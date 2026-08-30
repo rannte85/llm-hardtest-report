@@ -214,6 +214,10 @@ def main(argv=None) -> int:
     p_run.add_argument("--runs-dir", default="runs")
     p_run.add_argument("--resume")
     p_run.add_argument("--dry-run", action="store_true")
+    p_run.add_argument(
+        "--progress", choices=("auto", "dashboard", "plain"), default="auto",
+        help="progress display: live dashboard on a TTY, force dashboard, or plain logs",
+    )
     p_report = sub.add_parser("report", help="regenerate a completed campaign report")
     p_report.add_argument("run_dir")
     p_validate = sub.add_parser("validate", help="validate config syntax and local executables")
@@ -232,7 +236,7 @@ def main(argv=None) -> int:
         if args.command == "run":
             config = load_json(Path(args.config))
             run_dir = run(config, Path(args.runs_dir), Path(args.resume) if args.resume else None,
-                          args.dry_run)
+                          args.dry_run, args.progress)
             print(f"Campaign directory: {run_dir}")
             if not args.dry_run:
                 print(f"Report: {run_dir / 'REPORT.md'}")

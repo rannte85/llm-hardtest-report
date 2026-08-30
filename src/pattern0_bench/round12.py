@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import time
 from pathlib import Path
+from typing import Callable
 
 from .backends import Backend
 from .common import answer_matches, answer_text, load_json, repo_root, save_json
@@ -11,13 +12,16 @@ SUFFIX = "\n\nEnd with exactly one final line in this format: ANSWER: <value>"
 
 
 def run(round_no: int, model: dict, backend: Backend, attempt: int,
-        out_dir: Path, timeout: int, question_filter: set[int] | None = None) -> dict:
+        out_dir: Path, timeout: int, question_filter: set[int] | None = None,
+        progress: Callable[[dict], None] | None = None) -> dict:
     questions = load_json(repo_root() / "rounds" /
                           f"round{round_no}" / "questions.json")
     if question_filter:
         questions = [q for q in questions if int(q["id"]) in question_filter]
     results = []
     for q in questions:
+        if progress:
+            progress({"event": "start", "item": f'q{q["id"]}'})
         started = time.time()
         try:
             response = backend.complete([{"role": "user", "content": q["q"] + SUFFIX}], timeout)
@@ -32,7 +36,11 @@ def run(round_no: int, model: dict, backend: Backend, attempt: int,
                    "error": str(exc), "wall": round(time.time() - started, 3)}
         results.append(row)
         mark = "INVALID" if row.get("valid") is False else ("PASS" if row["correct"] else "FAIL")
-        print(f'    r{round_no} q{q["id"]}: {mark}')
+        if progress:
+            progress({"event": "complete", "item": f'q{q["id"]}', "status": mark,
+                      "wall": row.get("wall")})
+        else:
+            print(f'    r{round_no} q{q["id"]}: {mark}')
     valid = [row for row in results if row.get("valid") is not False]
     payload = {
         "round": round_no, "model": model["key"], "model_id": model["model"],

@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 import time
 from pathlib import Path
+from typing import Callable
 
 from .backends import Backend
 from .common import load_json, repo_root, save_json
@@ -90,10 +91,13 @@ def _prompt(spec: dict, q: dict) -> str:
     return text + spec["answer_block_instruction"] + q.get("answer_example", "")
 
 
-def run(model: dict, backend: Backend, attempt: int, out_dir: Path, timeout: int) -> dict:
+def run(model: dict, backend: Backend, attempt: int, out_dir: Path, timeout: int,
+        progress: Callable[[dict], None] | None = None) -> dict:
     spec = load_json(BASE / "problems_v3.json")
     results = []
     for q in spec["questions"]:
+        if progress:
+            progress({"event": "start", "item": f'q{q["id"]}'})
         started = time.time()
         try:
             if q.get("multi_turn"):
@@ -119,7 +123,11 @@ def run(model: dict, backend: Backend, attempt: int, out_dir: Path, timeout: int
         mark = ("INVALID" if row.get("valid") is False else
                 ("REVIEW" if row.get("correct") is None else
                  ("PASS" if row["correct"] else "FAIL")))
-        print(f'    r3 q{q["id"]}: {mark}')
+        if progress:
+            progress({"event": "complete", "item": f'q{q["id"]}', "status": mark,
+                      "wall": row.get("wall")})
+        else:
+            print(f'    r3 q{q["id"]}: {mark}')
     valid = [x for x in results if x.get("valid") is not False]
     auto = [x for x in valid if x.get("correct") is not None]
     payload = {"round": 3, "model": model["key"], "model_id": model["model"],

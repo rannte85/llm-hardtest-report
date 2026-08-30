@@ -546,7 +546,7 @@ def run_attempt(model_key, task_key, attempt, run_dir, timeout=3600,
 # ---------------------------------------------------------------------------
 # orchestration
 # ---------------------------------------------------------------------------
-def main(argv=None):
+def main(argv=None, progress_callback=None):
     ap = argparse.ArgumentParser(description="Hard Set v4 execution harness")
     ap.add_argument("--model", help="one of: %s" % ", ".join(MODELS))
     ap.add_argument("--tasks", default="all",
@@ -631,17 +631,27 @@ def main(argv=None):
         print("\n  --- %s (%s) ---" % (task_key, G.TASK_META[task_key]["qid"]))
         for attempt in range(1, args.attempts + 1):
             print("    attempt %d/%d" % (attempt, args.attempts))
+            if progress_callback:
+                progress_callback(dict(event="start", item=task_key, attempt=attempt))
             try:
                 g = run_attempt(args.model, task_key, attempt, run_dir,
                                 timeout=args.timeout, dry_run=args.dry_run,
                                 extra_config=args.extra_config)
                 if g:
                     grades.append(g)
+                    if progress_callback:
+                        progress_callback(dict(
+                            event="complete", item=task_key, attempt=attempt,
+                            status="PASS" if g.get("flags", {}).get("attempt_pass") else "FAIL",
+                            wall=g.get("run_meta", {}).get("wall")))
             except Exception as exc:  # noqa: BLE001
                 import traceback
                 traceback.print_exc()
                 print("    attempt %d ERROR: %s" % (attempt, exc))
                 errors.append(dict(task=task_key, attempt=attempt, error=str(exc)))
+                if progress_callback:
+                    progress_callback(dict(event="complete", item=task_key, attempt=attempt,
+                                            status="INVALID"))
 
     if args.dry_run:
         print("\n  [dry-run] plan complete; no model was called")

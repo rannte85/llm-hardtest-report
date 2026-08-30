@@ -85,6 +85,20 @@ llm-hardtest doctor --config benchmark.json
 llm-hardtest run --config benchmark.json
 ```
 
+Interactive terminals show a live text dashboard with overall progress, the current
+model/round/question or task, elapsed time, ETA, result counters, resumed work, and the
+output directory. No extra terminal package is required. Redirected output and CI use
+stable line-oriented logs automatically:
+
+```bash
+llm-hardtest run --config benchmark.json --progress auto       # default
+llm-hardtest run --config benchmark.json --progress dashboard  # force live display
+llm-hardtest run --config benchmark.json --progress plain      # one event per line
+```
+
+During Round 4 dashboard runs, verbose agent-harness output is retained in
+`<run>/<model>/round4/harness.log` instead of disrupting the live display.
+
 The default output is `runs/<campaign>-<timestamp>/REPORT.md`. The whole `runs/`
 directory is ignored by Git so model outputs and large working copies are not
 accidentally committed.

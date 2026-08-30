@@ -1,4 +1,4 @@
-# Release Notes — 1.0.1
+# Release Notes — 1.1.0
 
 This repository is ready to publish as `rannte85/llm-hardtest-report`. It contains no campaign
 outputs, credentials, local model files, personal filesystem paths, or generated
@@ -19,6 +19,8 @@ The release validation covers:
   and security documentation.
 - adversarial-review fixes for credential handling, path safety, exact-answer grading,
   infrastructure quarantine, live server/model diagnosis, and installed package data.
+- interactive terminal dashboard behavior, plain-log fallback, resume accounting, and
+  Round 1–4 progress-event regression coverage.
 
 The package deliberately does not include historical Pattern0 campaign results. A new
 campaign writes its report and all evidence into the selected `runs/` directory.

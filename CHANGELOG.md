@@ -3,6 +3,15 @@
 All notable changes are documented here. Benchmark-scoring compatibility is called
 out separately from harness features.
 
+## 1.1.0 — 2026-08-31
+
+- Added a dependency-free live terminal dashboard with campaign progress, current
+  model/round/item, elapsed time, ETA, result counters, resume counts, and output path.
+- Added `--progress auto|dashboard|plain`; interactive terminals default to the live
+  dashboard while redirected output and CI retain stable line-oriented logs.
+- Connected Round 4 attempt progress to the shared display and preserved its detailed
+  harness output in `round4/harness.log` while the dashboard is active.
+
 ## 1.0.1 — 2026-08-30
 
 - Stopped persisting real custom-provider API keys and restricted generated auth files.

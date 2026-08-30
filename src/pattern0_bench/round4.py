@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import contextlib
 import importlib
 import os
 import sys
 from pathlib import Path
+from typing import Callable
 
 from .common import repo_root, save_json
 
@@ -15,7 +17,9 @@ CANONICAL_TASKS = [
 
 
 def run(model: dict, attempts: int, out_dir: Path, timeout: int,
-        tasks: list[str] | None = None, dry_run: bool = False) -> int:
+        tasks: list[str] | None = None, dry_run: bool = False,
+        progress: Callable[[dict], None] | None = None) -> int:
+    out_dir.mkdir(parents=True, exist_ok=True)
     base = repo_root() / "rounds" / "round4"
     sys.path.insert(0, str(base))
     previous_omlx_key = os.environ.get("OMLX_API_KEY")
@@ -49,7 +53,12 @@ def run(model: dict, attempts: int, out_dir: Path, timeout: int,
                 "--out", str(out_dir)]
         if dry_run:
             args.append("--dry-run")
-        return int(runner.main(args) or 0)
+        if progress and not dry_run:
+            log_path = out_dir / "harness.log"
+            with log_path.open("a", encoding="utf-8") as log:
+                with contextlib.redirect_stdout(log), contextlib.redirect_stderr(log):
+                    return int(runner.main(args, progress_callback=progress) or 0)
+        return int(runner.main(args, progress_callback=progress) or 0)
     finally:
         if previous_omlx_key is None:
             os.environ.pop("OMLX_API_KEY", None)

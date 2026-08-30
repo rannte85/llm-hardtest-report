@@ -6,8 +6,9 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from .backends import make_backend
-from .common import load_json, save_json, slug, stamp
+from .common import load_json, repo_root, save_json, slug, stamp
 from . import round12, round3, round4
+from .progress import TerminalDashboard
 from .report import generate
 
 
@@ -136,19 +137,41 @@ def validate_config(config: dict, check_runtime: bool = True) -> None:
         raise ValueError("selected Codex transport or round 4 requires the codex CLI on PATH")
 
 
-def run(config: dict, runs_root: Path, resume: Path | None = None,
-        dry_run: bool = False) -> Path:
-    validate_config(config)
-    run_dir = resume or (runs_root / (_safe_component(config.get("name", "campaign"), "campaign name")
-                                      + "-" + stamp()))
-    run_dir.mkdir(parents=True, exist_ok=True)
-    snapshot = run_dir / "config.json"
-    if snapshot.exists():
-        existing = load_json(snapshot)
-        if existing != config:
-            raise ValueError("resume config does not match the saved config.json")
-    else:
-        save_json(snapshot, config)
+def _round_units(round_no: int) -> int:
+    root = repo_root() / "rounds"
+    if round_no in (1, 2):
+        return len(load_json(root / f"round{round_no}" / "questions.json"))
+    if round_no == 3:
+        return len(load_json(root / "round3" / "problems_v3.json")["questions"])
+    raise ValueError(f"unsupported round {round_no}")
+
+
+def _campaign_units(config: dict) -> int:
+    repetitions = int(config["repetitions"])
+    campaign_rounds = [int(value) for value in config["rounds"]]
+    tasks = config.get("round4_tasks") or round4.CANONICAL_TASKS
+    total = 0
+    for model in config["models"]:
+        for round_no in _model_rounds(model, campaign_rounds):
+            total += repetitions * (len(tasks) if round_no == 4 else _round_units(round_no))
+    return total
+
+
+def _progress_callback(dashboard: TerminalDashboard, model: dict, round_no: int,
+                       attempt: int, attempts: int):
+    def update(event: dict) -> None:
+        item = str(event.get("item", "item"))
+        event_attempt = int(event.get("attempt", attempt))
+        if event.get("event") == "start":
+            dashboard.start(model["key"], round_no, event_attempt, attempts, item)
+        else:
+            dashboard.record(str(event["status"]), model["key"], round_no,
+                             event_attempt, attempts, item, event.get("wall"))
+    return update
+
+
+def _execute(config: dict, run_dir: Path, dry_run: bool,
+             dashboard: TerminalDashboard) -> None:
     repetitions = int(config["repetitions"])
     timeout = int(config.get("timeout_seconds", 3600))
     for model in config["models"]:
@@ -163,34 +186,72 @@ def run(config: dict, runs_root: Path, resume: Path | None = None,
                 if result_path.exists():
                     saved_result = load_json(result_path)
                     if not saved_result.get("infrastructure_errors"):
-                        print(f"[resume] {model['key']} round {round_no} attempt {attempt}")
+                        dashboard.skip(
+                            int(saved_result.get("planned", _round_units(round_no))),
+                            f"{model['key']} round {round_no} attempt {attempt}")
                         continue
-                    print(f"[retry] {model['key']} round {round_no} attempt {attempt} "
-                          "has infrastructure errors")
-                print(f"[run] {model['key']} round {round_no} attempt {attempt}/{repetitions}")
+                    dashboard.message(
+                        f"[retry] {model['key']} round {round_no} attempt {attempt} "
+                        "has infrastructure errors")
+                dashboard.message(
+                    f"[run] {model['key']} round {round_no} attempt {attempt}/{repetitions}")
                 if dry_run:
                     continue
                 out.mkdir(parents=True, exist_ok=True)
+                progress = _progress_callback(
+                    dashboard, model, round_no, attempt, repetitions)
                 if round_no in (1, 2):
-                    round12.run(round_no, model, backend, attempt, out, timeout)
+                    round12.run(round_no, model, backend, attempt, out, timeout,
+                                progress=progress)
                 else:
-                    round3.run(model, backend, attempt, out, timeout)
+                    round3.run(model, backend, attempt, out, timeout, progress=progress)
         if 4 in selected_rounds:
             out = model_root / "round4"
             if (out / "run.json").exists():
                 saved = load_json(out / "run.json")
                 if not saved.get("errors"):
-                    print(f"[resume] {model['key']} round 4")
+                    dashboard.skip(
+                        int(saved.get("attempts", repetitions))
+                        * len(saved.get("tasks", config.get("round4_tasks")
+                                       or round4.CANONICAL_TASKS)),
+                        f"{model['key']} round 4")
                     continue
-                print(f"[retry] {model['key']} round 4 has infrastructure errors")
+                dashboard.message(f"[retry] {model['key']} round 4 has infrastructure errors")
             if not (out / "run.json").exists() or saved.get("errors"):
-                print(f"[run] {model['key']} round 4 x{repetitions}")
+                dashboard.message(f"[run] {model['key']} round 4 x{repetitions}")
                 if not dry_run:
                     out.mkdir(parents=True, exist_ok=True)
+                    progress = _progress_callback(dashboard, model, 4, 1, repetitions)
                     code = round4.run(model, repetitions, out, timeout,
-                                      config.get("round4_tasks"))
+                                      config.get("round4_tasks"), progress=progress)
                     if code:
                         raise RuntimeError(f"round 4 failed with exit code {code}")
-    if not dry_run:
-        generate(run_dir)
+
+
+def run(config: dict, runs_root: Path, resume: Path | None = None,
+        dry_run: bool = False, progress_mode: str = "auto") -> Path:
+    validate_config(config)
+    run_dir = resume or (runs_root / (_safe_component(config.get("name", "campaign"), "campaign name")
+                                      + "-" + stamp()))
+    run_dir.mkdir(parents=True, exist_ok=True)
+    snapshot = run_dir / "config.json"
+    if snapshot.exists():
+        existing = load_json(snapshot)
+        if existing != config:
+            raise ValueError("resume config does not match the saved config.json")
+    else:
+        save_json(snapshot, config)
+    dashboard = TerminalDashboard(
+        config.get("name", "campaign"), _campaign_units(config), run_dir,
+        mode=progress_mode)
+    try:
+        _execute(config, run_dir, dry_run, dashboard)
+        if not dry_run:
+            generate(run_dir)
+    except BaseException:
+        dashboard.finish(False)
+        raise
+    if dry_run:
+        dashboard.complete_plan()
+    dashboard.finish(True, "Dry-run plan complete" if dry_run else "Report generated")
     return run_dir

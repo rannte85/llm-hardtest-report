@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import io
 import os
 import stat
 import tempfile
@@ -13,10 +14,12 @@ from pathlib import Path
 from pattern0_bench.backends import Backend, BackendError, CodexBackend, OpenAICompatBackend
 from pattern0_bench.cli import discover_models, doctor_config
 from pattern0_bench.common import answer_matches, answer_text, save_json
-from pattern0_bench.orchestrator import run as run_campaign, validate_config
+from pattern0_bench.orchestrator import _campaign_units, run as run_campaign, validate_config
+from pattern0_bench.progress import TerminalDashboard, _duration
 from pattern0_bench.report import collect, render
 from pattern0_bench.round12 import run as run_round12
 from pattern0_bench.round3 import _fields, _grade
+from pattern0_bench.round4 import run as run_round4
 
 
 class AnswerTests(unittest.TestCase):
@@ -30,6 +33,42 @@ class AnswerTests(unittest.TestCase):
     def test_partial_answer_is_not_accepted(self):
         self.assertFalse(answer_matches("142", "42"))
         self.assertEqual(answer_text("The answer might be 42."), "")
+
+
+class ProgressTests(unittest.TestCase):
+    def test_campaign_total_respects_model_rounds_and_repetitions(self):
+        self.assertEqual(_campaign_units({
+            "repetitions": 2, "rounds": [1, 3, 4],
+            "models": [{"rounds": [1, 4]}],
+        }), 52)
+
+    def test_duration_formats_short_and_long_runs(self):
+        self.assertEqual(_duration(None), "--:--")
+        self.assertEqual(_duration(65), "01:05")
+        self.assertEqual(_duration(3661), "01:01:01")
+
+    def test_forced_dashboard_renders_progress_and_counters(self):
+        output = io.StringIO()
+        dashboard = TerminalDashboard(
+            "demo", 4, Path("runs/demo"), mode="dashboard", stream=output)
+        dashboard.start("model-a", 1, 1, 1, "q1")
+        dashboard.record("PASS", "model-a", 1, 1, 1, "q1", 2.5)
+        dashboard.record("INVALID", "model-a", 1, 1, 1, "q2")
+        dashboard.finish()
+        text = output.getvalue()
+        self.assertIn("LLM Hardtest | demo", text)
+        self.assertIn("2/4 ( 50.0%)", text)
+        self.assertIn("PASS 1 | FAIL 0 | REVIEW 0 | INVALID 1", text)
+        self.assertIn("model-a | Round 1 | attempt 1/1 | q2", text)
+        self.assertIn("\x1b[", text)
+
+    def test_plain_mode_keeps_line_oriented_logs(self):
+        output = io.StringIO()
+        dashboard = TerminalDashboard(
+            "demo", 1, Path("runs/demo"), mode="plain", stream=output)
+        dashboard.record("FAIL", "model-a", 2, 1, 1, "q7")
+        dashboard.finish()
+        self.assertEqual(output.getvalue(), "    r2 q7: FAIL\n")
 
 
 class BackendTests(unittest.TestCase):
@@ -165,7 +204,54 @@ OPTIMAL_ORDER: A,B,C,D,E
         self.assertTrue(result["correct"])
 
 
+class RoundFourProgressTests(unittest.TestCase):
+    def test_dashboard_events_are_forwarded_and_verbose_output_is_logged(self):
+        class FakeRunner:
+            MODELS = {}
+
+            def main(self, _args, progress_callback=None):
+                print("verbose harness output")
+                progress_callback({"event": "start", "item": "q26_hidden_tests",
+                                   "attempt": 1})
+                progress_callback({"event": "complete", "item": "q26_hidden_tests",
+                                   "attempt": 1, "status": "PASS", "wall": 3.0})
+                return 0
+
+        class FakeGrader:
+            @staticmethod
+            def available_tasks():
+                return ["q26_hidden_tests"]
+
+        events = []
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "model/round4"
+            with patch("pattern0_bench.round4.importlib.import_module",
+                       side_effect=[FakeRunner(), FakeGrader()]):
+                status = run_round4(
+                    {"key": "m", "model": "m", "codex_provider": "custom"},
+                    1, out, 10, ["q26_hidden_tests"], progress=events.append)
+            self.assertEqual(status, 0)
+            self.assertEqual([event["event"] for event in events], ["start", "complete"])
+            self.assertIn("verbose harness output", (out / "harness.log").read_text())
+
+
 class RoundOneTwoTests(unittest.TestCase):
+    def test_question_progress_events_wrap_each_model_call(self):
+        class AnswerBackend(Backend):
+            def complete(self, messages, timeout):
+                return {"content": "ANSWER: 286", "wall": 1.25}
+
+        events = []
+        with tempfile.TemporaryDirectory() as tmp:
+            payload = run_round12(
+                1, {"key": "m", "model": "m"},
+                AnswerBackend({}, Path(tmp)), 1, Path(tmp), 10, {1}, events.append)
+        self.assertEqual(payload["score"], 1)
+        self.assertEqual(events[0], {"event": "start", "item": "q1"})
+        self.assertEqual(events[1]["event"], "complete")
+        self.assertEqual(events[1]["status"], "PASS")
+        self.assertEqual(events[1]["wall"], 1.25)
+
     def test_backend_failure_is_not_scored_as_a_wrong_answer(self):
         class BrokenBackend(Backend):
             def complete(self, messages, timeout):

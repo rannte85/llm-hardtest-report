@@ -42,7 +42,11 @@ export PATTERN0_API_KEY=local-dummy
 
 `validate` checks configuration syntax and required local executables without contacting
 a model. `doctor` lists the configured model and makes a tiny request to every API the
-campaign needs. The smoke configuration runs Round 1 once. After it succeeds, increase repetitions
+campaign needs. `run` displays a live text dashboard in an interactive terminal and
+automatically switches to line-oriented logs when output is redirected. Use
+`--progress dashboard` or `--progress plain` to override detection.
+
+The smoke configuration runs Round 1 once. After it succeeds, increase repetitions
 and add Rounds 2 and 3. Add Round 4 only after reading `BACKENDS.md` and installing
 Codex CLI.
 

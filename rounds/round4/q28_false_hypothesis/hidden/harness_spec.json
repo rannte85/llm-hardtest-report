@@ -1,0 +1,20 @@
+{
+  "protocol": "v4-hidden-1",
+  "public_tests": {
+    "default": 16
+  },
+  "public_tests_may_grow": false,
+  "hidden_tests": [
+    "test_deployment_budget_is_ten_attempts",
+    "test_deployment_backoff_schedule_is_preserved",
+    "test_single_attempt_budget",
+    "test_large_attempt_budget",
+    "test_backoff_cap_override_is_honoured",
+    "test_base_delay_override_is_honoured",
+    "test_file_only_deployment_unchanged",
+    "test_retry_still_recovers_a_flaky_call",
+    "test_healthy_call_is_not_retried",
+    "test_slow_upstream_exhausts_the_configured_budget",
+    "test_config_values_have_their_declared_types"
+  ]
+}

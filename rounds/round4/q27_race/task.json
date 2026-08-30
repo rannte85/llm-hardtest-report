@@ -1,0 +1,75 @@
+{
+  "id": "q27",
+  "name": "taskhub intermittent race condition",
+  "type": "agentic-debug",
+  "prompt": "You are working in a Python repository at the path you were given. It contains `taskhub`, a small in-process job queue with retries and a versioned result cache (standard library only, no third-party packages are installed or permitted).\n\nA support ticket has come in from a team running this in production:\n\n> After we invalidate a cache key, the old value sometimes comes back. It is\n> not every time - maybe a handful of requests a day out of millions. The\n> value that reappears is always one we had just thrown away, and it stays\n> visible until the next invalidation cleans it up again. Restarting the\n> process makes it go away for a while. We have not been able to reproduce it\n> on demand.\n\nCI is also intermittently red on `tests/test_race.py`, roughly one run in fifty, and the team has been re-running it until it goes green.\n\nYour job:\n\n1. Reproduce the defect reliably. `python3 run_tests.py` passes almost every time, so a single green run proves nothing. Find a way to make the failure show up on demand before you change any code.\n2. Find the actual root cause. Do not stop at the first thing that makes the symptom go away.\n3. Fix it with the smallest change that removes the cause. The fix must keep the system's existing behaviour intact: a pool of N workers must still run N jobs at the same time, and control-plane calls must still return promptly while jobs are running. Read `docs/DESIGN.md` for the contract the code is supposed to honour.\n4. Add a regression test that fails on the unfixed code deterministically - not one that relies on luck or on repeating a stress loop - and passes after your fix. Put it in the existing test suite.\n5. Leave `python3 run_tests.py` green, in every mode the runner supports.\n\nYou may read and modify anything in the repository, and you may run whatever commands you like. There is a hidden grading suite that exercises the same package; it is not in this repository and you cannot see it.\n\nWhen you are done, end your response with exactly this block, filled in:\n\n=== REPORT ===\nROOT_CAUSE_FILE: <file>\nROOT_CAUSE_FUNCTION: <function>\nFILES_CHANGED: <comma separated>\nPUBLIC_TESTS_AFTER_FIX: <N/M>\nCONFIDENCE: <high|medium|low>\nREMAINING_RISKS: <one line>\n",
+  "workdir_note": "LOAD-BEARING - READ BEFORE WIRING THIS TASK INTO A HARNESS. `hidden/`, `SOLUTION.md`, `verify_trap.py` and `task.json` sit as direct SIBLINGS of `repo/` in this task directory. A harness that points the model at `repo/` in place, instead of copying it to a scratch location, hands over the entire answer key to a single `ls ..`: the graded tests, the named root cause, the exact patch, and every trap with its measured score. Nothing inside `repo/` references any of those files - `grep -rn 'hidden|SOLUTION|verify_trap|task.json' repo/` returns 0 hits - so this isolation is a property of where the harness puts the model and cannot be enforced by the repository. REQUIRED: copy `repo/` to a scratch location outside this directory and point the model at the copy; never expose this directory or its parent to the model. Grade by running `python3 hidden/hidden_tests.py <path-to-model-repo>` from this directory.",
+  "grading": {
+    "hidden_tests": {
+      "command": "python3 hidden/hidden_tests.py <path-to-model-repo>",
+      "count": 12,
+      "baseline": "6/12 (H1, H2, H3, H6, H7 always fail; H5 fails ~100% of runs)",
+      "pass_threshold": "12/12",
+      "tests": {
+        "H1": "stale commit after snapshot is not observable (deterministic tracepoint gate at store.after_snapshot)",
+        "H2": "invalidation racing the publish itself (deterministic gate at store.before_commit) - only an atomic check inside the write catches this",
+        "H3": "the same interleaving driven straight against ResultStore, with no worker pool involved; second half is the read-side-masking discriminator - a late commit carrying a retired generation must not overwrite the value the live generation has already published, which is unreachable for any fix that filters stale values on the read path instead of refusing the write",
+        "H4": "fresh values are still published, including a recompute after an invalidation (catches 'reject everything')",
+        "H5": "aggressive stress never exposes a stale generation",
+        "H6": "raw ResultStore._entries/_generations state, inspected directly and never through entry()/get()/stale_entries() (which a masking store is free to make lie): (Part 1) a stale commit into a key with no live entry must not physically write a ghost row, stats()['entries'] must not count it, and commit()'s return value must match what the raw dict shows; (Part 2) a second late commit against the same retired snapshot must not destroy a live value that survived the first one - catches a one-deep 'restore from backup on read' masking shape that a single-late-commit test cannot distinguish from a real fix",
+        "H7": "commit()'s generation check and its write must happen under the SAME lock acquisition, not merely inside the same function - forced with a real concurrent race (250k rounds, fresh key per round, quiescent post-hoc scan) because no tracepoint exists inside a candidate's own commit() to gate on; catches a check that reads the live generation under one lock, releases it, then writes under a different lock",
+        "T1": "TRAP: a pool of 4 still runs 4 jobs concurrently (threading.Barrier rendezvous)",
+        "T2": "TRAP: invalidate() returns in under 0.6s while a 2s job is running",
+        "T3": "TRAP: cancel_pending() returns in under 0.6s while jobs are running, and still drops all 10 queued jobs",
+        "T4": "TRAP: stats() returns in under 0.6s while a job is running",
+        "T5": "retry and permanent-failure semantics survive the fix"
+      }
+    },
+    "rubric_notes": [
+      "Root cause: ResultStore.commit() in taskhub/store.py publishes unconditionally. It receives the producer's Snapshot but never compares snapshot.generation against the key's live generation, so a value computed before an invalidation overwrites the invalidated state. Correct fix = compare-and-set inside the same lock acquisition that performs the write, returning False and not publishing on mismatch.",
+      "Trap 1 (the designed one): serializing the system. Wrapping snapshot -> compute -> publish in store.transaction() (or any equivalent hub/worker-level lock held across job.fn()) makes the symptom vanish completely - public suite 19/19 in every mode including --barrier and --repeat 60 - while breaking T1/T2/T3/T4. Measured: hidden drops from 6/10 to 5/10, i.e. this 'fix' is a net regression that the public suite cannot see.",
+      "Trap 2: re-tagging. Writing Entry(value, live_generation) instead of Entry(value, snapshot.generation) silences the stale_entries() invariant check that the visible test asserts, but the stale value is still served. Measured hidden 7/10.",
+      "Trap 3: a non-atomic check. Comparing store.generation(key) against snapshot.generation in worker._run before calling commit passes the deterministic --barrier repro and the whole public suite, but loses an invalidation that lands inside the check-to-write window. Measured hidden 8/10 (H2, H3).",
+      "Trap 5: read-side masking. commit() is left writing unconditionally and the stale entry is filtered out of the read path instead - get()/entry()/stale_entries(). Two shapes measured: drop-on-read (a read evicts the stale entry as a side effect) and pure filter (nothing is mutated, the stale entry is simply never handed out). Both score public 19/19 in default mode, 19/19 under --barrier and 60/60 under --repeat 60, and both scored hidden 10/10 before H3 was strengthened - i.e. the suite could not tell them apart from the real fix. The second half of H3 closes it: both measured hidden 9/10 (H3), 40 consecutive runs each. The discriminator is behavioural, not structural: a stale write that still reaches the store lands on top of the live generation's published value and destroys it, and no read-side filter can restore what is no longer there. A fix that filters the read path AND refuses the stale write still passes - only the filtering-instead-of-refusing shape fails.",
+      "Known false negative on H3's second half / H6 Part 2, measured, disclose it when scoring: a commit that does perform the atomic compare-and-set but ALSO pops the live entry on a mismatch ('reject and be safe') scores 10/12 (fails only H3, H6), because the live generation's published value does not survive an unrelated late producer's commit. That is a real if milder defect - a stale actor can evict a hot, valid cache key - and it is not the reference patch, which touches nothing on the mismatch path. A human grader who sees exactly H3/H6 failing should read the assertion messages: they name both shapes, the still-writes one and the refuses-but-evicts one.",
+      "Trap 6 (commit_toctou): the generation check moves INSIDE commit() - matching a shallow reading of the root cause - but under a lock that is not the one the write uses (e.g. a dedicated self._check_lock). H1/H2's tracepoint gates cannot see this: they park a producer before commit() runs anything and only release once a concurrent invalidate() has already completed, so the check correctly observes the bumped generation regardless of whether it shares a lock with the write. Only a real concurrent race (H7) lands an invalidate() in the gap between the check's lock release and the write's lock acquisition. Public 19/19 in every mode, hidden 11/12 (H7 only). Measured zero misses over 30 consecutive H7 runs; a real same-lock CAS measured zero false positives over the same 30 runs.",
+      "Trap 7 (mask_undo): commit() stays fully unconditional, but backs up the previous entry into a one-deep shadow slot before overwriting, and a reader restores that backup when it finds a stale entry. A single late commit round-trips correctly (this is exactly the interleaving H3's second half exercises, so H3 alone does not catch it) but a SECOND late commit against the same retired snapshot overwrites the backup with the first stale value before anything reads it, permanently destroying the live value - with no read having happened in between. Public 19/19 in every mode, hidden 10/12, failure set {H6, H7} - H6 is the direct hit (Part 2's two-consecutive-late-commits check); H7 also fires because commit() has no check at all, so H7's fresh-key race lands a stale write on effectively every round, same as the baseline.",
+      "Trap 8 (mask_anticlobber): a partial write guard ('reject only if the slot already holds a strictly newer generation') combined with the Trap-5 read filter. The guard covers a late commit landing after a fresher value was published (H3's second half); the read filter covers a late commit landing in an empty slot (H3's first half, H1, H2). What neither half covers: a late commit into a key that was invalidated with no republish yet - the guard's comparison never fires (nothing to compare against), the write lands physically in _entries, and the read filter hides it from every store method except stats()['entries'], which counts raw dict length. Public 19/19 in every mode, hidden 10/12, failure set {H6, H7} - H6 is the direct hit (Part 1's raw-dict-and-stats check); H7 also fires because on H7's fresh keys 'existing' is always None, so the write guard's comparison never triggers there either.",
+      "Score the self-report against reality. ROOT_CAUSE_FILE should be taskhub/store.py and ROOT_CAUSE_FUNCTION should be ResultStore.commit. A report naming worker.py/_run indicates the model fixed a call site rather than the contract, and H3 will show it.",
+      "Reproduction credit: the model should discover run_tests.py --barrier (visible in --help and in tests/test_race.py) or the tracepoints seam, or build its own deterministic gate. Reaching a fix only via --repeat looping is weaker but acceptable; declaring the bug unreproducible is a fail.",
+      "Regression-test credit: the added test must fail deterministically on the unfixed code. A test that only repeats the stress loop does not count. Verify by reverting the fix and running the model's test.",
+      "Removing or relocating the tracepoints in taskhub/tracepoints.py (or their call sites) is a fail: docs/DESIGN.md declares them part of the internal test contract, and H1/H2 report 'tracepoint missing' when they are gone.",
+      "Widening RESPONSIVENESS budgets, deleting public tests, or weakening tests/test_race.py to make things green is a fail."
+    ],
+    "self_report_fields": [
+      "ROOT_CAUSE_FILE",
+      "ROOT_CAUSE_FUNCTION",
+      "FILES_CHANGED",
+      "PUBLIC_TESTS_AFTER_FIX",
+      "CONFIDENCE",
+      "REMAINING_RISKS"
+    ]
+  },
+  "harness": {
+    "protocol": "v4-hidden-1",
+    "public_tests": {
+      "default": 19,
+      "barrier": 19
+    },
+    "public_tests_may_grow": true,
+    "hidden_tests": [
+      "H1 stale commit after snapshot",
+      "H2 invalidation racing the publish",
+      "H3 store-level stale commit refused",
+      "H4 fresh values still published",
+      "H5 stress exposes no stale generation",
+      "H6 raw store state has no ghost rows",
+      "H7 commit check-and-write share one lock acquisition",
+      "T1 pool still concurrent",
+      "T2 invalidate responsive",
+      "T3 cancel_pending responsive",
+      "T4 stats responsive",
+      "T5 retry semantics intact"
+    ]
+  }
+}

@@ -1,0 +1,16 @@
+# Test inventory (d(start, end, overnight=False) is an entry-dict helper)
+T01_parse_basic       parse("09:30") == 570                                            PASS
+T02_parse_midnight    parse("00:00") == 0                                              PASS
+T03_parse_reject      parse("25:00") raises ValueError                                 PASS
+T04_span_day          span(normalize(d("09:00","17:00"))) == 480                       PASS
+T05_span_zero         span(normalize(d("13:00","13:00"))) == 0                         PASS
+T06_total_day         total_minutes([d("09:00","12:00"), d("13:00","18:00")]) == 480   PASS
+T07_within_day        within(d("09:00","17:00"), "12:00") is True                      PASS
+T08_within_edge       within(d("09:00","17:00"), "17:00") is False                     PASS
+T09_reversed_detect   is_reversed(d("14:00","12:00")) is True                          PASS
+T10_reversed_ok       is_reversed(d("09:00","17:00")) is False                         PASS
+T11_longest_skips_bad longest([d("10:00","11:00"), d("14:00","12:00")]) == d("10:00","11:00")  PASS
+T12_longest_normal    longest([d("09:00","10:00"), d("09:00","12:00")]) == d("09:00","12:00")  PASS
+T13_span_overnight    span(normalize(d("23:00","01:00",True))) == 120                  FAIL (actual: -1320)
+T14_total_overnight   total_minutes([d("22:30","00:30",True)]) == 120                  FAIL (actual: -1320)
+T15_within_overnight  within(d("23:00","01:00",True), "23:30") is True                 FAIL (actual: False)

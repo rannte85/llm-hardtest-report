@@ -1,0 +1,44 @@
+name: Benchmark proposal
+description: Propose a task, grader, scoring, or methodology change
+title: "[Benchmark]: "
+labels: ["benchmark", "proposal"]
+body:
+  - type: textarea
+    id: gap
+    attributes:
+      label: Evaluation gap
+      description: What capability or failure mode is not measured well today?
+    validations:
+      required: true
+  - type: textarea
+    id: contract
+    attributes:
+      label: Proposed task and grading contract
+      description: Define inputs, visible authority, expected behavior, held-back checks, and score semantics.
+    validations:
+      required: true
+  - type: textarea
+    id: controls
+    attributes:
+      label: Positive and negative controls
+      description: Explain how the grader will be shown to accept valid alternatives and reject shortcuts.
+    validations:
+      required: true
+  - type: textarea
+    id: compatibility
+    attributes:
+      label: Compatibility and contamination risks
+      description: State whether prior scores remain comparable and how public exposure affects the task.
+    validations:
+      required: true
+  - type: checkboxes
+    id: principles
+    attributes:
+      label: Design checks
+      options:
+        - label: The proposal does not require weakening a grader for one model.
+          required: true
+        - label: Candidate and grader-only files can be separated.
+          required: true
+        - label: The task can run deterministically from a clean copy.
+          required: true

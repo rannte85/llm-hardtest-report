@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Usage question
+    url: https://github.com/rannte85/llm-hardtest-report/discussions
+    about: Ask setup and interpretation questions in Discussions.
+  - name: Security vulnerability
+    url: https://github.com/rannte85/llm-hardtest-report/security/advisories/new
+    about: Report vulnerabilities privately.

@@ -1,0 +1,60 @@
+{
+  "answer_block_instruction": "\n\nEnd your response with the exact block below. Include every requested field as `FIELD: value`. Explanations outside the block are allowed.\n=== ANSWER ===\n",
+  "questions": [
+    {
+      "id": 21,
+      "name": "Greedy Trap",
+      "multi_turn": false,
+      "artifacts": [],
+      "prompt": "Review this single-machine scheduling problem. All jobs are available at t=0, execution is non-preemptive, and at most one job runs at a time.\n\n| job | duration | deadline | reward | dependency |\n|---|---:|---:|---:|---|\n| A | 4 | 4 | 9 | none |\n| B | 3 | 7 | 3 | none |\n| C | 3 | 10 | 4 | B complete |\n| D | 2 | 12 | 9 | C complete |\n| E | 5 | 17 | 6 | none |\n| F | 6 | 20 | 5 | A complete |\n\nA job earns zero reward if its completion exceeds its deadline, so such jobs may be skipped. A dependent job may start only after its prerequisite completed; skipping a prerequisite makes the dependent job permanently unavailable.\n\nA senior engineer claims: 'At each step, choose the currently feasible job with the highest reward/duration ratio, breaking ties alphabetically. This greedy strategy always maximizes reward, so implement it as-is.'\n\nRequirements: (1) verify the claim before designing anything; (2) if false, compute the greedy order and reward on this instance; (3) find the true optimal order and reward; (4) explain structurally why greedy fails and give an independent counterexample with at most three jobs; (5) give an always-correct algorithm with time and space complexity.",
+      "answer_fields": ["CLAIM_VALID", "GREEDY_REWARD", "GREEDY_ORDER", "OPTIMAL_REWARD", "OPTIMAL_ORDER"],
+      "answer_example": "CLAIM_VALID: NO\nGREEDY_REWARD: <integer>\nGREEDY_ORDER: A,B,C\nOPTIMAL_REWARD: <integer>\nOPTIMAL_ORDER: A,B,C",
+      "auto": {"CLAIM_VALID":"NO","GREEDY_REWARD":"20","OPTIMAL_REWARD":"31","OPTIMAL_ORDER":"SIMULATE_31","GREEDY_ORDER":"A,E,F"}
+    },
+    {
+      "id": 22,
+      "name": "Multi-file Root Cause",
+      "multi_turn": false,
+      "artifacts": ["q22_src/request.ts","q22_src/scheduler.ts","q22_src/cache.ts","q22_src/retry.ts","q22_src/worker.ts","q22_src/metrics.ts","q22_src/main.ts"],
+      "prompt": "The seven attached files form one system. Running main.ts raises `CONSISTENCY VIOLATION: user:42 delivered \"refreshed(schema=1)\" but last write was \"v2-result\"` in metrics.ts. The log also contains an earlier `transient I/O failure` from worker.ts, so the on-call engineer blamed the worker.\n\nEvery file is line-numbered. Determine: (1) the file, line, and function where invalid state is first created—the root cause; (2) the file and line where the final symptom appears; (3) the exact event sequence from request to symptom; (4) the smallest patch; (5) why making the worker's first call succeed is not a fix, including whether the consistency violation still occurs; (6) one regression test.",
+      "answer_fields": ["ROOT_CAUSE_FILE","ROOT_CAUSE_FUNCTION","ROOT_CAUSE_LINE","SYMPTOM_FILE","SYMPTOM_LINE","WORKER_FIX_SUFFICIENT"],
+      "answer_example": "ROOT_CAUSE_FILE: xxx.ts\nROOT_CAUSE_FUNCTION: someFunc\nROOT_CAUSE_LINE: <integer>\nSYMPTOM_FILE: xxx.ts\nSYMPTOM_LINE: <integer>\nWORKER_FIX_SUFFICIENT: NO",
+      "auto": {"ROOT_CAUSE_FILE":"cache.ts","ROOT_CAUSE_FUNCTION":"update","ROOT_CAUSE_LINE_RANGE":[20,26],"SYMPTOM_FILE":"metrics.ts","SYMPTOM_LINE_RANGE":[6,10],"WORKER_FIX_SUFFICIENT":"NO"}
+    },
+    {
+      "id": 23,
+      "name": "Contradictory Spec",
+      "multi_turn": false,
+      "artifacts": [],
+      "prompt": "These are fourteen requirements for a task scheduler. Design a scheduler satisfying all of them and provide pseudocode—but first verify that they are jointly satisfiable.\n\nR1. Every enqueued task receives integer priority 1–9 and an enqueue timestamp; higher priority starts first.\nR2. At most four execution slots exist; a task starts only when a slot is free.\nR3. A start decision is made once when a slot opens, and started tasks are not preempted.\nR4. Tasks at the same priority must start in FIFO enqueue order. A failed task reinserted into the retry queue receives the reinsertion time as its new enqueue timestamp.\nR5. If a priority-9 task waits, no newly arriving task may start ahead of it; already running tasks continue under R3.\nR6. A task may retry at most three times, then goes to the dead-letter queue.\nR7. A dead-letter task is never automatically reinserted without operator approval.\nR8. Each task has a timeout, default 300 seconds; timeout counts as failure and releases the slot.\nR9. No tenant may run more than two tasks simultaneously.\nR10. On scheduler restart, running tasks count as failed and enter retry with retry count incremented.\nR11. A retry must start before every never-started waiting task of the same priority.\nR12. Each scheduling decision must be O(log n), where n is waiting tasks.\nR13. Every start, failure, and retry event is written to an order-preserving log.\nR14. A new enqueue is ignored if the queue already contains the same idempotency key.\n\nValidation scenario: enqueue A(priority=5) at 10:00:00 and B(priority=5) at 10:00:01. A starts first, fails, and is reinserted at 10:00:30, which becomes its timestamp under R4. B has not started and one slot is now free.\n\nIf the specification is contradictory, identify the conflicting pair, give the minimal counterexample and impossibility proof, and propose the smallest correction.",
+      "answer_fields": ["HAS_CONTRADICTION","CONFLICT_PAIR","FIRST_UNDER_FIRST_RULE","FIRST_UNDER_SECOND_RULE"],
+      "answer_example": "HAS_CONTRADICTION: YES\nCONFLICT_PAIR: R1,R2\nFIRST_UNDER_FIRST_RULE: A\nFIRST_UNDER_SECOND_RULE: B",
+      "auto": {"HAS_CONTRADICTION":"YES","CONFLICT_PAIR":["R4","R11"],"FIRST_UNDER_FIRST_RULE":"B","FIRST_UNDER_SECOND_RULE":"A"}
+    },
+    {
+      "id": 24,
+      "name": "Regression Trap",
+      "multi_turn": false,
+      "artifacts": ["shiftlib.py","shiftlib_tests.txt"],
+      "prompt": "The attached shiftlib.py currently passes 12 of 15 tests. T13, T14, and T15 fail, all for overnight shifts.\n\nRequirements: (1) explain the root cause of all three failures; (2) give the minimum patch, naming the function and exact code, that makes all 15 pass; (3) state the expected result of every test after the patch; (4) consider instead adding `if e < s: e += 1440` inside span(). Predict exactly which tests this alternative breaks and explain why it is wrong; (5) add one new regression test.",
+      "answer_fields": ["FIX_FUNCTION","TESTS_AFTER_FIX","SPAN_FIX_REGRESSIONS"],
+      "answer_example": "FIX_FUNCTION: function_name\nTESTS_AFTER_FIX: 15/15\nSPAN_FIX_REGRESSIONS: T01,T02",
+      "auto": {"FIX_FUNCTION":"normalize","TESTS_AFTER_FIX":"15/15","SPAN_FIX_REGRESSIONS":["T09","T11"]}
+    },
+    {
+      "id": 25,
+      "name": "Long-horizon Constraint Revision",
+      "multi_turn": true,
+      "artifacts": [],
+      "turns": [
+        "Plan a database migration for a payment service. Provide numbered deployment and migration steps that satisfy all eight constraints, and state how every step relates to them.\n\nC1. Total service downtime must be at most 30 seconds.\nC2. Schema changes must be backward-compatible: old code runs on the new schema.\nC3. Old client applications remain supported after migration.\nC4. Rollback must be possible at every stage.\nC5. Application write traffic continues throughout migration.\nC6. At most three migration workers may run.\nC7. Full cache flushes are forbidden.\nC8. Regions A and B cannot migrate simultaneously; migration is sequential.",
+        "New information: during migration one database replica becomes read-only, reducing read capacity by 30%. Peak read traffic is 85% of current capacity. Revise the plan while preserving all eight original constraints. Explicitly identify which steps change and why.",
+        "Important correction: contrary to prior research, 20% of old clients crash while parsing if a server response contains any new-schema field. Previous turns assumed old clients ignored unknown fields. Revise the plan again. Explicitly identify and replace every earlier step invalidated by this discovery.",
+        "Final constraint: regulatory audit retention forbids deleting data already written in the new format, even during rollback. Complete the final migration plan. End with exactly this self-audit format:\n\n=== CONSTRAINT AUDIT ===\nC1(downtime<=30s): <one line naming the mechanism and step>\nC2(backward compatibility): ...\nC3(old-client support): ...\nC4(rollback at every stage): ...\nC5(writes remain available): ...\nC6(workers<=3): ...\nC7(no full cache flush): ...\nC8(regions sequential): ...\nR1(read-only replica): ...\nR2(20% old-client crash): ...\nR3(no deletion of new-format data): ..."
+      ],
+      "answer_fields": [],
+      "auto": null,
+      "manual_rubric": "Evaluate all eleven constraints C1-C8 and R1-R3 against the final plan, not the self-audit claims alone. Critical traps: R2 requires response-version gating that omits all new fields; R3 rollback to old code must account for new-only writes; the read-capacity mitigation from turn 2 must survive turns 3 and 4; no full cache flush; no more than three workers."
+    }
+  ]
+}

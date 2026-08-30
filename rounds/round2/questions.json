@@ -1,0 +1,22 @@
+[
+  {"id":1,"type":"small-enumeration","q":"How many three-digit positive integers have digit product exactly 36?","ans":"21"},
+  {"id":2,"type":"algebra-functional-equation","q":"For every nonzero real x, f(x)+2f(1/x)=3x. Find f(2).","ans":"-1"},
+  {"id":3,"type":"constructive-counting","q":"How many positive integers at most 500 have a palindromic binary representation?","ans":"45"},
+  {"id":4,"type":"formula-insight","q":"Seven labeled positions are arranged in a circle and colored with four colors. Adjacent positions must have different colors. Rotations count as different because positions are labeled. How many colorings exist?","ans":"2184"},
+  {"id":5,"type":"modular-exponentiation","q":"What are the last three decimal digits of 7^777? Answer as a three-digit number.","ans":"207"},
+  {"id":6,"type":"geometry-lattice","q":"How many integer lattice points lie strictly inside the triangle with vertices (0,0), (14,0), and (0,10)?","ans":"58"},
+  {"id":7,"type":"number-theory-search","q":"Find the smallest positive integer that has exactly 12 divisors and leaves remainder 3 when divided by 7.","ans":"108"},
+  {"id":8,"type":"exact-simulation","q":"The sequence starts at a(1)=7 and satisfies a(n)=a(n-1)+gcd(n,a(n-1)) for n>=2. Find a(25).","ans":"73"},
+  {"id":9,"type":"logic-deduction","q":"Six people A, B, C, D, E, F sit in seats 1 through 6 from left to right. Clues: (1) A is left of B. (2) C is not at either end. (3) D and E are adjacent. (4) F is in seat 3. (5) B is left of C. (6) E is left of D. Who sits in seat 5?","ans":"E"},
+  {"id":10,"type":"logic-case-analysis","q":"Every islander is a knight who always tells the truth or a liar who always lies. W says, 'Y is a knight.' X says, 'W and Z are both liars.' Y says, 'X is a liar.' Z says, 'Exactly two of us are knights.' List every knight using letters only.","ans":"X"},
+  {"id":11,"type":"probability-expectation","q":"A fair six-sided die is rolled exactly five times. Let X be the number of distinct faces observed. Write E[X] as a reduced fraction a/b and compute a+b.","ans":"5947"},
+  {"id":12,"type":"number-theory-frobenius","q":"There are unlimited coins of denominations 7, 12, and 17. What is the largest amount that cannot be paid exactly?","ans":"44"},
+  {"id":13,"type":"long-simulation","q":"People numbered 1 through 37 stand in a circle. Starting at 1 and moving clockwise, every fourth remaining person is eliminated; counting restarts at 1 with the next person. What number survives?","ans":"34"},
+  {"id":14,"type":"state-search-optimization","q":"You have unmarked 5-liter and 9-liter jugs and unlimited water. One operation fills a jug, empties a jug, or pours between jugs until the source is empty or destination is full. What is the minimum number of operations needed to leave exactly 7 liters in the 9-liter jug?","ans":"12"},
+  {"id":15,"type":"number-theory-legendre","q":"How many trailing zeros does 300! have when written in base 12?","ans":"148"},
+  {"id":16,"type":"generating-function-insight","q":"Among all nonempty subsets of {1,2,...,15}, how many have element sum divisible by 5?","ans":"6559"},
+  {"id":17,"type":"dynamic-programming","q":"Roll a fair die repeatedly and stop the instant the cumulative sum is exactly 15. How many distinct ordered face sequences reach exactly 15?","ans":"15109"},
+  {"id":18,"type":"game-theory-pattern","q":"A pile has n stones. Players alternate removing exactly 1, 3, or 4 stones, and the player taking the last stone wins. For 1<=n<=200, how many n are losing positions for the first player under optimal play?","ans":"57"},
+  {"id":19,"type":"transfer-matrix","q":"How many ways can a 3x8 rectangle be tiled completely by 1x2 dominoes placed horizontally or vertically?","ans":"153"},
+  {"id":20,"type":"crt-periodicity","q":"Find the smallest positive integer n satisfying 3^n congruent to n modulo 100.","ans":"87"}
+]

@@ -1,0 +1,23 @@
+{
+  "protocol": "v4-hidden-1",
+  "public_tests": {
+    "default": 16
+  },
+  "public_tests_may_grow": false,
+  "hidden_tests": [
+    "F1_approved_fifo_single_slot",
+    "F2_approved_fifo_whole_band",
+    "F3_approved_fifo_on_an_unseen_queue",
+    "F4_retry_flag_no_longer_orders",
+    "S1_promotes_at_the_exact_threshold",
+    "S2_no_promotion_below_the_threshold",
+    "S3_promotion_is_one_band_exactly",
+    "R1_bands_still_order_first",
+    "R2_result_is_input_order_independent",
+    "R3_priority_is_never_written",
+    "D1_product_spec_reconciled",
+    "D2_decision_recorded_somewhere",
+    "I1_runner_untouched",
+    "I2_acceptance_tests_untouched"
+  ]
+}

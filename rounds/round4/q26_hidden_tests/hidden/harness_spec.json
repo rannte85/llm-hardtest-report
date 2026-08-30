@@ -1,0 +1,16 @@
+{
+  "protocol": "v4-hidden-1",
+  "public_tests": {
+    "default": 20
+  },
+  "public_tests_may_grow": false,
+  "hidden_tests": [
+    "H1_midnight_start_same_day_stay_keeps_its_grace",
+    "H2_charge_segment_honours_the_grace_flag_it_is_given",
+    "H3_reprice_of_a_midnight_stay_after_extension",
+    "H4_midnight_start_multi_day_stay_gets_exactly_one_grace",
+    "H5_ledger_path_prices_an_overnight_stay_like_the_billing_path",
+    "H6_segment_builder_grants_the_grace_allowance_exactly_once",
+    "H7_structural_invariants_hold"
+  ]
+}

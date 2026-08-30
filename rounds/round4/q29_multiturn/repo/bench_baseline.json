@@ -1,0 +1,8 @@
+{
+  "metric": "list_orders_read_ops_p95",
+  "recorded_from": "orderservice v1.0 (pre-rewrite), same 400-order / 20-customer workload",
+  "baseline_p95_read_ops": 21,
+  "budget_multiplier": 1.2,
+  "budget_p95_read_ops": 25,
+  "note": "budget = floor(baseline * 1.2). p95 above the budget is a regression."
+}

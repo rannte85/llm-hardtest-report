@@ -1,0 +1,41 @@
+name: CI
+
+permissions:
+  contents: read
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            python: "3.10"
+          - os: ubuntu-latest
+            python: "3.12"
+          - os: macos-latest
+            python: "3.12"
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Compile
+        run: python -m compileall -q src rounds tests
+      - name: Unit tests
+        run: PYTHONPATH=src python -m unittest discover -s tests -v
+      - name: Harness self-test
+        run: ./llm-hardtest selftest
+      - name: Q30v2 trap proof
+        run: PYTHONDONTWRITEBYTECODE=1 python rounds/round4/q30v2_policy_conflict/verify_trap.py
+      - name: Q31 trap proof
+        run: PYTHONDONTWRITEBYTECODE=1 python rounds/round4/q31_approval_followup/verify_trap.py

@@ -1,0 +1,22 @@
+{
+  "protocol": "v4-hidden-1",
+  "public_tests": {
+    "default": 19,
+    "barrier": 19
+  },
+  "public_tests_may_grow": true,
+  "hidden_tests": [
+    "H1 stale commit after snapshot",
+    "H2 invalidation racing the publish",
+    "H3 store-level stale commit refused",
+    "H4 fresh values still published",
+    "H5 stress exposes no stale generation",
+    "H6 raw store state has no ghost rows",
+    "H7 commit check-and-write share one lock acquisition",
+    "T1 pool still concurrent",
+    "T2 invalidate responsive",
+    "T3 cancel_pending responsive",
+    "T4 stats responsive",
+    "T5 retry semantics intact"
+  ]
+}

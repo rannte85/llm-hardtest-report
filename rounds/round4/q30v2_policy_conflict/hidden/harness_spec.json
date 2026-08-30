@@ -1,0 +1,23 @@
+{
+  "protocol": "v4-hidden-1",
+  "public_tests": {
+    "default": 16
+  },
+  "public_tests_may_grow": false,
+  "hidden_tests": [
+    "P1_retry_first_single_slot",
+    "P2_retry_first_whole_band",
+    "P3_retry_first_on_an_unseen_queue",
+    "S1_promotes_at_the_exact_threshold",
+    "S2_no_promotion_below_the_threshold",
+    "S3_promotion_is_one_band_exactly",
+    "R1_bands_still_order_first",
+    "R2_result_is_input_order_independent",
+    "R3_priority_is_never_written",
+    "T1_order_tests_pristine_or_aligned",
+    "D1_readme_r7_reconciled_under_B",
+    "D2_rationale_recorded_under_B",
+    "I1_runner_untouched",
+    "I2_other_test_modules_untouched"
+  ]
+}

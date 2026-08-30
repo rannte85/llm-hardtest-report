@@ -1,0 +1,7 @@
+{
+  "upstream_url": "http://upstream.internal/v1/quote",
+  "timeout_ms": 250,
+  "max_attempts": 3,
+  "base_delay_ms": 50,
+  "backoff_max_ms": 800
+}

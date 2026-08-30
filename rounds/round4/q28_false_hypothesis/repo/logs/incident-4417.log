@@ -1,0 +1,373 @@
+# incident 4417 - quote-svc ap-northeast-1 - excerpt kept by on-call
+# log level INFO, one pod (quote-svc-7d9c8f-4kq2)
+2026-08-19T04:10:58.000Z INFO  svc.api   request_id=q-5d01 tenant=hokuriku-taxi quote requested
+2026-08-19T04:10:58.014Z INFO  svc.http  upstream ok in 14ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=hokuriku-taxi
+2026-08-19T04:10:59.314Z INFO  svc.api   request_id=q-5b12 tenant=marine-cab quote requested
+2026-08-19T04:10:59.325Z INFO  svc.http  upstream ok in 11ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=marine-cab
+2026-08-19T04:11:00.625Z INFO  svc.api   request_id=q-44b8 tenant=nishi-koutsu quote requested
+2026-08-19T04:11:00.642Z INFO  svc.http  upstream ok in 17ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=nishi-koutsu
+2026-08-19T04:11:02.000Z INFO  svc.api   request_id=q-9f3a tenant=acme-mobility quote requested
+2026-08-19T04:11:02.013Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:11:02.013Z INFO  svc.retry attempt 1 failed (upstream read timeout after 100ms)
+2026-08-19T04:11:02.013Z INFO  svc.retry retrying in 50ms
+2026-08-19T04:11:02.078Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:11:02.078Z INFO  svc.retry attempt 2 failed (upstream read timeout after 100ms)
+2026-08-19T04:11:02.078Z INFO  svc.retry retrying in 100ms
+2026-08-19T04:11:02.190Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:11:02.190Z INFO  svc.retry attempt 3 failed (upstream read timeout after 100ms)
+2026-08-19T04:11:02.190Z INFO  svc.retry retrying in 200ms
+2026-08-19T04:11:02.404Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:11:02.404Z INFO  svc.retry attempt 4 failed (upstream read timeout after 100ms)
+2026-08-19T04:11:02.404Z INFO  svc.retry retrying in 400ms
+2026-08-19T04:11:02.815Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:11:02.815Z INFO  svc.retry attempt 5 failed (upstream read timeout after 100ms)
+2026-08-19T04:11:02.815Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:11:03.628Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:11:03.628Z INFO  svc.retry attempt 6 failed (upstream read timeout after 100ms)
+2026-08-19T04:11:03.628Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:11:04.443Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:11:04.443Z INFO  svc.retry attempt 7 failed (upstream read timeout after 100ms)
+2026-08-19T04:11:04.443Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:11:05.255Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:11:05.255Z INFO  svc.retry attempt 8 failed (upstream read timeout after 100ms)
+2026-08-19T04:11:05.255Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:11:06.069Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:11:06.069Z INFO  svc.retry attempt 9 failed (upstream read timeout after 100ms)
+2026-08-19T04:11:06.069Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:11:06.880Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:11:06.880Z INFO  svc.retry attempt 10 failed (upstream read timeout after 100ms)
+2026-08-19T04:11:06.880Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:11:07.693Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:11:07.693Z INFO  svc.retry attempt 11 failed (upstream read timeout after 100ms)
+2026-08-19T04:11:07.693Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:11:08.508Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:11:08.508Z INFO  svc.retry attempt 12 failed (upstream read timeout after 100ms)
+2026-08-19T04:11:08.508Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:11:09.000Z INFO  svc.api   request_id=q-df54 tenant=hokuriku-taxi quote requested
+2026-08-19T04:11:09.009Z INFO  svc.http  upstream ok in 9ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=hokuriku-taxi
+2026-08-19T04:11:09.320Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:11:09.320Z INFO  svc.retry attempt 13 failed (upstream read timeout after 100ms)
+2026-08-19T04:11:09.320Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:11:10.134Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:11:10.134Z INFO  svc.retry attempt 14 failed (upstream read timeout after 100ms)
+2026-08-19T04:11:10.134Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:11:10.945Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:11:10.945Z INFO  svc.retry attempt 15 failed (upstream read timeout after 100ms)
+2026-08-19T04:11:10.945Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:11:11.758Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:11:11.758Z INFO  svc.retry attempt 16 failed (upstream read timeout after 100ms)
+2026-08-19T04:11:11.758Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:11:12.573Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:11:12.573Z INFO  svc.retry attempt 17 failed (upstream read timeout after 100ms)
+2026-08-19T04:11:12.573Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:11:13.385Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:11:13.385Z INFO  svc.retry attempt 18 failed (upstream read timeout after 100ms)
+2026-08-19T04:11:13.385Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:11:14.199Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:11:14.199Z INFO  svc.retry attempt 19 failed (upstream read timeout after 100ms)
+2026-08-19T04:11:14.199Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:11:15.010Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:11:15.010Z INFO  svc.retry attempt 20 failed (upstream read timeout after 100ms)
+2026-08-19T04:11:15.010Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:11:15.823Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:11:15.823Z INFO  svc.retry attempt 21 failed (upstream read timeout after 100ms)
+2026-08-19T04:11:15.823Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:11:16.638Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:11:16.638Z INFO  svc.retry attempt 22 failed (upstream read timeout after 100ms)
+2026-08-19T04:11:16.638Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:11:17.450Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:11:17.450Z INFO  svc.retry attempt 23 failed (upstream read timeout after 100ms)
+2026-08-19T04:11:17.450Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:11:18.264Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:11:18.264Z INFO  svc.retry attempt 24 failed (upstream read timeout after 100ms)
+2026-08-19T04:11:18.264Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:11:18.400Z INFO  svc.api   request_id=q-ba78 tenant=marine-cab quote requested
+2026-08-19T04:11:18.412Z INFO  svc.http  upstream ok in 12ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=marine-cab
+2026-08-19T04:11:19.075Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:11:19.075Z INFO  svc.retry attempt 25 failed (upstream read timeout after 100ms)
+2026-08-19T04:11:19.075Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:11:19.888Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:11:19.888Z INFO  svc.retry attempt 26 failed (upstream read timeout after 100ms)
+2026-08-19T04:11:19.888Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:11:20.703Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:11:20.703Z INFO  svc.retry attempt 27 failed (upstream read timeout after 100ms)
+2026-08-19T04:11:20.703Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:11:21.515Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:11:21.515Z INFO  svc.retry attempt 28 failed (upstream read timeout after 100ms)
+2026-08-19T04:11:21.515Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:11:22.329Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:11:22.329Z INFO  svc.retry attempt 29 failed (upstream read timeout after 100ms)
+2026-08-19T04:11:22.329Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:11:23.140Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:11:23.140Z INFO  svc.retry attempt 30 failed (upstream read timeout after 100ms)
+2026-08-19T04:11:23.140Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:11:23.953Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:11:23.953Z INFO  svc.retry attempt 31 failed (upstream read timeout after 100ms)
+2026-08-19T04:11:23.953Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:11:24.768Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:11:24.768Z INFO  svc.retry attempt 32 failed (upstream read timeout after 100ms)
+2026-08-19T04:11:24.768Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:11:25.580Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:11:25.580Z INFO  svc.retry attempt 33 failed (upstream read timeout after 100ms)
+2026-08-19T04:11:25.580Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:11:26.394Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:11:26.394Z INFO  svc.retry attempt 34 failed (upstream read timeout after 100ms)
+2026-08-19T04:11:26.394Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:11:27.205Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:11:27.205Z INFO  svc.retry attempt 35 failed (upstream read timeout after 100ms)
+2026-08-19T04:11:27.205Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:11:27.800Z INFO  svc.api   request_id=q-3adb tenant=nishi-koutsu quote requested
+2026-08-19T04:11:27.815Z INFO  svc.http  upstream ok in 15ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=nishi-koutsu
+2026-08-19T04:11:28.018Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:11:28.018Z INFO  svc.retry attempt 36 failed (upstream read timeout after 100ms)
+2026-08-19T04:11:28.018Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:11:28.833Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:11:28.833Z INFO  svc.retry attempt 37 failed (upstream read timeout after 100ms)
+2026-08-19T04:11:28.833Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:11:29.645Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:11:29.645Z INFO  svc.retry attempt 38 failed (upstream read timeout after 100ms)
+2026-08-19T04:11:29.645Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:11:30.459Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:11:30.459Z INFO  svc.retry attempt 39 failed (upstream read timeout after 100ms)
+2026-08-19T04:11:30.459Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:11:31.270Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:11:31.270Z INFO  svc.retry attempt 40 failed (upstream read timeout after 100ms)
+2026-08-19T04:11:31.270Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:11:32.083Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:11:32.083Z INFO  svc.retry attempt 41 failed (upstream read timeout after 100ms)
+2026-08-19T04:11:32.083Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:11:32.898Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:11:32.898Z INFO  svc.retry attempt 42 failed (upstream read timeout after 100ms)
+2026-08-19T04:11:32.898Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:11:33.710Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:11:33.710Z INFO  svc.retry attempt 43 failed (upstream read timeout after 100ms)
+2026-08-19T04:11:33.710Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:11:34.524Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:11:34.524Z INFO  svc.retry attempt 44 failed (upstream read timeout after 100ms)
+2026-08-19T04:11:34.524Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:11:35.335Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:11:35.335Z INFO  svc.retry attempt 45 failed (upstream read timeout after 100ms)
+2026-08-19T04:11:35.335Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:11:36.148Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:11:36.148Z INFO  svc.retry attempt 46 failed (upstream read timeout after 100ms)
+2026-08-19T04:11:36.148Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:11:36.963Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:11:36.963Z INFO  svc.retry attempt 47 failed (upstream read timeout after 100ms)
+2026-08-19T04:11:36.963Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:11:37.200Z INFO  svc.api   request_id=q-7360 tenant=sakura-hire quote requested
+2026-08-19T04:11:37.218Z INFO  svc.http  upstream ok in 18ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=sakura-hire
+2026-08-19T04:11:37.775Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:11:37.775Z INFO  svc.retry attempt 48 failed (upstream read timeout after 100ms)
+2026-08-19T04:11:37.775Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:11:38.589Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:11:38.589Z INFO  svc.retry attempt 49 failed (upstream read timeout after 100ms)
+2026-08-19T04:11:38.589Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:11:39.400Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:11:39.400Z INFO  svc.retry attempt 50 failed (upstream read timeout after 100ms)
+2026-08-19T04:11:39.400Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:11:40.213Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:11:40.213Z INFO  svc.retry attempt 51 failed (upstream read timeout after 100ms)
+2026-08-19T04:11:40.213Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:11:41.028Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:11:41.028Z INFO  svc.retry attempt 52 failed (upstream read timeout after 100ms)
+2026-08-19T04:11:41.028Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:11:41.840Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:11:41.840Z INFO  svc.retry attempt 53 failed (upstream read timeout after 100ms)
+2026-08-19T04:11:41.840Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:11:42.654Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:11:42.654Z INFO  svc.retry attempt 54 failed (upstream read timeout after 100ms)
+2026-08-19T04:11:42.654Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:11:43.465Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:11:43.465Z INFO  svc.retry attempt 55 failed (upstream read timeout after 100ms)
+2026-08-19T04:11:43.465Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:11:44.278Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:11:44.278Z INFO  svc.retry attempt 56 failed (upstream read timeout after 100ms)
+2026-08-19T04:11:44.278Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:11:45.093Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:11:45.093Z INFO  svc.retry attempt 57 failed (upstream read timeout after 100ms)
+2026-08-19T04:11:45.093Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:11:45.905Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:11:45.905Z INFO  svc.retry attempt 58 failed (upstream read timeout after 100ms)
+2026-08-19T04:11:45.905Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:11:46.600Z INFO  svc.api   request_id=q-4668 tenant=yamate-taxi quote requested
+2026-08-19T04:11:46.610Z INFO  svc.http  upstream ok in 10ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=yamate-taxi
+2026-08-19T04:11:46.719Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:11:46.719Z INFO  svc.retry attempt 59 failed (upstream read timeout after 100ms)
+2026-08-19T04:11:46.719Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:11:47.530Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:11:47.530Z INFO  svc.retry attempt 60 failed (upstream read timeout after 100ms)
+2026-08-19T04:11:47.530Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:11:48.343Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:11:48.343Z INFO  svc.retry attempt 61 failed (upstream read timeout after 100ms)
+2026-08-19T04:11:48.343Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:11:49.158Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:11:49.158Z INFO  svc.retry attempt 62 failed (upstream read timeout after 100ms)
+2026-08-19T04:11:49.158Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:11:49.970Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:11:49.970Z INFO  svc.retry attempt 63 failed (upstream read timeout after 100ms)
+2026-08-19T04:11:49.970Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:11:50.784Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:11:50.784Z INFO  svc.retry attempt 64 failed (upstream read timeout after 100ms)
+2026-08-19T04:11:50.784Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:11:51.595Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:11:51.595Z INFO  svc.retry attempt 65 failed (upstream read timeout after 100ms)
+2026-08-19T04:11:51.595Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:11:52.408Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:11:52.408Z INFO  svc.retry attempt 66 failed (upstream read timeout after 100ms)
+2026-08-19T04:11:52.408Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:11:53.223Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:11:53.223Z INFO  svc.retry attempt 67 failed (upstream read timeout after 100ms)
+2026-08-19T04:11:53.223Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:11:54.035Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:11:54.035Z INFO  svc.retry attempt 68 failed (upstream read timeout after 100ms)
+2026-08-19T04:11:54.035Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:11:54.849Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:11:54.849Z INFO  svc.retry attempt 69 failed (upstream read timeout after 100ms)
+2026-08-19T04:11:54.849Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:11:55.660Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:11:55.660Z INFO  svc.retry attempt 70 failed (upstream read timeout after 100ms)
+2026-08-19T04:11:55.660Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:11:56.000Z INFO  svc.api   request_id=q-b12b tenant=hokuriku-taxi quote requested
+2026-08-19T04:11:56.013Z INFO  svc.http  upstream ok in 13ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=hokuriku-taxi
+2026-08-19T04:11:56.473Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:11:56.473Z INFO  svc.retry attempt 71 failed (upstream read timeout after 100ms)
+2026-08-19T04:11:56.473Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:11:57.288Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:11:57.288Z INFO  svc.retry attempt 72 failed (upstream read timeout after 100ms)
+2026-08-19T04:11:57.288Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:11:58.100Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:11:58.100Z INFO  svc.retry attempt 73 failed (upstream read timeout after 100ms)
+2026-08-19T04:11:58.100Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:11:58.914Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:11:58.914Z INFO  svc.retry attempt 74 failed (upstream read timeout after 100ms)
+2026-08-19T04:11:58.914Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:11:59.725Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:11:59.725Z INFO  svc.retry attempt 75 failed (upstream read timeout after 100ms)
+2026-08-19T04:11:59.725Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:12:00.538Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:12:00.538Z INFO  svc.retry attempt 76 failed (upstream read timeout after 100ms)
+2026-08-19T04:12:00.538Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:12:01.353Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:12:01.353Z INFO  svc.retry attempt 77 failed (upstream read timeout after 100ms)
+2026-08-19T04:12:01.353Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:12:02.165Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:12:02.165Z INFO  svc.retry attempt 78 failed (upstream read timeout after 100ms)
+2026-08-19T04:12:02.165Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:12:02.979Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:12:02.979Z INFO  svc.retry attempt 79 failed (upstream read timeout after 100ms)
+2026-08-19T04:12:02.979Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:12:03.790Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:12:03.790Z INFO  svc.retry attempt 80 failed (upstream read timeout after 100ms)
+2026-08-19T04:12:03.790Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:12:04.603Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:12:04.603Z INFO  svc.retry attempt 81 failed (upstream read timeout after 100ms)
+2026-08-19T04:12:04.603Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:12:05.400Z INFO  svc.api   request_id=q-5d24 tenant=marine-cab quote requested
+2026-08-19T04:12:05.416Z INFO  svc.http  upstream ok in 16ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=marine-cab
+2026-08-19T04:12:05.418Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:12:05.418Z INFO  svc.retry attempt 82 failed (upstream read timeout after 100ms)
+2026-08-19T04:12:05.418Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:12:06.230Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:12:06.230Z INFO  svc.retry attempt 83 failed (upstream read timeout after 100ms)
+2026-08-19T04:12:06.230Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:12:07.044Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:12:07.044Z INFO  svc.retry attempt 84 failed (upstream read timeout after 100ms)
+2026-08-19T04:12:07.044Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:12:07.855Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:12:07.855Z INFO  svc.retry attempt 85 failed (upstream read timeout after 100ms)
+2026-08-19T04:12:07.855Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:12:08.668Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:12:08.668Z INFO  svc.retry attempt 86 failed (upstream read timeout after 100ms)
+2026-08-19T04:12:08.668Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:12:09.483Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:12:09.483Z INFO  svc.retry attempt 87 failed (upstream read timeout after 100ms)
+2026-08-19T04:12:09.483Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:12:10.295Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:12:10.295Z INFO  svc.retry attempt 88 failed (upstream read timeout after 100ms)
+2026-08-19T04:12:10.295Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:12:11.109Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:12:11.109Z INFO  svc.retry attempt 89 failed (upstream read timeout after 100ms)
+2026-08-19T04:12:11.109Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:12:11.920Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:12:11.920Z INFO  svc.retry attempt 90 failed (upstream read timeout after 100ms)
+2026-08-19T04:12:11.920Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:12:12.733Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:12:12.733Z INFO  svc.retry attempt 91 failed (upstream read timeout after 100ms)
+2026-08-19T04:12:12.733Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:12:13.548Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:12:13.548Z INFO  svc.retry attempt 92 failed (upstream read timeout after 100ms)
+2026-08-19T04:12:13.548Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:12:14.360Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:12:14.360Z INFO  svc.retry attempt 93 failed (upstream read timeout after 100ms)
+2026-08-19T04:12:14.360Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:12:14.800Z INFO  svc.api   request_id=q-dc5a tenant=nishi-koutsu quote requested
+2026-08-19T04:12:14.819Z INFO  svc.http  upstream ok in 19ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=nishi-koutsu
+2026-08-19T04:12:15.174Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:12:15.174Z INFO  svc.retry attempt 94 failed (upstream read timeout after 100ms)
+2026-08-19T04:12:15.174Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:12:15.985Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:12:15.985Z INFO  svc.retry attempt 95 failed (upstream read timeout after 100ms)
+2026-08-19T04:12:15.985Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:12:16.798Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:12:16.798Z INFO  svc.retry attempt 96 failed (upstream read timeout after 100ms)
+2026-08-19T04:12:16.798Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:12:17.613Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:12:17.613Z INFO  svc.retry attempt 97 failed (upstream read timeout after 100ms)
+2026-08-19T04:12:17.613Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:12:18.425Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:12:18.425Z INFO  svc.retry attempt 98 failed (upstream read timeout after 100ms)
+2026-08-19T04:12:18.425Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:12:19.239Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:12:19.239Z INFO  svc.retry attempt 99 failed (upstream read timeout after 100ms)
+2026-08-19T04:12:19.239Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:12:20.050Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:12:20.050Z INFO  svc.retry attempt 100 failed (upstream read timeout after 100ms)
+2026-08-19T04:12:20.050Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:12:20.863Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:12:20.863Z INFO  svc.retry attempt 101 failed (upstream read timeout after 100ms)
+2026-08-19T04:12:20.863Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:12:21.678Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:12:21.678Z INFO  svc.retry attempt 102 failed (upstream read timeout after 100ms)
+2026-08-19T04:12:21.678Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:12:22.490Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:12:22.490Z INFO  svc.retry attempt 103 failed (upstream read timeout after 100ms)
+2026-08-19T04:12:22.490Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:12:23.304Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:12:23.304Z INFO  svc.retry attempt 104 failed (upstream read timeout after 100ms)
+2026-08-19T04:12:23.304Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:12:24.115Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:12:24.115Z INFO  svc.retry attempt 105 failed (upstream read timeout after 100ms)
+2026-08-19T04:12:24.115Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:12:24.200Z INFO  svc.api   request_id=q-3163 tenant=sakura-hire quote requested
+2026-08-19T04:12:24.211Z INFO  svc.http  upstream ok in 11ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=sakura-hire
+2026-08-19T04:12:24.928Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:12:24.928Z INFO  svc.retry attempt 106 failed (upstream read timeout after 100ms)
+2026-08-19T04:12:24.928Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:12:25.743Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:12:25.743Z INFO  svc.retry attempt 107 failed (upstream read timeout after 100ms)
+2026-08-19T04:12:25.743Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:12:26.555Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:12:26.555Z INFO  svc.retry attempt 108 failed (upstream read timeout after 100ms)
+2026-08-19T04:12:26.555Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:12:27.369Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:12:27.369Z INFO  svc.retry attempt 109 failed (upstream read timeout after 100ms)
+2026-08-19T04:12:27.369Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:12:28.180Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:12:28.180Z INFO  svc.retry attempt 110 failed (upstream read timeout after 100ms)
+2026-08-19T04:12:28.180Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:12:28.993Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:12:28.993Z INFO  svc.retry attempt 111 failed (upstream read timeout after 100ms)
+2026-08-19T04:12:28.993Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:12:29.808Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:12:29.808Z INFO  svc.retry attempt 112 failed (upstream read timeout after 100ms)
+2026-08-19T04:12:29.808Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:12:30.620Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:12:30.620Z INFO  svc.retry attempt 113 failed (upstream read timeout after 100ms)
+2026-08-19T04:12:30.620Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:12:31.434Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:12:31.434Z INFO  svc.retry attempt 114 failed (upstream read timeout after 100ms)
+2026-08-19T04:12:31.434Z INFO  svc.retry retrying in 800ms
+2026-08-19T04:12:32.245Z WARN  svc.http  upstream read timeout after 100ms url=http://quote-api.ap-northeast-1.internal/v1/quote?tenant=acme-mobility
+2026-08-19T04:12:32.245Z INFO  svc.retry attempt 115 failed (upstream read timeout after 100ms)
+2026-08-19T04:12:32.285Z ERROR svc.api   request_id=q-9f3a worker killed by supervisor (no response within 90s deadline)
+2026-08-19T04:12:32.286Z ERROR svc.api   request_id=q-9f3a tenant=acme-mobility 504 returned to client

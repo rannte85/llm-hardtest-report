@@ -1,0 +1,20 @@
+cff-version: 1.2.0
+message: "If you use this benchmark, cite the repository version and commit."
+title: "LLM Hardtest Report: Pattern0 Agent Benchmark"
+type: software
+authors:
+  - name: "LLM Hardtest Report Contributors"
+version: 1.0.0
+date-released: 2026-08-30
+url: "https://github.com/rannte85/llm-hardtest-report"
+repository-code: "https://github.com/rannte85/llm-hardtest-report"
+license: MIT
+abstract: >-
+  A local-first, reproducible command-line benchmark for comparing language models
+  on reasoning, coding-agent execution, release readiness, and safe handoffs.
+keywords:
+  - large language models
+  - benchmark
+  - local models
+  - coding agents
+  - reproducibility

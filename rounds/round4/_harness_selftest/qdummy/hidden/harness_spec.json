@@ -1,0 +1,18 @@
+{
+  "protocol": "v4-hidden-1",
+  "public_tests": {
+    "default": 8
+  },
+  "public_tests_may_grow": false,
+  "hidden_tests": [
+    "h1_single_line_with_coupon",
+    "h2_two_lines_share_one_coupon",
+    "h3_four_lines_share_one_coupon",
+    "h4_no_coupon_is_a_plain_sum",
+    "h5_coupon_larger_than_the_first_line",
+    "h6_coupon_exceeding_the_whole_order_floors_at_zero",
+    "h7_empty_order_is_zero",
+    "h8_does_not_mutate_the_caller_items",
+    "h9_repeated_calls_are_stable"
+  ]
+}

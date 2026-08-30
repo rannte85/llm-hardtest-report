@@ -36,10 +36,13 @@ Copy `configs/smoke.json`, replace the model identifier, and set the matching ke
 cp configs/smoke.json benchmark.json
 export PATTERN0_API_KEY=local-dummy
 ./llm-hardtest validate --config benchmark.json
+./llm-hardtest doctor --config benchmark.json
 ./llm-hardtest run --config benchmark.json
 ```
 
-The smoke configuration runs Round 1 once. After it succeeds, increase repetitions
+`validate` checks configuration syntax and required local executables without contacting
+a model. `doctor` lists the configured model and makes a tiny request to every API the
+campaign needs. The smoke configuration runs Round 1 once. After it succeeds, increase repetitions
 and add Rounds 2 and 3. Add Round 4 only after reading `BACKENDS.md` and installing
 Codex CLI.
 

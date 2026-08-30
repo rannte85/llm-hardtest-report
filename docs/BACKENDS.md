@@ -3,6 +3,27 @@
 LLM Hardtest Report has two transports. Choose based on the round and the API your
 server implements.
 
+## Discover and verify first
+
+| Server preset | Typical base URL | Rounds 1–3 | Round 4 |
+|---|---|---:|---:|
+| [Ollama](https://docs.ollama.com/api/openai-compatibility) | `http://127.0.0.1:11434/v1` | Yes | Ollama 0.13.3+ |
+| [LM Studio](https://lmstudio.ai/docs/developer/openai-compat/responses) | `http://127.0.0.1:1234/v1` | Yes | LM Studio 0.3.29+ |
+| [llama.cpp](https://github.com/ggml-org/llama.cpp/tree/master/tools/server) | `http://127.0.0.1:8080/v1` | Yes | Current server builds |
+| [vLLM](https://docs.vllm.ai/en/latest/serving/openai_compatible_server/) | `http://127.0.0.1:8000/v1` | Yes | Current releases |
+| [MLX-LM](https://github.com/ml-explore/mlx-lm/blob/main/mlx_lm/SERVER.md) | `http://127.0.0.1:8080/v1` | Yes | Only if that build exposes Responses |
+
+Do not copy a model filename from a UI and assume it is the API ID:
+
+```bash
+./llm-hardtest discover --base-url http://127.0.0.1:11434/v1
+./llm-hardtest doctor --config benchmark.json
+```
+
+`discover` authenticates with the optional `--api-key-env` variable. `doctor` verifies
+the configured model appears in `/v1/models` and makes a minimal Chat Completions or
+Responses request. The model probes are small, but they can consume provider usage.
+
 ## `openai_compat`
 
 This transport sends Rounds 1–3 directly to `<base_url>/chat/completions`.
@@ -24,9 +45,8 @@ It requires the OpenAI chat-completions response shape. The benchmark forwards
 }
 ```
 
-Ollama, LM Studio, llama.cpp, vLLM, MLX-LM, and other runtimes can expose compatible
-routes. Their exact launch flags and endpoint support change over time; use the
-runtime's documentation and verify it with the curl request in `GETTING_STARTED.md`.
+The exact launch flags and endpoint support change over time. Use the runtime's
+documentation and verify the installed version with `doctor`.
 
 ## `codex_cli`
 
@@ -83,6 +103,10 @@ export PATTERN0_API_KEY='replace-with-real-key-only-if-required'
 Local servers that ignore authentication can use `local-dummy`. Never commit a real
 key, `auth.json`, shell history, or a run directory that may contain sensitive model
 content.
+
+The harness passes real credentials only through the environment. Generated custom
+Codex homes contain a permission-restricted dummy auth file; they do not persist the
+actual provider key.
 
 ## Compatibility reports
 

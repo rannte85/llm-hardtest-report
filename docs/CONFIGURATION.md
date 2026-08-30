@@ -5,6 +5,7 @@ test or `configs/example.json` for all transports. Validate before a campaign:
 
 ```bash
 ./llm-hardtest validate --config benchmark.json
+./llm-hardtest doctor --config benchmark.json
 ```
 
 Top-level fields:
@@ -22,6 +23,7 @@ Model fields:
 - `label`: report label.
 - `model`: endpoint or Codex model identifier.
 - `transport`: `openai_compat` or `codex_cli`.
+- `rounds`: optional non-empty subset of the campaign rounds for this model.
 - `base_url`: OpenAI-compatible `/v1` base URL for a custom provider.
 - `api_key_env`: environment variable holding the API key.
 - `codex_provider`: `custom` or `openai` when using Codex.
@@ -32,6 +34,10 @@ Model fields:
 
 Model configurations count independently. The same model identifier at two reasoning
 efforts should use two different keys.
+
+`validate` is deliberately offline. Use `doctor` before a campaign to authenticate to
+`/v1/models`, verify the exact model ID, and probe Chat Completions or Responses as
+required. Use `discover --base-url <url>` to print server model IDs.
 
 ## Transport and round compatibility
 
@@ -47,6 +53,7 @@ entries use `openai_compat` for earlier rounds.
 ## Reproducibility notes
 
 - Configuration order is execution order; models are not run concurrently.
+- Model-level `rounds` can divide chat-only and coding-agent evaluations.
 - Every repetition starts from a clean task state.
 - Resume requires a config exactly equal to the saved `config.json` snapshot.
 - Secrets must live only in environment variables named by `api_key_env`.

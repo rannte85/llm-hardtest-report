@@ -66,7 +66,7 @@ Create an isolated environment and install the command if preferred:
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-python -m pip install -e .
+python -m pip install .
 llm-hardtest selftest
 ```
 
@@ -81,6 +81,7 @@ For a server that does not require authentication, use a non-secret placeholder:
 ```bash
 export PATTERN0_API_KEY=local-dummy
 llm-hardtest validate --config benchmark.json
+llm-hardtest doctor --config benchmark.json
 llm-hardtest run --config benchmark.json
 ```
 
@@ -104,6 +105,7 @@ Use Rounds 1–3 with any server that exposes `/v1/chat/completions`:
       "label": "Model A Q4",
       "model": "model-a",
       "transport": "openai_compat",
+      "rounds": [1, 2, 3],
       "base_url": "http://127.0.0.1:8000/v1",
       "api_key_env": "PATTERN0_API_KEY",
       "max_tokens": 16000,
@@ -113,17 +115,26 @@ Use Rounds 1–3 with any server that exposes `/v1/chat/completions`:
 }
 ```
 
-Common servers such as Ollama, LM Studio, llama.cpp, vLLM, and MLX-LM may expose an
-OpenAI-compatible route, but route availability and model identifiers depend on the
-server version and launch options. Confirm that `/v1/chat/completions` works before
-starting a large campaign. See [Backend setup](docs/BACKENDS.md) for examples and the
-Round 4 capability boundary.
+List the exact model IDs exposed by a running server instead of guessing:
+
+```bash
+llm-hardtest discover --base-url http://127.0.0.1:11434/v1
+```
+
+The interactive initializer includes presets for Ollama, LM Studio, llama.cpp, vLLM,
+and MLX-LM. Current Ollama, LM Studio, llama.cpp, and vLLM releases expose both Chat
+Completions and Responses APIs; version and model tool-calling support still matter for
+Round 4. The upstream MLX-LM server should be treated as Rounds 1–3 only unless the
+installed build explicitly provides `/v1/responses`. See
+[Backend setup](docs/BACKENDS.md) for exact default ports and capability checks.
 
 ## Compare configurations
 
 Every entry in `models` is treated independently. This makes it possible to compare
 quantizations, sampling settings, reasoning effort, prompt endpoints, or a cloud
 control in one report. Give every entry a unique filesystem-safe `key`.
+An optional model-level `rounds` list lets one local chat model run Rounds 1–3 while a
+Responses-capable coding agent or cloud control runs Round 4 in the same campaign.
 
 The full example includes both direct API and Codex transports:
 

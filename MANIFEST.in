@@ -1,0 +1,5 @@
+graft rounds
+prune rounds/round4/out
+prune rounds/round4/.codex_omlx
+exclude rounds/round4/.v4_baselines.json
+global-exclude __pycache__ *.py[cod] .DS_Store

@@ -4,7 +4,7 @@ title: "LLM Hardtest Report: Pattern0 Agent Benchmark"
 type: software
 authors:
   - name: "LLM Hardtest Report Contributors"
-version: 1.0.0
+version: 1.0.1
 date-released: 2026-08-30
 url: "https://github.com/rannte85/llm-hardtest-report"
 repository-code: "https://github.com/rannte85/llm-hardtest-report"

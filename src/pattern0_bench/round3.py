@@ -5,10 +5,10 @@ import time
 from pathlib import Path
 
 from .backends import Backend
-from .common import load_json, save_json
+from .common import load_json, repo_root, save_json
 
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = repo_root()
 BASE = ROOT / "rounds" / "round3"
 JOBS = {'A': (4,4,9,[]), 'B': (3,7,3,[]), 'C': (3,10,4,['B']),
         'D': (2,12,9,['C']), 'E': (5,17,6,[]), 'F': (6,20,5,['A'])}
@@ -95,28 +95,38 @@ def run(model: dict, backend: Backend, attempt: int, out_dir: Path, timeout: int
     results = []
     for q in spec["questions"]:
         started = time.time()
-        if q.get("multi_turn"):
-            messages, turns = [], []
-            for index, turn in enumerate(q["turns"], 1):
-                messages.append({"role": "user", "content": turn})
-                response = backend.complete(messages, timeout)
-                messages.append({"role": "assistant", "content": response["content"]})
-                turns.append({"turn": index, **response})
-            row = {"id": q["id"], "name": q["name"], "manual_review_required": True,
-                   "correct": None, "turns": turns,
-                   "wall": round(time.time() - started, 3),
-                   "completion_tokens": sum(x.get("completion_tokens") or 0 for x in turns)}
-        else:
-            response = backend.complete([{"role": "user", "content": _prompt(spec, q)}], timeout)
-            grade = _grade(q["id"], _fields(response["content"]))
-            row = {"id": q["id"], "name": q["name"], **grade, **response}
+        try:
+            if q.get("multi_turn"):
+                messages, turns = [], []
+                for index, turn in enumerate(q["turns"], 1):
+                    messages.append({"role": "user", "content": turn})
+                    response = backend.complete(messages, timeout)
+                    messages.append({"role": "assistant", "content": response["content"]})
+                    turns.append({"turn": index, **response})
+                row = {"id": q["id"], "name": q["name"], "manual_review_required": True,
+                       "correct": None, "turns": turns,
+                       "wall": round(time.time() - started, 3),
+                       "completion_tokens": sum(x.get("completion_tokens") or 0 for x in turns)}
+            else:
+                response = backend.complete([{"role": "user", "content": _prompt(spec, q)}], timeout)
+                grade = _grade(q["id"], _fields(response["content"]))
+                row = {"id": q["id"], "name": q["name"], **grade, **response}
+        except Exception as exc:
+            row = {"id": q["id"], "name": q["name"], "correct": None,
+                   "valid": False, "error": str(exc),
+                   "wall": round(time.time() - started, 3)}
         results.append(row)
-        mark = "REVIEW" if row.get("correct") is None else ("PASS" if row["correct"] else "FAIL")
+        mark = ("INVALID" if row.get("valid") is False else
+                ("REVIEW" if row.get("correct") is None else
+                 ("PASS" if row["correct"] else "FAIL")))
         print(f'    r3 q{q["id"]}: {mark}')
-    auto = [x for x in results if x.get("correct") is not None]
+    valid = [x for x in results if x.get("valid") is not False]
+    auto = [x for x in valid if x.get("correct") is not None]
     payload = {"round": 3, "model": model["key"], "model_id": model["model"],
                "attempt": attempt, "score": sum(x["correct"] for x in auto),
-               "total": len(auto), "manual_review": sum(x.get("correct") is None for x in results),
+               "total": len(auto), "planned": len(results),
+               "infrastructure_errors": len(results) - len(valid),
+               "manual_review": sum(x.get("correct") is None for x in valid),
                "wall": round(sum(x.get("wall", 0) for x in results), 3), "results": results}
     save_json(out_dir / "result.json", payload)
     return payload

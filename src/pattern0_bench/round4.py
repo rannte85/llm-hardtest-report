@@ -18,6 +18,7 @@ def run(model: dict, attempts: int, out_dir: Path, timeout: int,
         tasks: list[str] | None = None, dry_run: bool = False) -> int:
     base = repo_root() / "rounds" / "round4"
     sys.path.insert(0, str(base))
+    previous_omlx_key = os.environ.get("OMLX_API_KEY")
     try:
         runner = importlib.import_module("v4_runner")
         grader = importlib.import_module("v4_grade")
@@ -36,7 +37,9 @@ def run(model: dict, attempts: int, out_dir: Path, timeout: int,
         runner.DEFAULT_SCRATCH = str(out_dir.parent.parent / "_work")
         home = Path(runner.CODEX_HOME_LOCAL) / model["key"]
         home.mkdir(parents=True, exist_ok=True)
-        save_json(home / "auth.json", {"OPENAI_API_KEY": "local-dummy"})
+        auth_path = home / "auth.json"
+        save_json(auth_path, {"OPENAI_API_KEY": "local-dummy"})
+        auth_path.chmod(0o600)
         selected = tasks or CANONICAL_TASKS
         unknown = [task for task in selected if task not in grader.available_tasks()]
         if unknown:
@@ -48,5 +51,9 @@ def run(model: dict, attempts: int, out_dir: Path, timeout: int,
             args.append("--dry-run")
         return int(runner.main(args) or 0)
     finally:
+        if previous_omlx_key is None:
+            os.environ.pop("OMLX_API_KEY", None)
+        else:
+            os.environ["OMLX_API_KEY"] = previous_omlx_key
         if str(base) in sys.path:
             sys.path.remove(str(base))

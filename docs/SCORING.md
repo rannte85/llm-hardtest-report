@@ -3,7 +3,9 @@
 ## Rounds 1 and 2
 
 Answers are normalized for whitespace, commas, and percent signs, then compared with
-the expected answer. Every repetition starts independently.
+the expected answer using full equality. The required final `ANSWER:` line must be
+present; numbers merely mentioned in reasoning are not accepted. Every repetition
+starts independently.
 
 ## Round 3
 
@@ -32,6 +34,14 @@ the next attempt's workspace or prompt. Server-side caches may affect speed, but
 solutions are not supplied to subsequent attempts. Randomness, sampling policy, and
 shared model state remain properties of the selected serving stack and should be
 reported with published results.
+
+## Infrastructure-invalid work
+
+Connection failures, provider errors, malformed API responses, and harness exceptions
+are recorded separately as infrastructure errors. They are not model answers and are
+excluded from correctness denominators. Reports retain their wall time and error
+evidence; operators should repair the environment and resume rather than deleting the
+failed evidence.
 
 ## Throughput
 

@@ -7,6 +7,7 @@
 ├── llm-hardtest                # checkout-local launcher
 ├── pattern0-bench              # compatibility launcher
 ├── pyproject.toml              # package metadata and installed commands
+├── setup.py / MANIFEST.in      # wheel and source-data bundling
 ├── configs/                    # safe example configurations
 ├── docs/                       # user, scoring, integrity, and developer guides
 ├── rounds/                     # benchmark data, tasks, runners, and graders

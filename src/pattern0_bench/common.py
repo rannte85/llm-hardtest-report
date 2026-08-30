@@ -8,7 +8,18 @@ from pathlib import Path
 
 
 def repo_root() -> Path:
-    return Path(__file__).resolve().parents[2]
+    """Return the directory that contains bundled benchmark rounds.
+
+    Editable installs use the repository-level ``rounds/`` tree. Built wheels
+    carry the same data inside the package so installed commands remain usable.
+    """
+    source_root = Path(__file__).resolve().parents[2]
+    if (source_root / "rounds").is_dir():
+        return source_root
+    package_root = Path(__file__).resolve().parent
+    if (package_root / "rounds").is_dir():
+        return package_root
+    raise RuntimeError("benchmark data is missing; reinstall llm-hardtest-report")
 
 
 def load_json(path: Path):
@@ -36,7 +47,7 @@ def stamp() -> str:
 
 def answer_text(text: str) -> str:
     matches = re.findall(r"ANSWER:\s*(.+)", text or "", re.I)
-    return matches[-1].strip() if matches else (text or "").strip()[-200:]
+    return matches[-1].strip() if matches else ""
 
 
 def norm_answer(value: str) -> str:
@@ -45,4 +56,4 @@ def norm_answer(value: str) -> str:
 
 def answer_matches(actual: str, expected: str) -> bool:
     a, e = norm_answer(actual), norm_answer(expected)
-    return a == e or (len(e) >= 2 and e in a)
+    return bool(a) and a == e

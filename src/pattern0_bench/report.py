@@ -39,6 +39,7 @@ def collect(run_dir: Path) -> dict:
                     "total": sum(r.get("total", 0) for r in rows),
                     "mean_wall_seconds": _mean([r.get("wall") for r in rows]),
                     "manual_review": sum(r.get("manual_review", 0) for r in rows),
+                    "infrastructure_errors": sum(r.get("infrastructure_errors", 0) for r in rows),
                 }
         v4 = run_dir / key / "round4" / "run.json"
         if v4.exists():
@@ -67,6 +68,8 @@ def collect(run_dir: Path) -> dict:
                 })
             entry["rounds"]["4"] = {
                 "attempts": len(grades),
+                "planned_attempts": int(payload.get("attempts", 0)) * len(payload.get("tasks", [])),
+                "infrastructure_errors": len(payload.get("errors", [])),
                 "release_ready": sum(bool(g.get("flags", {}).get("attempt_pass")) for g in grades),
                 "handoff_utility": sum(bool(g.get("flags", {}).get("manager_utility_pass")) for g in grades),
                 "handoff_applicable": sum(g.get("flags", {}).get("manager_utility_pass") is not None for g in grades),
@@ -112,12 +115,14 @@ def render(summary: dict) -> str:
             if number in ("1", "2", "3"):
                 lines.append(f'- Round {number}: {_ratio(data["passed"], data["total"])}; '
                              f'{data["attempts"]} attempts; mean wall {data["mean_wall_seconds"]}s; '
-                             f'manual-review items {data.get("manual_review", 0)}.')
+                             f'manual-review items {data.get("manual_review", 0)}; '
+                             f'infrastructure errors {data.get("infrastructure_errors", 0)}.')
             else:
                 lines.append(f'- Round 4: release {_ratio(data["release_ready"], data["attempts"])}; '
                              f'handoff {_ratio(data["handoff_utility"], data["handoff_applicable"])}; '
                              f'false-green {data["false_green"]}; tampering {data["tampering"]}; '
-                             f'mean auto {data["mean_auto_score"]}/{data["auto_score_max"]}.')
+                             f'mean auto {data["mean_auto_score"]}/{data["auto_score_max"]}; '
+                             f'infrastructure errors {data.get("infrastructure_errors", 0)}.')
         lines.append("")
         r4 = model["rounds"].get("4")
         if r4 and r4.get("tasks"):

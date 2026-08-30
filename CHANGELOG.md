@@ -3,6 +3,18 @@
 All notable changes are documented here. Benchmark-scoring compatibility is called
 out separately from harness features.
 
+## 1.0.1 — 2026-08-30
+
+- Stopped persisting real custom-provider API keys and restricted generated auth files.
+- Enforced exact final-answer matching and quarantined infrastructure errors from
+  correctness denominators.
+- Rejected path-traversal campaign names and reserved model keys.
+- Added authenticated Round 4 preflight, `discover`, live `doctor` probes, server
+  presets, and per-model round selection.
+- Bundled benchmark data in wheels so standard `pip install .` works.
+- Preserved infrastructure exceptions in reports and made failed attempts resumable.
+- Added regression coverage for all adversarial-review findings.
+
 ## 1.0.0 — 2026-08-30
 
 - Published Pattern0 rounds 1–4 as LLM Hardtest Report.

@@ -110,8 +110,14 @@ class CodexBackend(Backend):
             f'base_url = {json.dumps(base)}\n'
             f'env_key = {json.dumps(key_env)}\n'
             'wire_api = "responses"\n')
-        (home / "config.toml").write_text(config, encoding="utf-8")
-        save_json(home / "auth.json", {"OPENAI_API_KEY": os.environ.get(key_env, "local-dummy")})
+        config_path = home / "config.toml"
+        config_path.write_text(config, encoding="utf-8")
+        config_path.chmod(0o600)
+        # Codex auth discovery expects the file to exist for a custom provider,
+        # but the actual provider credential is supplied only through env_key.
+        auth_path = home / "auth.json"
+        save_json(auth_path, {"OPENAI_API_KEY": "local-dummy"})
+        auth_path.chmod(0o600)
         env["CODEX_HOME"] = str(home)
         env.setdefault(key_env, "local-dummy")
         return env
@@ -144,8 +150,10 @@ class CodexBackend(Backend):
         transcript = (proc.stdout or "") + (proc.stderr or "")
         content = last.read_text(encoding="utf-8", errors="replace") if last.exists() else ""
         tokens = re.findall(r"tokens used[:\s]*\n?\s*([\d,]+)", transcript, re.I)
-        if proc.returncode != 0 and not content:
+        if proc.returncode != 0:
             raise BackendError(f"codex exited {proc.returncode}: {transcript[-500:]}")
+        if not content.strip():
+            raise BackendError("codex completed without a final text response")
         return {
             "content": content,
             "wall": round(time.time() - started, 3),

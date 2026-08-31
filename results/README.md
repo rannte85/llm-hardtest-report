@@ -21,4 +21,5 @@ llm-hardtest results build --check
 ```
 
 The index groups only identical public configurations and pack fingerprints. An
-observed baseline remains hidden until five comparable runs have been accepted.
+observed baseline remains hidden until five distinct comparable bundles have been
+accepted; repeating a model entry inside one bundle cannot meet that threshold.

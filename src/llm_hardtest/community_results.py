@@ -9,7 +9,7 @@ from .github_submit import submission_relative_path
 from .public_results import load_public_bundle
 
 
-MIN_BASELINE_RUNS = 5
+MIN_BASELINE_SUBMISSIONS = 5
 
 
 def load_submission_directory(directory: Path) -> list[dict]:
@@ -53,16 +53,20 @@ def _configuration_id(payload: dict, model: dict) -> str:
 def aggregate_submissions(submissions: list[dict]) -> list[dict]:
     """Group only identical public configurations, rounds, and pack fingerprints."""
     groups = defaultdict(lambda: {
-        "runs": 0, "passed": 0, "total": 0, "incomplete": 0,
+        "submissions": 0, "runs": 0, "passed": 0, "total": 0, "incomplete": 0,
         "infrastructure_errors": 0,
     })
     for payload in submissions:
+        bundle_groups = set()
         for model in payload["models"]:
             configuration = _configuration_id(payload, model)
             for round_number, metrics in model["rounds"].items():
                 pack = payload["benchmark"]["packs"][round_number]
                 key = (int(round_number), pack, model["public_name"], configuration)
                 group = groups[key]
+                if key not in bundle_groups:
+                    group["submissions"] += 1
+                    bundle_groups.add(key)
                 group["runs"] += 1
                 for field in ("passed", "total", "incomplete", "infrastructure_errors"):
                     value = metrics.get(field)
@@ -107,7 +111,7 @@ def render_index(submissions: list[dict]) -> str:
     lines += [
         f"Validated bundles: **{len(submissions)}**. Comparable model/round groups: **{len(rows)}**.",
         "",
-        "| Round | Pack | Public model | Config | Runs | Observed score | Completion | Baseline |",
+        "| Round | Pack | Public model | Config | Bundles | Observed score | Completion | Baseline |",
         "|---:|---|---|---|---:|---:|---:|---|",
     ]
     for row in rows:
@@ -117,15 +121,16 @@ def render_index(submissions: list[dict]) -> str:
         score = f"{passed:g}/{total:g}" if total else "n/a"
         completion = f"{(100 * total / attempted):.1f}%" if attempted else "n/a"
         baseline = (f"{(100 * passed / total):.1f}% observed"
-                    if row["runs"] >= MIN_BASELINE_RUNS and total else
-                    f"withheld (<{MIN_BASELINE_RUNS} runs)")
+                    if row["submissions"] >= MIN_BASELINE_SUBMISSIONS and total else
+                    f"withheld (<{MIN_BASELINE_SUBMISSIONS} bundles)")
         lines.append(
             f"| {row['round']} | `{row['pack'][7:19]}` | {_cell(row['model'])} | "
-            f"`{row['configuration']}` | {row['runs']} | {score} | {completion} | {baseline} |")
+            f"`{row['configuration']}` | {row['submissions']} | {score} | {completion} | {baseline} |")
     lines += [
         "",
-        f"Baselines appear only after at least {MIN_BASELINE_RUNS} independently submitted runs",
-        "share the exact public configuration and pack. They are descriptive observations,",
+        f"Baselines appear only after at least {MIN_BASELINE_SUBMISSIONS} distinct accepted bundles",
+        "share the exact public configuration and pack. Duplicate model entries inside one",
+        "bundle cannot raise this threshold. The values are descriptive observations,",
         "not predictions for an unseen model or a different runtime configuration.",
         "",
     ]

@@ -949,7 +949,7 @@ class PublicResultTests(unittest.TestCase):
             rows = aggregate_submissions(loaded)
             self.assertEqual((len(loaded), len(rows)), (1, 1))
             self.assertEqual(rows[0]["passed"], 1)
-            self.assertIn("withheld (<5 runs)", render_index(loaded))
+            self.assertIn("withheld (<5 bundles)", render_index(loaded))
             output = Path(tmp) / "INDEX.md"
             self.assertEqual(build_index(submissions, output), (1, 1))
             self.assertEqual(build_index(submissions, output, check=True), (1, 1))
@@ -974,6 +974,21 @@ class PublicResultTests(unittest.TestCase):
         document = render_index(submissions)
         self.assertIn("5/5", document)
         self.assertIn("100.0% observed", document)
+
+    def test_duplicate_model_entries_do_not_raise_the_baseline_threshold(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run = Path(tmp) / "run"
+            self._run(run)
+            payload, _ = build_public_result(run)
+        payload["models"] = payload["models"] * 5
+        from llm_hardtest.public_results import _bundle_id
+        body = {key: value for key, value in payload.items() if key != "bundle_id"}
+        payload["bundle_id"] = _bundle_id(body)
+        validate_public_result(payload)
+        rows = aggregate_submissions([payload])
+        self.assertEqual(rows[0]["runs"], 5)
+        self.assertEqual(rows[0]["submissions"], 1)
+        self.assertIn("withheld (<5 bundles)", render_index([payload]))
 
     def test_community_validation_rejects_wrong_filename_and_extra_entry(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -71,7 +71,8 @@ versions, or pack fingerprints are directly comparable.
 
 `results build` groups records only when model name, environment, transport,
 generation parameters, declared metadata, round, and pack fingerprint match. It
-withholds a descriptive pass-rate baseline until five independently submitted runs
-exist in that exact group. A future predictive model would require substantially more
+withholds a descriptive pass-rate baseline until five distinct accepted bundles exist
+in that exact group. Duplicate entries inside one bundle count only once toward that
+threshold. A future predictive model would require substantially more
 representative data, uncertainty reporting, abuse controls, and an explicit statement
 of the population it claims to predict.

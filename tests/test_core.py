@@ -19,6 +19,7 @@ from llm_hardtest.progress import TerminalDashboard, _duration
 from llm_hardtest.report import collect, render
 from llm_hardtest.results import item_status, result_counts
 from llm_hardtest.inspection import inspect_run, render_inspection
+from llm_hardtest.replay import make_replay_config
 from llm_hardtest.round12 import run as run_round12
 from llm_hardtest.round3 import _fields, _grade
 from llm_hardtest.round4 import run as run_round4
@@ -98,6 +99,76 @@ class InspectionTests(unittest.TestCase):
             save_json(root / "config.json", {"models": [{"key": "../escape"}]})
             with self.assertRaisesRegex(ValueError, "unsafe model key"):
                 inspect_run(root)
+
+
+class ReplayTests(unittest.TestCase):
+    def test_replay_config_selects_only_unresolved_items(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "source-run"
+            config = {
+                "name": "source", "repetitions": 5, "rounds": [1, 2],
+                "models": [
+                    {"key": "a", "model": "a", "transport": "openai_compat",
+                     "rounds": [1, 2]},
+                    {"key": "b", "model": "b", "transport": "openai_compat",
+                     "rounds": [1]},
+                ],
+            }
+            save_json(root / "config.json", config)
+            save_json(root / "a/round1/attempt-1/result.json", {"results": [
+                {"id": 1, "correct": True},
+                {"id": 4, "correct": False, "finish_reason": "length"},
+            ]})
+            save_json(root / "a/round2/attempt-1/result.json", {"results": [
+                {"id": 3, "correct": False, "extracted": "wrong"},
+            ]})
+            replay = make_replay_config(root)
+        self.assertEqual(replay["name"], "source-replay")
+        self.assertEqual(replay["repetitions"], 1)
+        self.assertEqual(replay["rounds"], [1, 2])
+        self.assertEqual(len(replay["models"]), 1)
+        self.assertEqual(replay["models"][0]["item_filters"], {"1": [4], "2": [3]})
+        self.assertEqual(replay["replay"]["parent_run_id"], "source-run")
+        validate_config(replay)
+        self.assertEqual(_campaign_units(replay), 2)
+
+    def test_replay_skips_review_unless_requested(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "source-run"
+            save_json(root / "config.json", {
+                "name": "source", "repetitions": 1, "rounds": [3],
+                "models": [{"key": "m", "model": "m",
+                            "transport": "openai_compat", "rounds": [3]}],
+            })
+            save_json(root / "m/round3/attempt-1/result.json", {"results": [
+                {"id": 25, "correct": None, "manual_review_required": True},
+            ]})
+            self.assertIsNone(make_replay_config(root))
+            replay = make_replay_config(root, include_review=True)
+        self.assertEqual(replay["models"][0]["item_filters"], {"3": [25]})
+
+    def test_item_filters_are_validated(self):
+        config = {
+            "name": "test", "repetitions": 1, "rounds": [1],
+            "models": [{"key": "m", "model": "m", "transport": "openai_compat",
+                        "rounds": [1], "item_filters": {"1": [999]}}],
+        }
+        with self.assertRaisesRegex(ValueError, "unknown round 1 item"):
+            validate_config(config)
+        config["models"][0]["item_filters"] = {"01": [1]}
+        with self.assertRaisesRegex(ValueError, "canonical strings"):
+            validate_config(config)
+
+    def test_campaign_forwards_focused_question_filter(self):
+        config = {
+            "name": "test", "repetitions": 1, "rounds": [1],
+            "models": [{"key": "m", "model": "m", "transport": "openai_compat",
+                        "rounds": [1], "item_filters": {"1": [4, 7]}}],
+        }
+        with tempfile.TemporaryDirectory() as tmp, \
+                patch("llm_hardtest.orchestrator.round12.run") as focused:
+            run_campaign(config, Path(tmp), dry_run=False)
+        self.assertEqual(focused.call_args.kwargs["question_filter"], {4, 7})
 
 
 class ProgressTests(unittest.TestCase):

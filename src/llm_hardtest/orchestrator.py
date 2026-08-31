@@ -47,6 +47,11 @@ def _model_rounds(model: dict, campaign_rounds: list[int]) -> list[int]:
     return selected
 
 
+def _item_filter(model: dict, round_no: int):
+    filters = model.get("item_filters", {})
+    return filters.get(str(round_no)) if isinstance(filters, dict) else None
+
+
 def validate_config(config: dict, check_runtime: bool = True) -> None:
     """Validate a campaign before any run artifacts are created.
 
@@ -119,6 +124,32 @@ def validate_config(config: dict, check_runtime: bool = True) -> None:
                 if isinstance(value, bool) or not isinstance(value, int) or value < 1:
                     raise ValueError(f'{model["key"]}: {field} must be a positive integer')
         _model_rounds(model, rounds)
+        filters = model.get("item_filters")
+        if filters is not None:
+            if not isinstance(filters, dict):
+                raise ValueError(f'{model["key"]}: item_filters must be a JSON object')
+            selected_rounds = set(_model_rounds(model, rounds))
+            for round_text, values in filters.items():
+                try:
+                    round_no = int(round_text)
+                except (TypeError, ValueError) as exc:
+                    raise ValueError(f'{model["key"]}: invalid item-filter round') from exc
+                if not isinstance(round_text, str) or round_text != str(round_no):
+                    raise ValueError(
+                        f'{model["key"]}: item-filter round keys must be canonical strings')
+                if round_no not in selected_rounds or not isinstance(values, list) or not values:
+                    raise ValueError(
+                        f'{model["key"]}: item filter must be non-empty and target a selected round')
+                if len(values) != len({str(value) for value in values}):
+                    raise ValueError(f'{model["key"]}: item filter contains duplicates')
+                if round_no in (1, 2, 3):
+                    available = _round_item_ids(round_no)
+                    if any(isinstance(value, bool) or not isinstance(value, int)
+                           or value not in available for value in values):
+                        raise ValueError(f'{model["key"]}: unknown round {round_no} item')
+                elif any(not isinstance(value, str) or value not in round4.CANONICAL_TASKS
+                         for value in values):
+                    raise ValueError(f'{model["key"]}: unknown round 4 task')
     tasks = config.get("round4_tasks")
     if tasks is not None:
         if (not isinstance(tasks, list) or not tasks
@@ -137,13 +168,19 @@ def validate_config(config: dict, check_runtime: bool = True) -> None:
         raise ValueError("selected Codex transport or round 4 requires the codex CLI on PATH")
 
 
-def _round_units(round_no: int) -> int:
+def _round_item_ids(round_no: int) -> set[int]:
     root = repo_root() / "rounds"
     if round_no in (1, 2):
-        return len(load_json(root / f"round{round_no}" / "questions.json"))
+        return {int(item["id"]) for item in
+                load_json(root / f"round{round_no}" / "questions.json")}
     if round_no == 3:
-        return len(load_json(root / "round3" / "problems_v3.json")["questions"])
+        return {int(item["id"]) for item in
+                load_json(root / "round3" / "problems_v3.json")["questions"]}
     raise ValueError(f"unsupported round {round_no}")
+
+
+def _round_units(round_no: int) -> int:
+    return len(_round_item_ids(round_no))
 
 
 def _campaign_units(config: dict) -> int:
@@ -153,7 +190,10 @@ def _campaign_units(config: dict) -> int:
     total = 0
     for model in config["models"]:
         for round_no in _model_rounds(model, campaign_rounds):
-            total += repetitions * (len(tasks) if round_no == 4 else _round_units(round_no))
+            selected = _item_filter(model, round_no)
+            units = len(selected) if selected is not None else (
+                len(tasks) if round_no == 4 else _round_units(round_no))
+            total += repetitions * units
     return total
 
 
@@ -203,9 +243,15 @@ def _execute(config: dict, run_dir: Path, dry_run: bool,
                     dashboard, model, round_no, attempt, repetitions)
                 if round_no in (1, 2):
                     round12.run(round_no, model, backend, attempt, out, timeout,
+                                question_filter=(set(_item_filter(model, round_no))
+                                                 if _item_filter(model, round_no) else None),
                                 progress=progress)
                 else:
-                    round3.run(model, backend, attempt, out, timeout, progress=progress)
+                    round3.run(
+                        model, backend, attempt, out, timeout,
+                        question_filter=(set(_item_filter(model, round_no))
+                                         if _item_filter(model, round_no) else None),
+                        progress=progress)
         if 4 in selected_rounds:
             out = model_root / "round4"
             if (out / "run.json").exists():
@@ -223,8 +269,10 @@ def _execute(config: dict, run_dir: Path, dry_run: bool,
                 if not dry_run:
                     out.mkdir(parents=True, exist_ok=True)
                     progress = _progress_callback(dashboard, model, 4, 1, repetitions)
-                    code = round4.run(model, repetitions, out, timeout,
-                                      config.get("round4_tasks"), progress=progress)
+                    code = round4.run(
+                        model, repetitions, out, timeout,
+                        _item_filter(model, 4) or config.get("round4_tasks"),
+                        progress=progress)
                     if code:
                         raise RuntimeError(f"round 4 failed with exit code {code}")
 

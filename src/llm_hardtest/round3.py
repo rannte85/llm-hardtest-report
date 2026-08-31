@@ -92,10 +92,14 @@ def _prompt(spec: dict, q: dict) -> str:
 
 
 def run(model: dict, backend: Backend, attempt: int, out_dir: Path, timeout: int,
+        question_filter: set[int] | None = None,
         progress: Callable[[dict], None] | None = None) -> dict:
     spec = load_json(BASE / "problems_v3.json")
     results = []
-    for q in spec["questions"]:
+    questions = spec["questions"]
+    if question_filter:
+        questions = [q for q in questions if int(q["id"]) in question_filter]
+    for q in questions:
         if progress:
             progress({"event": "start", "item": f'q{q["id"]}'})
         started = time.time()

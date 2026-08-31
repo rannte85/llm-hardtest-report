@@ -101,6 +101,18 @@ llm-hardtest inspect runs/my-local-models-20260831-090000
 llm-hardtest inspect runs/my-local-models-20260831-090000 --json
 ```
 
+Run only failed, incomplete, or infrastructure-invalid items again as a new campaign.
+The parent evidence remains unchanged, and the new config records the parent run ID
+and exact item filters:
+
+```bash
+llm-hardtest replay runs/my-local-models-20260831-090000
+llm-hardtest replay runs/my-local-models-20260831-090000 --dry-run
+```
+
+Manual-review items are not model failures and are skipped by default. Add
+`--include-review` only when a fresh response is intentionally required.
+
 ## Live terminal dashboard
 
 The CLI shows a live text dashboard automatically when `run` is attached to an

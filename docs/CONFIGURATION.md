@@ -31,6 +31,8 @@ Model fields:
 - `context_window`: advertised context window for custom Codex providers.
 - `max_tokens`: direct API maximum output for Rounds 1–3.
 - `temperature`, `top_p`, `top_k`, `min_p`: optional direct API sampling fields.
+- `item_filters`: optional advanced mapping from round numbers to question IDs or
+  Round 4 task IDs. The `replay` command creates this field automatically.
 
 Model configurations count independently. The same model identifier at two reasoning
 efforts should use two different keys.
@@ -56,6 +58,7 @@ entries use `openai_compat` for earlier rounds.
 - Model-level `rounds` can divide chat-only and coding-agent evaluations.
 - Every repetition starts from a clean task state.
 - Resume requires a config exactly equal to the saved `config.json` snapshot.
+- Replay creates a new one-repetition campaign and never overwrites its parent run.
 - Secrets must live only in environment variables named by `api_key_env`.
 - Sampling fields unsupported by a server may cause that server to reject the request;
   remove them rather than silently changing the benchmark code.

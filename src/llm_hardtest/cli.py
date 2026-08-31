@@ -15,6 +15,7 @@ from .orchestrator import _model_rounds, run, validate_config
 from .report import generate
 from .results import output_limited
 from .inspection import inspect_run, render_inspection
+from .replay import make_replay_config
 
 
 def _ask(prompt: str, default: str | None = None) -> str:
@@ -230,6 +231,13 @@ def main(argv=None) -> int:
     p_inspect = sub.add_parser("inspect", help="show unresolved campaign items")
     p_inspect.add_argument("run_dir")
     p_inspect.add_argument("--json", action="store_true", help="emit machine-readable JSON")
+    p_replay = sub.add_parser("replay", help="rerun unresolved items as a new campaign")
+    p_replay.add_argument("run_dir")
+    p_replay.add_argument("--runs-dir", default="runs")
+    p_replay.add_argument("--include-review", action="store_true")
+    p_replay.add_argument("--dry-run", action="store_true")
+    p_replay.add_argument(
+        "--progress", choices=("auto", "dashboard", "plain"), default="auto")
     p_validate = sub.add_parser("validate", help="validate config syntax and local executables")
     p_validate.add_argument("--config", required=True)
     p_doctor = sub.add_parser("doctor", help="probe configured servers, models, and APIs")
@@ -256,6 +264,18 @@ def main(argv=None) -> int:
         if args.command == "inspect":
             summary = inspect_run(Path(args.run_dir))
             print(json.dumps(summary, indent=2) if args.json else render_inspection(summary))
+            return 0
+        if args.command == "replay":
+            source = Path(args.run_dir)
+            config = make_replay_config(source, args.include_review)
+            if config is None:
+                print(f"{source.name}: no matching unresolved items to replay")
+                return 0
+            run_dir = run(config, Path(args.runs_dir), dry_run=args.dry_run,
+                          progress_mode=args.progress)
+            print(f"Replay campaign directory: {run_dir}")
+            if not args.dry_run:
+                print(f"Report: {run_dir / 'REPORT.md'}")
             return 0
         if args.command == "validate":
             validate_config(load_json(Path(args.config)))

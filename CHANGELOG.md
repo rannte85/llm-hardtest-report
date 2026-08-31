@@ -11,6 +11,8 @@ out separately from harness features.
 - Added provider response-shape diagnostics and retained compatibility with result
   files created before explicit item statuses were introduced.
 - Added `inspect` text and JSON views for unresolved items in current and legacy runs.
+- Added focused `replay` campaigns that preserve parent evidence and select only
+  failed, incomplete, or infrastructure-invalid question and task IDs.
 
 ## 2.0.0 — 2026-08-31
 

@@ -15,6 +15,7 @@ from .results import item_status
 
 SCORED = {"PASS", "FAIL"}
 MIN_ITEM_OBSERVATIONS = 5
+MIN_ITEM_INTERVAL_OBSERVATIONS = 10
 MIN_PAIR_ITEMS = 2
 MIN_COMPARISON_ITEMS = 5
 MIN_CONFIGURATION_RESPONDENTS = 5
@@ -35,6 +36,24 @@ class _HashSampler:
             self.seed + self.counter.to_bytes(16, "big")).digest()
         self.counter += 1
         return values[int.from_bytes(block, "big") % len(values)]
+
+
+def _bounded_rate_interval(values: list[float], minimum: int, method: str) -> dict | None:
+    if len(values) < minimum:
+        return None
+    z = 1.96
+    sample_size = len(values)
+    estimate = statistics.mean(values)
+    denominator = 1 + z ** 2 / sample_size
+    center = (estimate + z ** 2 / (2 * sample_size)) / denominator
+    margin = z / denominator * math.sqrt(
+        estimate * (1 - estimate) / sample_size
+        + z ** 2 / (4 * sample_size ** 2))
+    return {
+        "low": round(max(0.0, center - margin), 6),
+        "high": round(min(1.0, center + margin), 6),
+        "method": method,
+    }
 
 
 def _model_identity(model: dict) -> str:
@@ -166,28 +185,48 @@ def _correlation(xs: list[float], ys: list[float]) -> float | None:
     return numerator / denominator if denominator else None
 
 
-def _item_metrics(matrix: dict) -> list[dict]:
+def _item_metrics(matrix: dict, clusters: dict | None = None) -> list[dict]:
     item_ids = sorted({item for rows in matrix.values() for item in rows})
     metrics = []
     for item in item_ids:
         counts = {status: 0 for status in
                   ("PASS", "FAIL", "INCOMPLETE", "REVIEW", "INVALID", "MISSING")}
         xs, rest_scores = [], []
-        for rows in matrix.values():
+        outcomes_by_cluster = defaultdict(list)
+        pairs_by_cluster = defaultdict(list)
+        for respondent, rows in matrix.items():
             status = rows.get(item, "MISSING")
             counts[status] += 1
             if status not in SCORED:
                 continue
+            cluster = clusters.get(respondent, respondent) if clusters else respondent
+            outcome = 1.0 if status == "PASS" else 0.0
+            outcomes_by_cluster[cluster].append(outcome)
             rest = [1.0 if value == "PASS" else 0.0
                     for other, value in rows.items()
                     if other != item and value in SCORED]
             if rest:
-                xs.append(1.0 if status == "PASS" else 0.0)
-                rest_scores.append(statistics.mean(rest))
+                xs.append(outcome)
+                rest_score = statistics.mean(rest)
+                rest_scores.append(rest_score)
+                pairs_by_cluster[cluster].append((outcome, rest_score))
         scored = counts["PASS"] + counts["FAIL"]
         pass_rate = counts["PASS"] / scored if scored else None
         discrimination = _correlation(xs, rest_scores)
+        cluster_rates = [statistics.mean(values)
+                         for values in outcomes_by_cluster.values()]
+        clustered_pass_rate = statistics.mean(cluster_rates) if cluster_rates else None
+        pass_interval = _bounded_rate_interval(
+            cluster_rates, MIN_ITEM_OBSERVATIONS, "independent_cluster_wilson_95")
+        clustered_discrimination = _cluster_weighted_correlation(
+            list(pairs_by_cluster.values()))
+        discrimination_interval = (
+            _item_discrimination_interval(
+                list(pairs_by_cluster.values()), f"item:{item}")
+            if len(pairs_by_cluster) >= MIN_ITEM_INTERVAL_OBSERVATIONS else None)
         information = 4 * pass_rate * (1 - pass_rate) if pass_rate is not None else None
+        clustered_information = (4 * clustered_pass_rate * (1 - clustered_pass_rate)
+                                 if clustered_pass_rate is not None else None)
         if scored < MIN_ITEM_OBSERVATIONS:
             classification = "INSUFFICIENT"
         elif pass_rate >= 0.95:
@@ -202,6 +241,24 @@ def _item_metrics(matrix: dict) -> list[dict]:
             classification = "WEAK"
         else:
             classification = "USEFUL"
+        if len(outcomes_by_cluster) < MIN_ITEM_INTERVAL_OBSERVATIONS:
+            robust_classification = "INSUFFICIENT"
+        elif (clustered_pass_rate is not None and clustered_pass_rate >= 0.95
+              and pass_interval is not None and pass_interval["low"] >= 0.8):
+            robust_classification = "ROBUST_CEILING"
+        elif (clustered_pass_rate is not None and clustered_pass_rate <= 0.05
+              and pass_interval is not None and pass_interval["high"] <= 0.2):
+            robust_classification = "ROBUST_FLOOR"
+        elif discrimination_interval is None:
+            robust_classification = "UNSTABLE"
+        elif (clustered_discrimination is not None and clustered_discrimination < 0
+              and discrimination_interval["high"] < 0):
+            robust_classification = "ROBUST_NEGATIVE"
+        elif (clustered_discrimination is not None and clustered_discrimination >= 0.15
+              and discrimination_interval["low"] >= 0.15):
+            robust_classification = "ROBUST_USEFUL"
+        else:
+            robust_classification = "UNCERTAIN"
         metrics.append({
             "item": item,
             "scored": scored,
@@ -211,15 +268,29 @@ def _item_metrics(matrix: dict) -> list[dict]:
             "review": counts["REVIEW"],
             "invalid": counts["INVALID"],
             "missing": counts["MISSING"],
+            "independent_units": len(outcomes_by_cluster),
+            "discrimination_units": len(pairs_by_cluster),
             "pass_rate": round(pass_rate, 6) if pass_rate is not None else None,
+            "clustered_pass_rate": (
+                round(clustered_pass_rate, 6)
+                if clustered_pass_rate is not None else None),
+            "pass_rate_interval95": pass_interval,
             "difficulty_balance": round(information, 6) if information is not None else None,
+            "clustered_difficulty_balance": (
+                round(clustered_information, 6)
+                if clustered_information is not None else None),
             "corrected_item_total_correlation": (
                 round(discrimination, 6) if discrimination is not None else None),
+            "clustered_corrected_discrimination": (
+                round(clustered_discrimination, 6)
+                if clustered_discrimination is not None else None),
+            "discrimination_interval95": discrimination_interval,
             "classification": classification,
+            "robust_classification": robust_classification,
         })
     def ranking(row: dict) -> tuple:
-        discrimination = row["corrected_item_total_correlation"]
-        information = row["difficulty_balance"]
+        discrimination = row["clustered_corrected_discrimination"]
+        information = row["clustered_difficulty_balance"]
         return (discrimination is None,
                 -discrimination if discrimination is not None else 0,
                 -information if information is not None else 0,
@@ -260,6 +331,67 @@ def _percentile(values: list[float], probability: float) -> float:
     return ordered[index]
 
 
+def _cluster_moments(cluster: list[tuple[float, float]]) -> tuple[float, ...]:
+    count = len(cluster)
+    return (
+        1.0,
+        sum(pair[0] for pair in cluster) / count,
+        sum(pair[1] for pair in cluster) / count,
+        sum(pair[0] ** 2 for pair in cluster) / count,
+        sum(pair[1] ** 2 for pair in cluster) / count,
+        sum(pair[0] * pair[1] for pair in cluster) / count,
+    )
+
+
+def _correlation_from_moments(rows: list[tuple[float, ...]]) -> float | None:
+    count = sum(row[0] for row in rows)
+    if not count:
+        return None
+    sum_x = sum(row[1] for row in rows)
+    sum_y = sum(row[2] for row in rows)
+    sum_x2 = sum(row[3] for row in rows)
+    sum_y2 = sum(row[4] for row in rows)
+    sum_xy = sum(row[5] for row in rows)
+    numerator = sum_xy - sum_x * sum_y / count
+    variance_x = sum_x2 - sum_x ** 2 / count
+    variance_y = sum_y2 - sum_y ** 2 / count
+    denominator = math.sqrt(max(0.0, variance_x) * max(0.0, variance_y))
+    if not denominator:
+        return None
+    return max(-1.0, min(1.0, numerator / denominator))
+
+
+def _cluster_weighted_correlation(
+        pair_clusters: list[list[tuple[float, float]]]) -> float | None:
+    return _correlation_from_moments([_cluster_moments(cluster)
+                                      for cluster in pair_clusters])
+
+
+def _item_discrimination_interval(pair_clusters: list[list[tuple[float, float]]],
+                                  seed: str) -> dict | None:
+    """Bootstrap independent clusters; withhold intervals dominated by undefined draws."""
+    if len(pair_clusters) < MIN_ITEM_INTERVAL_OBSERVATIONS:
+        return None
+    generator = _HashSampler(seed)
+    cluster_stats = [_cluster_moments(cluster) for cluster in pair_clusters]
+    correlations = []
+    for _ in range(BOOTSTRAP_SAMPLES):
+        sampled = [generator.choice(cluster_stats) for _ in cluster_stats]
+        correlation = _correlation_from_moments(sampled)
+        if correlation is not None:
+            correlations.append(correlation)
+    if len(correlations) < 0.8 * BOOTSTRAP_SAMPLES:
+        return None
+    return {
+        "low": round(_percentile(correlations, 0.025), 6),
+        "high": round(_percentile(correlations, 0.975), 6),
+        "method": "independent_cluster_bootstrap_95",
+        "samples": BOOTSTRAP_SAMPLES,
+        "valid_samples": len(correlations),
+        "independent_clusters": len(pair_clusters),
+    }
+
+
 def _hierarchical_difference_interval(left_rows: list[dict], right_rows: list[dict],
                                       items: list[str], seed: str) -> dict | None:
     """Resample respondents and items so repeat instability enters the effect interval."""
@@ -290,21 +422,8 @@ def _hierarchical_difference_interval(left_rows: list[dict], right_rows: list[di
 
 def _cluster_rate_interval(values: list[float]) -> dict | None:
     """Conservative Wilson-style interval across respondent-level rates."""
-    if len(values) < MIN_CONFIGURATION_RESPONDENTS:
-        return None
-    z = 1.96
-    sample_size = len(values)
-    estimate = statistics.mean(values)
-    denominator = 1 + z ** 2 / sample_size
-    center = (estimate + z ** 2 / (2 * sample_size)) / denominator
-    margin = z / denominator * math.sqrt(
-        estimate * (1 - estimate) / sample_size
-        + z ** 2 / (4 * sample_size ** 2))
-    return {
-        "low": round(max(0.0, center - margin), 6),
-        "high": round(min(1.0, center + margin), 6),
-        "method": "respondent_cluster_wilson_95",
-    }
+    return _bounded_rate_interval(
+        values, MIN_CONFIGURATION_RESPONDENTS, "respondent_cluster_wilson_95")
 
 
 def _configuration_aliases(matrix: dict, models: dict) -> dict[str, str]:
@@ -457,11 +576,21 @@ def analyze_runs(run_dirs: list[Path]) -> dict:
                 matrix, group["models"], aliases),
             "items": _item_metrics(matrix),
         })
-    return {"schema_version": 2, "source_runs": len(run_dirs), "groups": analyses}
+    return {"schema_version": 3, "source_runs": len(run_dirs), "groups": analyses}
 
 
 def _percent(value: float | None) -> str:
     return "n/a" if value is None else f"{100 * value:.1f}%"
+
+
+def _estimate_interval(value: float | None, interval: dict | None,
+                       *, percent: bool = False) -> str:
+    estimate = _percent(value) if percent else ("n/a" if value is None else str(value))
+    if interval is None:
+        return estimate
+    low = _percent(interval["low"]) if percent else str(interval["low"])
+    high = _percent(interval["high"]) if percent else str(interval["high"])
+    return f"{estimate} [{low}–{high}]"
 
 
 def render_analysis(analysis: dict) -> str:
@@ -524,27 +653,38 @@ def render_analysis(analysis: dict) -> str:
                 f"{row['classification']} |")
         lines += [
             "", "### Item diagnostics", "",
-            "| Item | Scored | Pass rate | Difficulty balance | Corrected discrimination | "
-            "Incomplete | Review | Invalid | Missing | Signal |",
-            "|---|---:|---:|---:|---:|---:|---:|---:|---:|---|",
+            "| Item | Scored | Independent units | Pass raw | Clustered pass [95%] | Balance raw / clustered | Corrected discrimination (raw) | Clustered corrected discrimination [95%] | "
+            "Observed signal | Robust signal | Incomplete | Review | Invalid | Missing |",
+            "|---|---:|---:|---:|---:|---:|---:|---:|---|---|---:|---:|---:|---:|",
         ]
         for item in group["items"]:
             discrimination = item["corrected_item_total_correlation"]
+            clustered = item["clustered_corrected_discrimination"]
             lines.append(
-                f"| {item['item']} | {item['scored']} | {_percent(item['pass_rate'])} | "
-                f"{item['difficulty_balance'] if item['difficulty_balance'] is not None else 'n/a'} | "
+                f"| {item['item']} | {item['scored']} | {item['independent_units']} | "
+                f"{_percent(item['pass_rate'])} | "
+                f"{_estimate_interval(item['clustered_pass_rate'], item['pass_rate_interval95'], percent=True)} | "
+                f"{item['difficulty_balance'] if item['difficulty_balance'] is not None else 'n/a'} / "
+                f"{item['clustered_difficulty_balance'] if item['clustered_difficulty_balance'] is not None else 'n/a'} | "
                 f"{discrimination if discrimination is not None else 'n/a'} | "
+                f"{_estimate_interval(clustered, item['discrimination_interval95'])} | "
+                f"{item['classification']} | {item['robust_classification']} | "
                 f"{item['incomplete']} | {item['review']} | {item['invalid']} | "
-                f"{item['missing']} | {item['classification']} |")
+                f"{item['missing']} |")
         lines += ["",]
     lines += [
         "## Interpretation", "",
         f"- Item classifications require at least {MIN_ITEM_OBSERVATIONS} scored observations.",
+        f"- Robust item classifications require at least {MIN_ITEM_INTERVAL_OBSERVATIONS}",
+        "  independent units and a cluster bootstrap with at least 80% defined draws.",
         "- Difficulty balance is `4p(1-p)`: 1.0 at a 50% pass rate and 0.0 at",
         "  unanimous pass/fail. It is not an item-response-theory information estimate.",
         "- `CEILING` and `FLOOR` items add little separation in the observed sample.",
         "- `NEGATIVE` discrimination is a review trigger for ambiguity, grading defects,",
         "  multidimensional skills, or sampling noise; it is not automatic proof of a bad item.",
+        "- `ROBUST_USEFUL` requires the discrimination interval to stay at or above 0.15;",
+        "  `ROBUST_NEGATIVE` requires it to remain below zero. Other non-extreme items are",
+        "  `UNCERTAIN` or `UNSTABLE`, so point estimates alone cannot drive pack changes.",
         f"- Pair comparisons require at least {MIN_PAIR_ITEMS} commonly scored items.",
         "- Between-configuration disagreement measures observed separation. Within-configuration",
         "  disagreement measures repeat instability. Net separation requires both.",

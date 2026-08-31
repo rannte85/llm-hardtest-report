@@ -5,6 +5,20 @@ out separately from harness features.
 
 ## Unreleased
 
+## 2.9.0 — 2026-09-01
+
+- Added bounded independent-cluster pass-rate intervals and deterministic bootstrap
+  intervals for corrected item discrimination.
+- Added separate robust item signals so noisy point estimates cannot directly drive
+  benchmark-pack changes.
+- Added equal-cluster weighting: local attempts are independent units, while all
+  repeated attempts and model rows inside one community bundle remain one unit.
+- Added raw and cluster-weighted discrimination side by side, with explicit
+  independent-unit and valid-bootstrap counts.
+- Added adversarial controls for stable positive/negative/ceiling signal, small-sample
+  uncertainty, undefined resamples, determinism, and bulk duplicate-cluster reversal.
+- Kept public schema v2 and all canonical Round 1–4 grading contracts unchanged.
+
 ## 2.8.0 — 2026-09-01
 
 - Added anonymous configuration scorecards with respondent-level pass rates,

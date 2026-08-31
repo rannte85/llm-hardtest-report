@@ -91,6 +91,12 @@ would require substantially more
 representative data, uncertainty reporting, abuse controls, and an explicit statement
 of the population it claims to predict.
 
+Community item confidence uses the accepted bundle as the independent resampling unit.
+Repeated attempts and duplicate model rows remain visible as observations but cannot
+increase the independent-bundle count or narrow a robust-discrimination interval. The
+index shows raw and bundle-clustered corrected discrimination separately when those
+weightings disagree.
+
 See [Community Data Model](COMMUNITY_DATA_MODEL.md) for the normalization and staged
 path from descriptive observations to an environment-aware serving recommendation.
 

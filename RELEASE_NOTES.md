@@ -1,4 +1,4 @@
-# Release Notes — 2.8.0
+# Release Notes — 2.9.0
 
 This repository is ready to publish as `rannte85/llm-hardtest-report`. It contains no campaign
 outputs, credentials, local model files, personal filesystem paths, or generated
@@ -6,7 +6,19 @@ Python caches.
 
 The release validation covers:
 
-- analysis schema v2 with anonymous `C1`-style configuration aliases and safe
+- analysis schema v3 with raw and independent-cluster-weighted corrected item
+  discrimination, bounded pass-rate intervals, and deterministic bootstrap intervals;
+- robust item decisions gated on ten independent clusters and at least 80% defined
+  bootstrap draws, while retaining the original five-observation point signal;
+- `ROBUST_USEFUL`, `ROBUST_NEGATIVE`, `ROBUST_CEILING`, `ROBUST_FLOOR`, `UNCERTAIN`,
+  `UNSTABLE`, and `INSUFFICIENT` states that keep noisy estimates reviewable;
+- bundle-clustered community inference where repeated attempts and duplicate model
+  rows in one contribution cannot narrow confidence intervals;
+- equal-cluster weighting verified against an adversarial bulk duplicate cluster that
+  reverses the raw observation-weighted correlation;
+- unchanged public result schema v2 and canonical Round 1–4 grading contracts;
+
+- retained anonymous `C1`-style configuration aliases and safe
   run/model input coordinates for mapping results back to the supplied configuration;
 - per-configuration respondent counts, completion evidence, mean respondent pass
   rates, and conservative 95% intervals withheld below five scored respondents;

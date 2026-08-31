@@ -7,7 +7,7 @@ import statistics
 from collections import defaultdict
 from pathlib import Path
 
-from .calibration import _item_metrics, _pairwise_stability
+from .calibration import _estimate_interval, _item_metrics, _pairwise_stability
 from .github_submit import submission_relative_path
 from .public_pilots import load_public_pilot_bundle
 from .public_results import load_public_bundle
@@ -159,7 +159,7 @@ def aggregate_submissions(submissions: list[dict]) -> list[dict]:
 def aggregate_item_diagnostics(submissions: list[dict]) -> list[dict]:
     """Recompute status-only item signal from schema-v2 community observations."""
     groups = defaultdict(lambda: {
-        "matrix": defaultdict(dict), "models": {}, "bundles": set(),
+        "matrix": defaultdict(dict), "models": {}, "clusters": {}, "bundles": set(),
     })
     for payload in submissions:
         if payload.get("schema_version", 1) < 2:
@@ -178,6 +178,7 @@ def aggregate_item_diagnostics(submissions: list[dict]) -> list[dict]:
                             "one public bundle has conflicting duplicate item outcomes")
                     group["matrix"][respondent][item["item"]] = item["status"]
                     group["models"][respondent] = configuration
+                    group["clusters"][respondent] = bundle_id
                     group["bundles"].add(bundle_id)
     rows = []
     for (round_number, pack), group in sorted(groups.items()):
@@ -190,7 +191,7 @@ def aggregate_item_diagnostics(submissions: list[dict]) -> list[dict]:
             "respondents": len(group["matrix"]),
             "configurations": len(set(group["models"].values())),
             "pairwise": _pairwise_stability(group["matrix"], group["models"]),
-            "items": _item_metrics(group["matrix"]),
+            "items": _item_metrics(group["matrix"], group["clusters"]),
         })
     return rows
 
@@ -269,16 +270,23 @@ def render_index(submissions: list[dict]) -> str:
                 f"within-config disagreement: **{_percent(pairwise['within_configuration_disagreement'])}** · "
                 f"net separation: **{_percent(pairwise['net_separation'])}**",
                 "",
-                "| Item | Scored | Pass rate | Balance | Corrected discrimination | Signal | Incomplete | Review | Invalid | Missing |",
-                "|---|---:|---:|---:|---:|---|---:|---:|---:|---:|",
+                "| Item | Scored | Independent bundles | Pass raw | Bundle pass [95%] | Balance raw / bundle | Corrected discrimination (raw) | Bundle-clustered corrected [95%] | Observed | Robust | Incomplete | Review | Invalid | Missing |",
+                "|---|---:|---:|---:|---:|---:|---:|---:|---|---|---:|---:|---:|---:|",
             ]
             for item in group["items"]:
                 discrimination = item["corrected_item_total_correlation"]
+                clustered = item["clustered_corrected_discrimination"]
                 lines.append(
                     f"| `{_cell(item['item'])}` | {item['scored']} | "
-                    f"{_percent(item['pass_rate'])} | {_percent(item['difficulty_balance'])} | "
+                    f"{item['independent_units']} | "
+                    f"{_percent(item['pass_rate'])} | "
+                    f"{_estimate_interval(item['clustered_pass_rate'], item['pass_rate_interval95'], percent=True)} | "
+                    f"{_percent(item['difficulty_balance'])} / "
+                    f"{_percent(item['clustered_difficulty_balance'])} | "
                     f"{discrimination if discrimination is not None else 'n/a'} | "
-                    f"{item['classification']} | {item['incomplete']} | {item['review']} | "
+                    f"{_estimate_interval(clustered, item['discrimination_interval95'])} | "
+                    f"{item['classification']} | {item['robust_classification']} | "
+                    f"{item['incomplete']} | {item['review']} | "
                     f"{item['invalid']} | {item['missing']} |")
     lines += [
         "",
@@ -286,7 +294,9 @@ def render_index(submissions: list[dict]) -> str:
         "with observed scores share the exact public configuration and pack. Each bundle",
         "contributes one rate regardless of its attempt count; duplicate model entries cannot",
         "raise the threshold. Brackets are Wilson-style 95% intervals across bundle rates,",
-        "not item-level certainty. Values are descriptive observations, not predictions",
+        "not item-level certainty. Item robust signals also use bundles as equal-weight",
+        "clusters and require at least ten independent bundles; repeated attempts cannot",
+        "unlock them. Values are descriptive observations, not predictions",
         "for an unseen model or a different runtime configuration.",
         "",
     ]

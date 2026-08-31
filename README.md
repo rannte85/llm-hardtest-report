@@ -4,11 +4,12 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-**Current release: 2.8.0** — adds privacy-safe configuration scorecards and directional
-head-to-head evidence. It requires five scored respondents per configuration, combines
-Holm-corrected exact sign tests with hierarchical respondent/item bootstrap intervals,
-and refuses to name a winner when repeat instability makes the apparent lead fragile.
-Canonical Round 1–4 questions and grading contracts are unchanged.
+**Current release: 2.9.0** — adds independent-cluster confidence intervals for item
+difficulty and corrected discrimination. Point estimates remain visible, but pack
+decisions now receive separate `ROBUST_USEFUL`, `ROBUST_NEGATIVE`, `UNCERTAIN`,
+`UNSTABLE`, ceiling/floor, or insufficient-evidence signals. Community analysis treats
+each accepted bundle—not its repeated attempts—as one independent unit. Canonical
+Round 1–4 questions and grading contracts are unchanged.
 
 LLM Hardtest Report is a local-first command-line benchmark for comparing language
 models as reasoners, coding workers, and safe handoff agents. Point it at one or more
@@ -141,7 +142,10 @@ between-configuration disagreement with within-configuration repeat disagreement
 also assign private aliases such as `C1`, report configuration-level uncertainty and
 completion, and test every configuration pair directionally. A winner is reported only
 when the Holm-adjusted exact sign test is below 0.05 and a hierarchical bootstrap over
-both respondents and items excludes zero. `INCOMPLETE`, `REVIEW`, and `INVALID` remain
+both respondents and items excludes zero. Item diagnostics independently report raw and
+cluster-weighted corrected discrimination, bounded pass-rate intervals, and a bootstrap
+interval that must remain above the useful threshold before an item is robustly useful.
+`INCOMPLETE`, `REVIEW`, and `INVALID` remain
 separate and never become wrong answers. The analysis copies no prompts, raw responses,
 model identifiers, local paths, or credentials.
 See [Calibration and Discrimination Analysis](docs/CALIBRATION.md) for formulas,
@@ -191,7 +195,9 @@ Standard campaign exports use public schema v2. Every item outcome is included b
 default as a status, attempt number, wall time, and completion-token count. Prompt and
 response content is never included. Accepted v2 bundles let the community index
 recompute item difficulty, corrected discrimination, and within/between-configuration
-disagreement instead of relying only on aggregate scores. See the
+disagreement instead of relying only on aggregate scores. Starting in 2.9, community
+item intervals and robust signals cluster by accepted bundle, so repeated attempts or
+duplicate model rows in one contribution cannot manufacture item certainty. See the
 [community data model](docs/COMMUNITY_DATA_MODEL.md).
 
 ## Live terminal dashboard

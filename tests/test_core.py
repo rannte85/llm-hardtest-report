@@ -37,7 +37,8 @@ from llm_hardtest.community_results import (
     render_index, render_pilot_index,
 )
 from llm_hardtest.calibration import (
-    _configuration_comparisons, analyze_runs, render_analysis, write_analysis,
+    _configuration_comparisons, _item_metrics,
+    analyze_runs, render_analysis, write_analysis,
 )
 from llm_hardtest.pilot_analysis import analyze_pilots, write_pilot_analysis
 from llm_hardtest.public_pilots import (
@@ -1306,6 +1307,65 @@ class CalibrationTests(unittest.TestCase):
         self.assertEqual(items["q5"]["classification"], "CEILING")
         self.assertEqual(items["q6"]["classification"], "INSUFFICIENT")
         self.assertEqual(items["q6"]["incomplete"], 6)
+        self.assertEqual(items["q2"]["robust_classification"], "INSUFFICIENT")
+        self.assertIsNone(items["q2"]["discrimination_interval95"])
+
+    def test_item_bootstrap_separates_robust_signal_from_point_estimates(self):
+        matrix = {}
+        for respondent in range(30):
+            matrix[(respondent,)] = {
+                "q1": "PASS" if respondent >= 15 else "FAIL",
+                "q2": "PASS" if respondent < 15 else "FAIL",
+                "q3": "PASS" if respondent >= 10 else "FAIL",
+                "q4": "PASS" if respondent >= 20 else "FAIL",
+                "q5": "PASS" if respondent >= 5 else "FAIL",
+                "q6": "PASS",
+            }
+        first = {row["item"]: row for row in _item_metrics(matrix)}
+        second = {row["item"]: row for row in _item_metrics(matrix)}
+
+        self.assertEqual(first, second)
+        self.assertEqual(first["q2"]["robust_classification"], "ROBUST_NEGATIVE")
+        self.assertLess(first["q2"]["discrimination_interval95"]["high"], 0)
+        self.assertEqual(first["q3"]["robust_classification"], "ROBUST_USEFUL")
+        self.assertGreaterEqual(first["q3"]["discrimination_interval95"]["low"], 0.15)
+        self.assertEqual(first["q6"]["robust_classification"], "ROBUST_CEILING")
+        self.assertGreaterEqual(first["q6"]["pass_rate_interval95"]["low"], 0.8)
+        self.assertEqual(first["q1"]["classification"], "USEFUL")
+        self.assertEqual(first["q1"]["robust_classification"], "UNCERTAIN")
+
+    def test_item_bootstrap_withholds_interval_when_resamples_are_undefined(self):
+        matrix = {}
+        for respondent in range(10):
+            matrix[(respondent,)] = {
+                "rare": "PASS" if respondent == 0 else "FAIL",
+                "anchor1": "PASS" if respondent < 5 else "FAIL",
+                "anchor2": "PASS" if respondent < 5 else "FAIL",
+            }
+        rare = {row["item"]: row for row in _item_metrics(matrix)}["rare"]
+        self.assertIsNone(rare["discrimination_interval95"])
+        self.assertEqual(rare["robust_classification"], "UNSTABLE")
+
+    def test_item_bootstrap_weights_independent_clusters_not_duplicate_rows(self):
+        matrix, clusters = {}, {}
+        for attempt in range(100):
+            respondent = ("bulk", attempt)
+            matrix[respondent] = {
+                "q": "PASS" if attempt < 50 else "FAIL",
+                "anchor": "FAIL" if attempt < 50 else "PASS",
+            }
+            clusters[respondent] = "bundle-0"
+        for bundle in range(1, 10):
+            respondent = ("single", bundle)
+            status = "PASS" if bundle % 2 == 0 else "FAIL"
+            matrix[respondent] = {"q": status, "anchor": status}
+            clusters[respondent] = f"bundle-{bundle}"
+
+        item = {row["item"]: row for row in _item_metrics(matrix, clusters)}["q"]
+        self.assertLess(item["corrected_item_total_correlation"], 0)
+        self.assertGreater(item["clustered_corrected_discrimination"], 0.15)
+        self.assertEqual(item["independent_units"], 10)
+        self.assertEqual(item["robust_classification"], "ROBUST_USEFUL")
 
     def test_calibration_proves_directional_configuration_separation(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1334,6 +1394,7 @@ class CalibrationTests(unittest.TestCase):
             analysis = analyze_runs(runs)
             rendered = render_analysis(analysis)
 
+        self.assertEqual(analysis["schema_version"], 3)
         group = analysis["groups"][0]
         self.assertEqual(
             [(row["configuration"], row["sources"], row["respondents"])
@@ -1889,9 +1950,14 @@ class PublicResultTests(unittest.TestCase):
         items = {item["item"]: item for item in diagnostics[0]["items"]}
         self.assertEqual(items["q4"]["classification"], "NEGATIVE")
         self.assertEqual(items["q5"]["classification"], "CEILING")
+        self.assertEqual(items["q4"]["independent_units"], 1)
+        self.assertEqual(items["q4"]["robust_classification"], "INSUFFICIENT")
+        self.assertIsNone(items["q4"]["discrimination_interval95"])
         document = render_index([payload])
         self.assertIn("Community Item Diagnostics", document)
         self.assertIn("Corrected discrimination", document)
+        self.assertIn("Independent bundles", document)
+        self.assertIn("Robust", document)
 
     def test_community_validation_rejects_wrong_filename_and_extra_entry(self):
         with tempfile.TemporaryDirectory() as tmp:

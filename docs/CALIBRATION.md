@@ -24,18 +24,30 @@ A configuration identity is a one-way hash of the saved model configuration afte
 removing display labels, filesystem keys, public aliases, and focused item filters.
 The hash is used only for equality tests and is not emitted in the analysis.
 
+For local analysis, each independently started attempt is an uncertainty cluster. In
+community analysis, every accepted public bundle is one cluster regardless of how many
+attempts or model rows it contains. Raw observation counts remain visible, while
+confidence intervals and robust item decisions use the independent-cluster count.
+
 ## Item diagnostics
 
 - **Pass rate** is `PASS / (PASS + FAIL)`.
+- **Pass-rate interval** is a bounded Wilson-style 95% interval across independent
+  cluster rates and is withheld below five clusters. Raw and cluster-weighted pass
+  rates are shown separately when repeated observations make them differ.
 - **Difficulty balance** is `4p(1-p)`. It ranges from zero for unanimous outcomes to
-  one at a 50% pass rate. This is a normalized balance heuristic, not IRT information.
+  one at a 50% pass rate. Raw and cluster-weighted values are shown. This is a
+  normalized balance heuristic, not IRT information.
 - **Corrected discrimination** is the Pearson correlation between an item's binary
   score and each respondent's mean score on all other scored items. Removing the item
   from the total avoids part-whole inflation.
+- **Clustered corrected discrimination** gives every independent cluster equal total
+  weight. Its deterministic bootstrap resamples whole clusters, preserving correlated
+  repetitions within a public bundle instead of treating them as new independent data.
 - **Signal** flags insufficient samples, observed ceiling/floor effects, undefined
   low-information cases, negative or weak corrected correlation, and useful signal.
 
-Signal classifications require at least five scored observations. Five is only an
+Observed signal classifications require at least five scored observations. Five is only an
 operational display floor; it is not evidence of statistical precision. Confidence
 intervals in this report remain conservative descriptive diagnostics; latent-trait
 IRT models, differential-item-functioning claims, and population generalization require
@@ -44,6 +56,14 @@ larger, representative samples and a separately reviewed analysis protocol.
 Negative discrimination is a review trigger rather than an automatic deletion rule.
 It can indicate ambiguity, a grader defect, multidimensional ability, unstable model
 behavior, or ordinary small-sample noise.
+
+Robust classification requires at least ten independent clusters and at least 80% of
+2,000 bootstrap draws to have defined variance. `ROBUST_USEFUL` requires the entire
+clustered discrimination interval to remain at or above 0.15. `ROBUST_NEGATIVE`
+requires the entire interval below zero. `ROBUST_CEILING` and `ROBUST_FLOOR` require
+both an extreme cluster-weighted pass rate and a cluster interval beyond the 80% boundary.
+Everything else remains `UNCERTAIN`, `UNSTABLE`, or `INSUFFICIENT`; point estimates
+alone should not cause a benchmark-pack change.
 
 ## Configuration separation and repeat stability
 

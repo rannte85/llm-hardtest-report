@@ -223,3 +223,29 @@ Acceptance checks:
 - Multiple pair comparisons use corrected—not raw—p-values.
 - Real historical evidence remains readable and private names, endpoints, paths, and
   response content do not enter Markdown or JSON output.
+
+## Phase 9 — Robust item evidence
+
+Goal: prevent noisy item point estimates or repeated observations from one contributor
+from driving benchmark-pack decisions.
+
+Deliverables:
+
+1. Add bounded pass-rate intervals and bootstrap intervals for corrected item
+   discrimination.
+2. Keep raw point classifications separate from robust pack-decision signals.
+3. Give every local attempt one uncertainty cluster and every community bundle one
+   cluster regardless of its internal attempts or duplicate model rows.
+4. Report raw and cluster-weighted discrimination when their weighting differs.
+5. Require ten independent clusters and at least 80% defined bootstrap draws before
+   emitting robust useful, negative, ceiling, or floor signals.
+
+Acceptance checks:
+
+- Known positive, negative, ceiling, uncertain, and unstable controls separate.
+- The bootstrap output is deterministic across repeated analysis calls.
+- One bundle containing many repeated or duplicate observations remains one
+  independent unit and cannot unlock a robust item classification.
+- Equal cluster weighting can resist a bulk duplicate cluster that reverses the raw
+  point estimate.
+- Existing runs and schema-v2 community submissions remain readable.

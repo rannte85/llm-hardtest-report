@@ -7,10 +7,17 @@ import time
 from pathlib import Path
 
 from .common import load_json, save_json
+from .results import result_counts
 
 
 def _ratio(passed: int, total: int) -> str:
     return f"{passed}/{total}" if total else "n/a"
+
+
+def _reasoning_result(data: dict) -> str:
+    score = _ratio(data.get("passed", 0), data.get("total", 0))
+    incomplete = int(data.get("incomplete", 0) or 0)
+    return f"{score} (+{incomplete} incomplete)" if incomplete else score
 
 
 def _mean(values):
@@ -34,12 +41,14 @@ def collect(run_dir: Path) -> dict:
             for path in sorted((run_dir / key / f"round{round_no}").glob("attempt-*/result.json")):
                 rows.append(load_json(path))
             if rows:
+                counts = [result_counts(row) for row in rows]
                 entry["rounds"][str(round_no)] = {
                     "attempts": len(rows), "passed": sum(r.get("score", 0) for r in rows),
-                    "total": sum(r.get("total", 0) for r in rows),
+                    "total": sum(c["PASS"] + c["FAIL"] for c in counts),
                     "mean_wall_seconds": _mean([r.get("wall") for r in rows]),
-                    "manual_review": sum(r.get("manual_review", 0) for r in rows),
-                    "infrastructure_errors": sum(r.get("infrastructure_errors", 0) for r in rows),
+                    "manual_review": sum(c["REVIEW"] for c in counts),
+                    "incomplete": sum(c["INCOMPLETE"] for c in counts),
+                    "infrastructure_errors": sum(c["INVALID"] for c in counts),
                 }
         v4 = run_dir / key / "round4" / "run.json"
         if v4.exists():
@@ -90,8 +99,8 @@ def render(summary: dict) -> str:
         "# LLM Hardtest — Comprehensive Report", "",
         f'**Run:** `{summary["run_id"]}`  ',
         f'**Generated:** {summary["generated_at"]}  ',
-        "**Interpretation rule:** product correctness, release readiness, handoff utility, "
-        "manual-review items, and throughput are separate axes.", "",
+        "**Interpretation rule:** product correctness, completion, release readiness, "
+        "handoff utility, manual-review items, and throughput are separate axes.", "",
         "## Executive Matrix", "",
         "| Model | Round 1 | Round 2 | Round 3 auto | Round 3 review | Round 4 release | Round 4 handoff | False-green |",
         "|---|---:|---:|---:|---:|---:|---:|---:|",
@@ -101,9 +110,9 @@ def render(summary: dict) -> str:
         r1, r2, r3, r4 = (rounds.get(str(n), {}) for n in (1, 2, 3, 4))
         lines.append("| {label} | {r1} | {r2} | {r3} | {review} | {release} | {handoff} | {fg} |".format(
             label=_md_text(model["label"]),
-            r1=_ratio(r1.get("passed", 0), r1.get("total", 0)),
-            r2=_ratio(r2.get("passed", 0), r2.get("total", 0)),
-            r3=_ratio(r3.get("passed", 0), r3.get("total", 0)),
+            r1=_reasoning_result(r1),
+            r2=_reasoning_result(r2),
+            r3=_reasoning_result(r3),
             review=r3.get("manual_review", 0) or "—",
             release=_ratio(r4.get("release_ready", 0), r4.get("attempts", 0)),
             handoff=_ratio(r4.get("handoff_utility", 0), r4.get("handoff_applicable", 0)),
@@ -115,6 +124,7 @@ def render(summary: dict) -> str:
             if number in ("1", "2", "3"):
                 lines.append(f'- Round {number}: {_ratio(data["passed"], data["total"])}; '
                              f'{data["attempts"]} attempts; mean wall {data["mean_wall_seconds"]}s; '
+                             f'incomplete items {data.get("incomplete", 0)}; '
                              f'manual-review items {data.get("manual_review", 0)}; '
                              f'infrastructure errors {data.get("infrastructure_errors", 0)}.')
             else:
@@ -148,6 +158,7 @@ def render(summary: dict) -> str:
         "- Round 4 `release` means the submitted repository is immediately releasable under the hidden suite and integrity gates.",
         "- Round 4 `handoff` means a policy-conflict candidate patch moved the ticket forward safely with an accurate blocker. It does not prove full manager capability.",
         "- Infrastructure-invalid attempts must be quarantined rather than counted as model failures.", "",
+        "- Output-limited incomplete items are excluded from correctness and reported separately.", "",
         "## Reproducibility", "",
         f'- Repetitions per task: {summary["config"]["repetitions"]}',
         f'- Selected rounds: {summary["config"]["rounds"]}',

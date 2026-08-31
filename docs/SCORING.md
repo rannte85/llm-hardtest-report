@@ -43,6 +43,20 @@ excluded from correctness denominators. Reports retain their wall time and error
 evidence; operators should repair the environment and resume rather than deleting the
 failed evidence.
 
+## Incomplete generations
+
+When a provider explicitly reports that it stopped at an output limit, the item is
+`INCOMPLETE`, not a wrong answer. Incomplete items are excluded from the correctness
+denominator and reported separately with their wall time, token use, partial content,
+finish reason, and provider-field diagnostics. They remain eligible for an explicit
+resume or replay.
+
+A normally stopped response that omits the required final answer is still `FAIL`.
+This distinction prevents format noncompliance from being excused while ensuring a
+server or generation-budget limit is not presented as a reasoning error. The harness
+does not silently raise limits or retry because doing so would change the campaign
+policy.
+
 ## Throughput
 
 Use three separate speed measurements when available:

@@ -13,6 +13,7 @@ from .backends import BackendError, CodexBackend, OpenAICompatBackend
 from .common import load_json, repo_root, save_json, slug
 from .orchestrator import _model_rounds, run, validate_config
 from .report import generate
+from .results import output_limited
 
 
 def _ask(prompt: str, default: str | None = None) -> str:
@@ -93,6 +94,11 @@ def doctor_config(config: dict, timeout: int = 30) -> int:
                 if model.get("transport") == "openai_compat":
                     result = OpenAICompatBackend(model, Path(".")).complete(
                         [{"role": "user", "content": "Reply with OK."}], timeout)
+                    if output_limited(result.get("finish_reason")):
+                        raise BackendError(
+                            "Chat Completions reached its output limit during a short probe"
+                            + (" and returned no final text"
+                               if not result["content"].strip() else ""))
                     if not result["content"].strip():
                         raise BackendError("Chat Completions returned no text")
                     print(f"PASS {key}: /chat/completions returned text")

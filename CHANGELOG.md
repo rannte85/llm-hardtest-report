@@ -3,6 +3,14 @@
 All notable changes are documented here. Benchmark-scoring compatibility is called
 out separately from harness features.
 
+## Unreleased
+
+- Classified provider output-limit termination as `INCOMPLETE` instead of a wrong
+  answer, excluded it from correctness denominators, and exposed it independently in
+  progress displays and reports.
+- Added provider response-shape diagnostics and retained compatibility with result
+  files created before explicit item statuses were introduced.
+
 ## 2.0.0 — 2026-08-31
 
 - Unified the repository, benchmark, reports, Python package, and command under the

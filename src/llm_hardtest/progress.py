@@ -34,6 +34,7 @@ class TerminalDashboard:
     passed: int = 0
     failed: int = 0
     review: int = 0
+    incomplete: int = 0
     invalid: int = 0
     skipped: int = 0
     current: str = "Preparing campaign"
@@ -72,7 +73,7 @@ class TerminalDashboard:
     def record(self, status: str, model: str, round_no: int, attempt: int,
                attempts: int, item: str, wall: float | None = None) -> None:
         status = status.upper()
-        if status not in {"PASS", "FAIL", "REVIEW", "INVALID"}:
+        if status not in {"PASS", "FAIL", "INCOMPLETE", "REVIEW", "INVALID"}:
             raise ValueError(f"unsupported progress status {status!r}")
         with self._lock:
             self.completed += 1
@@ -82,6 +83,8 @@ class TerminalDashboard:
                 self.failed += 1
             elif status == "REVIEW":
                 self.review += 1
+            elif status == "INCOMPLETE":
+                self.incomplete += 1
             else:
                 self.invalid += 1
             self.current = (f"{model} | Round {round_no} | attempt {attempt}/{attempts} | "
@@ -152,8 +155,8 @@ class TerminalDashboard:
                 f"[{bar}] {self.completed}/{self.total} ({percent:5.1f}%)",
                 f"Elapsed {_duration(elapsed)} | ETA {_duration(eta)}",
                 self.current,
-                (f"PASS {self.passed} | FAIL {self.failed} | REVIEW {self.review} | "
-                 f"INVALID {self.invalid} | RESUMED {self.skipped}"),
+                (f"PASS {self.passed} | FAIL {self.failed} | INCOMPLETE {self.incomplete} | "
+                 f"REVIEW {self.review} | INVALID {self.invalid} | RESUMED {self.skipped}"),
                 self.latest,
                 f"Output: {self.run_dir}",
             ]

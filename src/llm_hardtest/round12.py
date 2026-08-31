@@ -6,6 +6,7 @@ from typing import Callable
 
 from .backends import Backend
 from .common import answer_matches, answer_text, load_json, repo_root, save_json
+from .results import output_limited
 
 
 SUFFIX = "\n\nEnd with exactly one final line in this format: ANSWER: <value>"
@@ -26,27 +27,32 @@ def run(round_no: int, model: dict, backend: Backend, attempt: int,
         try:
             response = backend.complete([{"role": "user", "content": q["q"] + SUFFIX}], timeout)
             extracted = answer_text(response["content"])
-            correct = answer_matches(extracted, q["ans"])
+            incomplete = output_limited(response.get("finish_reason"))
+            correct = None if incomplete else answer_matches(extracted, q["ans"])
             row = {"id": q["id"], "type": q.get("type"), "expected": q["ans"],
                    "extracted": extracted, "correct": correct, "content": response["content"],
                    **{k: v for k, v in response.items() if k != "content"}}
+            row["status"] = "INCOMPLETE" if incomplete else ("PASS" if correct else "FAIL")
+            if incomplete:
+                row["incomplete"] = True
         except Exception as exc:  # keep the campaign resumable
             row = {"id": q["id"], "type": q.get("type"), "correct": None,
-                   "valid": False,
+                   "valid": False, "status": "INVALID",
                    "error": str(exc), "wall": round(time.time() - started, 3)}
         results.append(row)
-        mark = "INVALID" if row.get("valid") is False else ("PASS" if row["correct"] else "FAIL")
+        mark = row["status"]
         if progress:
             progress({"event": "complete", "item": f'q{q["id"]}', "status": mark,
                       "wall": row.get("wall")})
         else:
             print(f'    r{round_no} q{q["id"]}: {mark}')
-    valid = [row for row in results if row.get("valid") is not False]
+    scorable = [row for row in results if row.get("correct") is not None]
     payload = {
         "round": round_no, "model": model["key"], "model_id": model["model"],
-        "attempt": attempt, "score": sum(bool(x["correct"]) for x in valid),
-        "total": len(valid), "planned": len(results),
-        "infrastructure_errors": len(results) - len(valid),
+        "attempt": attempt, "score": sum(bool(x["correct"]) for x in scorable),
+        "total": len(scorable), "planned": len(results),
+        "incomplete": sum(row["status"] == "INCOMPLETE" for row in results),
+        "infrastructure_errors": sum(row["status"] == "INVALID" for row in results),
         "wall": round(sum(x.get("wall", 0) for x in results), 3),
         "completion_tokens": sum(x.get("completion_tokens") or 0 for x in results),
         "results": results,

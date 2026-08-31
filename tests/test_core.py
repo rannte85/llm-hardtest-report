@@ -17,6 +17,7 @@ from llm_hardtest.common import answer_matches, answer_text, save_json
 from llm_hardtest.orchestrator import _campaign_units, run as run_campaign, validate_config
 from llm_hardtest.progress import TerminalDashboard, _duration
 from llm_hardtest.report import collect, render
+from llm_hardtest.results import item_status, result_counts
 from llm_hardtest.round12 import run as run_round12
 from llm_hardtest.round3 import _fields, _grade
 from llm_hardtest.round4 import run as run_round4
@@ -33,6 +34,23 @@ class AnswerTests(unittest.TestCase):
     def test_partial_answer_is_not_accepted(self):
         self.assertFalse(answer_matches("142", "42"))
         self.assertEqual(answer_text("The answer might be 42."), "")
+
+
+class ResultStatusTests(unittest.TestCase):
+    def test_legacy_output_limit_is_inferred_as_incomplete(self):
+        row = {"correct": False, "finish_reason": "length"}
+        self.assertEqual(item_status(row), "INCOMPLETE")
+        self.assertEqual(result_counts({"score": 0, "total": 1, "results": [row]}), {
+            "PASS": 0, "FAIL": 0, "INCOMPLETE": 1, "REVIEW": 0, "INVALID": 0,
+        })
+
+    def test_aggregate_only_legacy_payload_remains_reportable(self):
+        self.assertEqual(result_counts({
+            "score": 2, "total": 3, "manual_review": 1,
+            "infrastructure_errors": 1,
+        }), {
+            "PASS": 2, "FAIL": 1, "INCOMPLETE": 0, "REVIEW": 1, "INVALID": 1,
+        })
 
 
 class ProgressTests(unittest.TestCase):
@@ -58,7 +76,7 @@ class ProgressTests(unittest.TestCase):
         text = output.getvalue()
         self.assertIn("LLM Hardtest | demo", text)
         self.assertIn("2/4 ( 50.0%)", text)
-        self.assertIn("PASS 1 | FAIL 0 | REVIEW 0 | INVALID 1", text)
+        self.assertIn("PASS 1 | FAIL 0 | INCOMPLETE 0 | REVIEW 0 | INVALID 1", text)
         self.assertIn("model-a | Round 1 | attempt 1/1 | q2", text)
         self.assertIn("\x1b[", text)
 
@@ -146,6 +164,21 @@ class BackendTests(unittest.TestCase):
 
 
 class ServerSetupTests(unittest.TestCase):
+    def test_doctor_rejects_output_limited_short_probe(self):
+        config = {
+            "name": "test", "repetitions": 1, "rounds": [1],
+            "models": [{"key": "local", "model": "local/model",
+                        "transport": "openai_compat",
+                        "base_url": "http://127.0.0.1:8000/v1", "rounds": [1]}],
+        }
+        limited = {"content": "O", "finish_reason": "length"}
+        with patch("llm_hardtest.cli.discover_models", return_value=["local/model"]), \
+                patch("llm_hardtest.cli.OpenAICompatBackend.complete",
+                      return_value=limited), \
+                patch("sys.stderr", new_callable=io.StringIO) as error:
+            self.assertEqual(doctor_config(config), 1)
+        self.assertIn("output limit", error.getvalue())
+
     def test_discover_and_doctor_use_auth_and_exact_model_id(self):
         seen_auth = []
 
@@ -236,6 +269,37 @@ class RoundFourProgressTests(unittest.TestCase):
 
 
 class RoundOneTwoTests(unittest.TestCase):
+    def test_output_limit_is_incomplete_not_wrong(self):
+        class LimitedBackend(Backend):
+            def complete(self, messages, timeout):
+                return {"content": "partial reasoning", "wall": 1.0,
+                        "finish_reason": "length", "completion_tokens": 4096}
+
+        events = []
+        with tempfile.TemporaryDirectory() as tmp:
+            payload = run_round12(
+                1, {"key": "m", "model": "m"},
+                LimitedBackend({}, Path(tmp)), 1, Path(tmp), 10, {1}, events.append)
+        self.assertEqual(payload["score"], 0)
+        self.assertEqual(payload["total"], 0)
+        self.assertEqual(payload["incomplete"], 1)
+        self.assertEqual(payload["results"][0]["status"], "INCOMPLETE")
+        self.assertIsNone(payload["results"][0]["correct"])
+        self.assertEqual(events[-1]["status"], "INCOMPLETE")
+
+    def test_stopped_response_without_answer_is_still_wrong(self):
+        class FormatBreakingBackend(Backend):
+            def complete(self, messages, timeout):
+                return {"content": "The value is 286.", "wall": 1.0,
+                        "finish_reason": "stop"}
+
+        with tempfile.TemporaryDirectory() as tmp:
+            payload = run_round12(
+                1, {"key": "m", "model": "m"},
+                FormatBreakingBackend({}, Path(tmp)), 1, Path(tmp), 10, {1})
+        self.assertEqual(payload["total"], 1)
+        self.assertEqual(payload["results"][0]["status"], "FAIL")
+
     def test_question_progress_events_wrap_each_model_call(self):
         class AnswerBackend(Backend):
             def complete(self, messages, timeout):
@@ -413,8 +477,42 @@ class ConfigurationTests(unittest.TestCase):
                 run_campaign(config, Path(tmp), resume=run_dir)
             rerun.assert_called_once()
 
+    def test_resume_retries_an_incomplete_attempt(self):
+        config = {
+            "name": "test", "repetitions": 1, "rounds": [1],
+            "models": [{"key": "m", "model": "one",
+                        "transport": "openai_compat"}],
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            run_dir = Path(tmp) / "saved-run"
+            save_json(run_dir / "config.json", config)
+            save_json(run_dir / "m/round1/attempt-1/result.json", {
+                "score": 19, "total": 19, "incomplete": 1,
+            })
+            with patch("llm_hardtest.orchestrator.round12.run") as rerun:
+                run_campaign(config, Path(tmp), resume=run_dir)
+            rerun.assert_called_once()
+
 
 class ReportTests(unittest.TestCase):
+    def test_legacy_truncation_is_separate_from_correctness(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            save_json(root / "config.json", {
+                "name": "test", "repetitions": 1, "rounds": [1],
+                "models": [{"key": "m", "label": "M", "model": "m"}],
+            })
+            save_json(root / "m/round1/attempt-1/result.json", {
+                "score": 1, "total": 2, "wall": 2,
+                "results": [
+                    {"id": 1, "correct": True, "finish_reason": "stop"},
+                    {"id": 2, "correct": False, "finish_reason": "length"},
+                ],
+            })
+            document = render(collect(root))
+        self.assertIn("1/1 (+1 incomplete)", document)
+        self.assertIn("incomplete items 1", document)
+
     def test_report_from_saved_result(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

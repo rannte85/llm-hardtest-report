@@ -104,7 +104,7 @@ LLM Hardtest | my-local-models
 [############-------------------] 16/40 ( 40.0%)
 Elapsed 18:42 | ETA 28:03
 model-a-q4 | Round 1 | attempt 1/2 | q17
-PASS 13 | FAIL 2 | REVIEW 0 | INVALID 1 | RESUMED 0
+PASS 13 | FAIL 2 | INCOMPLETE 1 | REVIEW 0 | INVALID 1 | RESUMED 0
 q16: PASS in 71.8s
 Output: runs/my-local-models-20260831-090000
 ```
@@ -113,7 +113,7 @@ The display tracks:
 
 - overall completed questions or Round 4 task attempts;
 - the current model, round, repetition, and question/task;
-- PASS, FAIL, manual REVIEW, and infrastructure-invalid counts;
+- PASS, FAIL, output-limit INCOMPLETE, manual REVIEW, and infrastructure-invalid counts;
 - work loaded from a completed attempt as `RESUMED`;
 - elapsed time, estimated remaining time, and the output directory.
 
@@ -133,7 +133,8 @@ llm-hardtest run --config benchmark.json --progress plain      # one event per l
 
 ETA remains `--:--` until at least one item completes. On resume, finished work advances
 the overall bar and is counted under `RESUMED`; it is not invented as a new PASS or
-FAIL. Infrastructure-invalid attempts remain retryable. During Round 4 dashboard runs,
+FAIL. Output-limited and infrastructure-invalid attempts remain retryable. During
+Round 4 dashboard runs,
 verbose agent-harness output is retained in
 `<run>/<model>/round4/harness.log` instead of disrupting the display.
 

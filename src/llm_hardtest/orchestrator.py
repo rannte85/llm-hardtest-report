@@ -185,14 +185,15 @@ def _execute(config: dict, run_dir: Path, dry_run: bool,
                 result_path = out / "result.json"
                 if result_path.exists():
                     saved_result = load_json(result_path)
-                    if not saved_result.get("infrastructure_errors"):
+                    if not (saved_result.get("infrastructure_errors")
+                            or saved_result.get("incomplete")):
                         dashboard.skip(
                             int(saved_result.get("planned", _round_units(round_no))),
                             f"{model['key']} round {round_no} attempt {attempt}")
                         continue
                     dashboard.message(
                         f"[retry] {model['key']} round {round_no} attempt {attempt} "
-                        "has infrastructure errors")
+                        "has incomplete or infrastructure-invalid items")
                 dashboard.message(
                     f"[run] {model['key']} round {round_no} attempt {attempt}/{repetitions}")
                 if dry_run:

@@ -78,6 +78,12 @@ class OpenAICompatBackend(Backend):
         if not isinstance(content, str):
             raise BackendError("OpenAI-compatible response has no text message content")
         usage = raw.get("usage") or {}
+        diagnostics = {
+            "choice_fields": sorted(str(key) for key in choice),
+            "message_fields": sorted(str(key) for key in message),
+            "content_type": type(message.get("content")).__name__,
+            "reasoning_content_present": bool(message.get("reasoning_content")),
+        }
         return {
             "content": content,
             "wall": round(time.time() - started, 3),
@@ -85,6 +91,7 @@ class OpenAICompatBackend(Backend):
             "completion_tokens": usage.get("completion_tokens"),
             "finish_reason": choice.get("finish_reason"),
             "raw_usage": usage,
+            "provider_diagnostics": diagnostics,
         }
 
 

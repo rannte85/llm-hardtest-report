@@ -91,6 +91,41 @@ skills rather than an error. Always inspect task content and grader behavior bef
 changing a pack. The thresholds are deliberately conservative descriptive review
 gates and do not correct for every possible exploratory comparison.
 
+## Repeat-adjusted item separation
+
+Corrected item-total correlation and dependency analysis do not by themselves show
+whether an item separates configurations more than the same configuration fluctuates
+between attempts. The repeat-adjusted table addresses that distinction for each item.
+
+For each exact configuration, the analyzer first gives every independent local attempt
+or public bundle one item pass-rate value. It then uses only configurations with at
+least two independent units to calculate:
+
+- **between-configuration separation**: the equal-weight mean absolute difference
+  between configuration pass rates;
+- **within-configuration instability**: the equal-weight mean pairwise outcome
+  difference across repeated units of the same configuration; and
+- **net repeat-adjusted separation**: between separation minus repeat instability.
+
+The observed signal is `SEPARATING` at a net value of at least `0.1`,
+`WEAK_SEPARATION` below that threshold, `NOISE_DOMINATED` below zero, and
+`NO_SEPARATION` when every eligible configuration and repeat has the same outcome.
+Observed labels require at least two repeated configurations.
+
+Robust inference requires at least five independent units for each of at least two
+configurations. Local evidence resamples attempts within configurations. Community
+evidence resamples the union of bundle IDs once per draw so results from configurations
+in the same contribution remain dependent. `ROBUST_SEPARATING` requires the entire
+95% interval at or above `0.1`; `ROBUST_NOISE_DOMINATED` requires it below zero; and
+`ROBUST_NO_SEPARATION` requires unanimous identical outcomes. Draws missing enough
+configuration evidence are discarded, and an interval is withheld as `UNSTABLE` if
+fewer than 80% of 2,000 deterministic draws remain valid.
+
+This is still a descriptive result for the observed configurations and pack. It does
+not prove a universal item ordering, replace content review, or predict an unseen
+model. It is especially useful for retaining specialist items that distinguish a
+configuration pair even when they do not align with one overall ability axis.
+
 ## Configuration separation and repeat stability
 
 For every respondent pair sharing at least two scored items, the analyzer measures

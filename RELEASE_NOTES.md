@@ -1,10 +1,27 @@
-# Release Notes — 2.10.0
+# Release Notes — 2.11.0
 
 This repository is ready to publish as `rannte85/llm-hardtest-report`. It contains no campaign
 outputs, credentials, local model files, personal filesystem paths, or generated
 Python caches.
 
 The release validation covers:
+
+- analysis schema v5 with per-item between-configuration separation,
+  same-configuration repeat instability, and their repeat-adjusted difference;
+- separate observed signals for stable separation, weak separation, noise-dominated
+  behavior, unanimous no-separation, and insufficient evidence;
+- deterministic hierarchical 95% intervals requiring at least five independent units
+  for each of two configurations before a robust item signal is possible;
+- shared-bundle community bootstrap draws that preserve outcomes from multiple
+  configurations in one contribution instead of pretending they are independent;
+- explicit `ROBUST_SEPARATING`, `ROBUST_NOISE_DOMINATED`, `ROBUST_NO_SEPARATION`,
+  `UNCERTAIN`, `UNSTABLE`, and `INSUFFICIENT` decisions;
+- adversarial controls for stable strong-vs-weak outcomes, identical noisy outcomes,
+  unanimous outcomes, a bundle with 100 repeated rows, and deterministic shared-bundle
+  resampling;
+- bounded Codex session fallback reads that avoid loading a complete long-running
+  JSONL transcript merely to recover its session ID;
+- unchanged public result schema v2 and canonical Round 1–4 grading contracts;
 
 - analysis schema v4 with pairwise item outcome agreement and phi correlation in both
   raw observation-weighted and independent-cluster-weighted forms;

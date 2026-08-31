@@ -193,17 +193,22 @@ class CodexBackend(Backend):
         for path in session_root.rglob("*"):
             if not path.is_file():
                 continue
+            try:
+                modified = path.stat().st_mtime
+            except OSError:
+                continue
             match = re.search(
                 r"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-"
                 r"[0-9a-f]{4}-[0-9a-f]{12})", path.name)
-            if not match or path.stat().st_mtime < started - 2:
+            if not match or modified < started - 2:
                 continue
             try:
-                header = path.read_text(encoding="utf-8", errors="replace")[:200_000]
+                with path.open("r", encoding="utf-8", errors="replace") as stream:
+                    header = stream.read(200_000)
             except OSError:
                 continue
             if str(workdir) in header:
-                candidates.append((path.stat().st_mtime, match.group(1)))
+                candidates.append((modified, match.group(1)))
         return max(candidates)[1] if candidates else None
 
     def agent_turn(self, prompt: str, workdir: Path, evidence_dir: Path,

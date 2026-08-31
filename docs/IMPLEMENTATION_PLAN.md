@@ -278,3 +278,30 @@ Acceptance checks:
 - Equal bundle weighting can reverse a raw redundancy point estimate created by a
   bulk duplicate contribution.
 - Existing local runs and schema-v2 community submissions remain readable.
+
+## Phase 11 — Repeat-adjusted item separation
+
+Goal: distinguish stable item-level model differences from ordinary repeat instability
+instead of rewarding whichever item happens to show the largest raw gap.
+
+Deliverables:
+
+1. Compute equal-weight between-configuration separation and same-configuration repeat
+   instability for every item.
+2. Report their difference as net repeat-adjusted separation with explicit stable,
+   weak, noise-dominated, no-separation, uncertain, and insufficient states.
+3. Require two configurations and five independent units per configuration for robust
+   inference.
+4. Resample attempts within local configurations while resampling shared community
+   bundle IDs once per draw to preserve contributor-level dependence.
+5. Withhold unstable intervals when fewer than 80% of 2,000 deterministic bootstrap
+   draws retain sufficient evidence.
+
+Acceptance checks:
+
+- Stable strong-vs-weak item outcomes produce `ROBUST_SEPARATING`.
+- Identical unstable outcome distributions are noise dominated rather than separating.
+- Unanimous configuration outcomes are reported as no separation, not repeat noise.
+- One bundle containing 100 repeated rows cannot satisfy the repeat or robust gates.
+- Shared-bundle bootstrap output is deterministic, and existing local/public evidence
+  remains readable.

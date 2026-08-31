@@ -38,6 +38,7 @@ from llm_hardtest.community_results import (
 )
 from llm_hardtest.calibration import (
     _configuration_comparisons, _item_metrics, _item_relationships,
+    _item_repeat_separation,
     analyze_runs, render_analysis, write_analysis,
 )
 from llm_hardtest.pilot_analysis import analyze_pilots, write_pilot_analysis
@@ -251,6 +252,27 @@ class BackendTests(unittest.TestCase):
             "key": "m", "model": "m", "codex_provider": "custom",
         }, Path("relative-state"))
         self.assertTrue(backend.state_dir.is_absolute())
+
+    def test_codex_session_fallback_reads_only_a_bounded_header(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            work = root / "work"
+            work.mkdir()
+            session = root / "home/sessions/2026/09/01"
+            session.mkdir(parents=True)
+            session_id = "11111111-1111-1111-1111-111111111111"
+            path = session / f"rollout-{session_id}.jsonl"
+            with path.open("w", encoding="utf-8") as stream:
+                stream.write(str(work) + "\n")
+                stream.write("x" * 1_000_000)
+            backend = CodexBackend({
+                "key": "m", "model": "m", "codex_provider": "openai",
+            }, root / "state")
+            with patch.object(Path, "read_text",
+                              side_effect=AssertionError("unbounded read")):
+                found = backend._session_id(
+                    "", {"CODEX_HOME": str(root / "home")}, work, 0)
+            self.assertEqual(found, session_id)
 
     def test_codex_nonzero_exit_with_partial_output_is_infrastructure_error(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1440,6 +1462,68 @@ class CalibrationTests(unittest.TestCase):
         self.assertEqual(relationship["classification"], "REDUNDANCY_CANDIDATE")
         self.assertEqual(relationship["robust_classification"], "UNCERTAIN")
 
+    def test_item_repeat_separation_distinguishes_signal_from_repeat_noise(self):
+        matrix, models = {}, {}
+        for configuration in ("strong", "weak"):
+            for attempt in range(20):
+                respondent = (configuration, attempt)
+                models[respondent] = configuration
+                stable = configuration == "strong"
+                noisy = attempt % 2 == 0
+                matrix[respondent] = {
+                    "stable": "PASS" if stable else "FAIL",
+                    "noisy": "PASS" if noisy else "FAIL",
+                    "same": "PASS",
+                }
+        rows = {row["item"]: row
+                for row in _item_repeat_separation(matrix, models)}
+
+        stable = rows["stable"]
+        self.assertEqual(stable["between_configuration_separation"], 1.0)
+        self.assertEqual(stable["within_configuration_instability"], 0.0)
+        self.assertEqual(stable["robust_classification"], "ROBUST_SEPARATING")
+        self.assertGreaterEqual(stable["net_separation_interval95"]["low"], 0.1)
+        noisy = rows["noisy"]
+        self.assertEqual(noisy["between_configuration_separation"], 0.0)
+        self.assertLess(noisy["net_repeat_adjusted_separation"], 0)
+        self.assertEqual(noisy["classification"], "NOISE_DOMINATED")
+        self.assertEqual(noisy["robust_classification"],
+                         "ROBUST_NOISE_DOMINATED")
+        self.assertLess(noisy["net_separation_interval95"]["high"], 0)
+        same = rows["same"]
+        self.assertEqual(same["classification"], "NO_SEPARATION")
+        self.assertEqual(same["robust_classification"], "ROBUST_NO_SEPARATION")
+
+    def test_item_repeat_separation_uses_bundles_as_shared_clusters(self):
+        matrix, models, clusters = {}, {}, {}
+        for attempt in range(100):
+            for configuration, outcome in (("a", True), ("b", False)):
+                respondent = ("bulk", configuration, attempt)
+                matrix[respondent] = {"q": "PASS" if outcome else "FAIL"}
+                models[respondent] = configuration
+                clusters[respondent] = "bundle-0"
+        rows = _item_repeat_separation(matrix, models, clusters)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["configurations"], 2)
+        self.assertEqual(rows[0]["independent_units"], 1)
+        self.assertEqual(rows[0]["repeat_configurations"], 0)
+        self.assertEqual(rows[0]["robust_classification"], "INSUFFICIENT")
+
+    def test_item_repeat_separation_shared_bundle_bootstrap_is_deterministic(self):
+        matrix, models, clusters = {}, {}, {}
+        for bundle in range(10):
+            for configuration, outcome in (("a", True), ("b", False)):
+                respondent = (bundle, configuration)
+                matrix[respondent] = {"q": "PASS" if outcome else "FAIL"}
+                models[respondent] = configuration
+                clusters[respondent] = f"bundle-{bundle}"
+        first = _item_repeat_separation(matrix, models, clusters)
+        second = _item_repeat_separation(matrix, models, clusters)
+        self.assertEqual(first, second)
+        self.assertEqual(first[0]["robust_classification"], "ROBUST_SEPARATING")
+        self.assertEqual(first[0]["net_separation_interval95"]["method"],
+                         "shared_cluster_hierarchical_bootstrap_95")
+
     def test_calibration_proves_directional_configuration_separation(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -1467,7 +1551,7 @@ class CalibrationTests(unittest.TestCase):
             analysis = analyze_runs(runs)
             rendered = render_analysis(analysis)
 
-        self.assertEqual(analysis["schema_version"], 4)
+        self.assertEqual(analysis["schema_version"], 5)
         group = analysis["groups"][0]
         self.assertEqual(
             [(row["configuration"], row["sources"], row["respondents"])
@@ -2031,9 +2115,14 @@ class PublicResultTests(unittest.TestCase):
         self.assertEqual({row["independent_units"] for row in relationships}, {0, 1})
         self.assertEqual({row["robust_classification"] for row in relationships},
                          {"INSUFFICIENT"})
+        repeat_separation = diagnostics[0]["item_repeat_separation"]
+        self.assertEqual(len(repeat_separation), 6)
+        self.assertEqual({row["robust_classification"]
+                          for row in repeat_separation}, {"INSUFFICIENT"})
         document = render_index([payload])
         self.assertIn("Community Item Diagnostics", document)
         self.assertIn("Community item dependency candidates", document)
+        self.assertIn("Community repeat-adjusted item separation", document)
         self.assertIn("Corrected discrimination", document)
         self.assertIn("Independent bundles", document)
         self.assertIn("Robust", document)

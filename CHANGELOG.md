@@ -5,6 +5,22 @@ out separately from harness features.
 
 ## Unreleased
 
+## 2.11.0 — 2026-09-01
+
+- Added analysis-schema-v5 repeat-adjusted item separation, comparing equal-weight
+  between-configuration outcome differences with same-configuration repeat instability.
+- Added distinct `SEPARATING`, `WEAK_SEPARATION`, `NOISE_DOMINATED`, and
+  `NO_SEPARATION` observed states.
+- Added deterministic hierarchical intervals and robust separating, noise-dominated,
+  no-separation, uncertain, unstable, and insufficient states.
+- Required at least five independent attempts or bundles for each of two
+  configurations before robust inference.
+- Preserved shared community-bundle dependence by resampling each bundle once per
+  bootstrap draw, even when it contains multiple configurations or repeated rows.
+- Fixed Codex session fallback discovery to read at most a bounded transcript header
+  instead of loading an entire potentially large JSONL session into memory.
+- Kept public schema v2 and canonical Round 1–4 content and grading unchanged.
+
 ## 2.10.0 — 2026-09-01
 
 - Added analysis-schema-v4 item dependency diagnostics with raw and independent-

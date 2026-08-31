@@ -8,7 +8,8 @@ from collections import defaultdict
 from pathlib import Path
 
 from .calibration import (
-    _estimate_interval, _item_metrics, _item_relationships, _pairwise_stability,
+    _estimate_interval, _item_metrics, _item_relationships,
+    _item_repeat_separation, _pairwise_stability,
 )
 from .github_submit import submission_relative_path
 from .public_pilots import load_public_pilot_bundle
@@ -196,6 +197,8 @@ def aggregate_item_diagnostics(submissions: list[dict]) -> list[dict]:
             "items": _item_metrics(group["matrix"], group["clusters"]),
             "item_relationships": _item_relationships(
                 group["matrix"], group["clusters"]),
+            "item_repeat_separation": _item_repeat_separation(
+                group["matrix"], group["models"], group["clusters"]),
         })
     return rows
 
@@ -319,6 +322,21 @@ def render_index(submissions: list[dict]) -> str:
             if len(relationships) > 20:
                 lines += ["", "Only the first 20 ranked candidates are shown; validated "
                           "machine-readable diagnostics retain every item pair."]
+            lines += [
+                "", "#### Community repeat-adjusted item separation", "",
+                "| Item | Configs / repeated / robust | Independent bundles | Between separation | Repeat instability | Net separation | Robust net [95%] | Observed | Robust |",
+                "|---|---:|---:|---:|---:|---:|---:|---|---|",
+            ]
+            for row in group["item_repeat_separation"]:
+                lines.append(
+                    f"| `{_cell(row['item'])}` | {row['configurations']}/"
+                    f"{row['repeat_configurations']}/{row['robust_configurations']} | "
+                    f"{row['independent_units']} | "
+                    f"{_percent(row['between_configuration_separation'])} | "
+                    f"{_percent(row['within_configuration_instability'])} | "
+                    f"{_percent(row['net_repeat_adjusted_separation'])} | "
+                    f"{_estimate_interval(row['robust_net_repeat_adjusted_separation'], row['net_separation_interval95'], percent=True)} | "
+                    f"{row['classification']} | {row['robust_classification']} |")
     lines += [
         "",
         f"Baselines appear only after at least {MIN_BASELINE_SUBMISSIONS} distinct accepted bundles",
@@ -329,7 +347,10 @@ def render_index(submissions: list[dict]) -> str:
         "clusters and require at least ten independent bundles; repeated attempts cannot",
         "unlock them. Dependency diagnostics use the same bundle clustering and treat",
         "high positive or negative phi relationships as content-review candidates, never",
-        "automatic deletion decisions. Values are descriptive observations, not predictions",
+        "automatic deletion decisions. Repeat-adjusted item diagnostics also require two",
+        "configurations with repeated bundle evidence and subtract within-configuration",
+        "instability from between-configuration separation. Values are descriptive",
+        "observations, not predictions",
         "for an unseen model or a different runtime configuration.",
         "",
     ]

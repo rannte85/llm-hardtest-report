@@ -40,6 +40,10 @@ for auditability and displayed separately when they disagree with bundle weighti
 The same rule applies to item dependency diagnostics: repeated rows in one submission
 cannot manufacture a robust redundancy signal. Pairwise phi relationships are stored
 as review evidence, not as instructions to delete or merge benchmark items.
+Repeat-adjusted item analysis also retains the bundle key. When a bundle reports more
+than one configuration, bootstrap draws resample that bundle once and preserve all of
+its configuration outcomes together. This prevents shared runtime or contributor
+effects from being treated as unrelated evidence.
 
 ## What can be recommended
 

@@ -22,6 +22,7 @@ MIN_CONFIGURATION_RESPONDENTS = 5
 BOOTSTRAP_SAMPLES = 2_000
 ITEM_RELATIONSHIP_THRESHOLD = 0.5
 ITEM_REDUNDANCY_THRESHOLD = 0.8
+ITEM_NET_SEPARATION_THRESHOLD = 0.1
 
 
 class _HashSampler:
@@ -497,6 +498,163 @@ def _item_relationships(matrix: dict, clusters: dict | None = None) -> list[dict
     return sorted(relationships, key=ranking)
 
 
+def _repeat_adjusted_components(
+        rates_by_configuration: dict[str, dict[object, float]]) -> tuple[float, float, float]:
+    means = [statistics.mean(rates.values())
+             for rates in rates_by_configuration.values()]
+    between = statistics.mean(
+        abs(left - right) for left, right in combinations(means, 2))
+    within = statistics.mean(
+        statistics.mean(abs(left - right)
+                        for left, right in combinations(rates.values(), 2))
+        for rates in rates_by_configuration.values())
+    return between, within, between - within
+
+
+def _repeat_adjusted_interval(
+        rates_by_configuration: dict[str, dict[object, float]], seed: str,
+        *, shared_clusters: bool) -> dict | None:
+    generator = _HashSampler(seed)
+    samples = []
+    if shared_clusters:
+        population = sorted({cluster for rates in rates_by_configuration.values()
+                             for cluster in rates}, key=repr)
+    for _ in range(BOOTSTRAP_SAMPLES):
+        sampled = {}
+        if shared_clusters:
+            selected = [generator.choice(population) for _ in population]
+            for configuration, rates in rates_by_configuration.items():
+                values = [rates[cluster] for cluster in selected if cluster in rates]
+                if len(values) >= 2:
+                    sampled[configuration] = {
+                        index: value for index, value in enumerate(values)}
+        else:
+            for configuration, rates in rates_by_configuration.items():
+                population = list(rates.values())
+                sampled[configuration] = {
+                    index: generator.choice(population)
+                    for index in range(len(population))}
+        if len(sampled) != len(rates_by_configuration):
+            continue
+        samples.append(_repeat_adjusted_components(sampled)[2])
+    if len(samples) < 0.8 * BOOTSTRAP_SAMPLES:
+        return None
+    return {
+        "low": round(_percentile(samples, 0.025), 6),
+        "high": round(_percentile(samples, 0.975), 6),
+        "method": ("shared_cluster_hierarchical_bootstrap_95" if shared_clusters
+                   else "configuration_cluster_bootstrap_95"),
+        "samples": BOOTSTRAP_SAMPLES,
+        "valid_samples": len(samples),
+    }
+
+
+def _item_repeat_separation(matrix: dict, models: dict,
+                            clusters: dict | None = None) -> list[dict]:
+    """Compare per-item configuration separation with same-configuration repeat noise."""
+    item_ids = sorted({item for rows in matrix.values() for item in rows})
+    diagnostics = []
+    for item in item_ids:
+        grouped = defaultdict(lambda: defaultdict(list))
+        for respondent, rows in matrix.items():
+            status = rows.get(item)
+            if status not in SCORED:
+                continue
+            configuration = models[respondent]
+            cluster = clusters.get(respondent, respondent) if clusters else respondent
+            grouped[configuration][cluster].append(1.0 if status == "PASS" else 0.0)
+        cluster_rates = {
+            configuration: {
+                cluster: statistics.mean(values)
+                for cluster, values in by_cluster.items()
+            }
+            for configuration, by_cluster in grouped.items()
+        }
+        repeated = {configuration: rates
+                    for configuration, rates in cluster_rates.items()
+                    if len(rates) >= 2}
+        robust = {configuration: rates
+                  for configuration, rates in cluster_rates.items()
+                  if len(rates) >= MIN_CONFIGURATION_RESPONDENTS}
+        if len(repeated) >= 2:
+            between, within, net = _repeat_adjusted_components(repeated)
+            if between == 0 and within == 0:
+                classification = "NO_SEPARATION"
+            elif net < 0:
+                classification = "NOISE_DOMINATED"
+            elif net < ITEM_NET_SEPARATION_THRESHOLD:
+                classification = "WEAK_SEPARATION"
+            else:
+                classification = "SEPARATING"
+        else:
+            between = within = net = None
+            classification = "INSUFFICIENT"
+
+        if len(robust) >= 2:
+            robust_between, robust_within, robust_net = (
+                _repeat_adjusted_components(robust))
+            interval = _repeat_adjusted_interval(
+                robust, f"repeat-separation:{item}",
+                shared_clusters=clusters is not None)
+            if interval is None:
+                robust_classification = "UNSTABLE"
+            elif robust_between == 0 and robust_within == 0:
+                robust_classification = "ROBUST_NO_SEPARATION"
+            elif (robust_net >= ITEM_NET_SEPARATION_THRESHOLD
+                  and interval["low"] >= ITEM_NET_SEPARATION_THRESHOLD):
+                robust_classification = "ROBUST_SEPARATING"
+            elif robust_net < 0 and interval["high"] < 0:
+                robust_classification = "ROBUST_NOISE_DOMINATED"
+            else:
+                robust_classification = "UNCERTAIN"
+        else:
+            robust_between = robust_within = robust_net = interval = None
+            robust_classification = "INSUFFICIENT"
+
+        independent_clusters = {cluster for rates in cluster_rates.values()
+                                for cluster in rates}
+        minimum_clusters = min((len(rates) for rates in robust.values()), default=0)
+        diagnostics.append({
+            "item": item,
+            "configurations": len(cluster_rates),
+            "repeat_configurations": len(repeated),
+            "robust_configurations": len(robust),
+            "independent_units": len(independent_clusters),
+            "minimum_robust_units_per_configuration": minimum_clusters,
+            "between_configuration_separation": (
+                round(between, 6) if between is not None else None),
+            "within_configuration_instability": (
+                round(within, 6) if within is not None else None),
+            "net_repeat_adjusted_separation": (
+                round(net, 6) if net is not None else None),
+            "robust_between_configuration_separation": (
+                round(robust_between, 6) if robust_between is not None else None),
+            "robust_within_configuration_instability": (
+                round(robust_within, 6) if robust_within is not None else None),
+            "robust_net_repeat_adjusted_separation": (
+                round(robust_net, 6) if robust_net is not None else None),
+            "net_separation_interval95": interval,
+            "classification": classification,
+            "robust_classification": robust_classification,
+        })
+
+    robust_order = {
+        "ROBUST_SEPARATING": 0,
+        "ROBUST_NOISE_DOMINATED": 1,
+        "ROBUST_NO_SEPARATION": 2,
+        "UNCERTAIN": 3,
+        "UNSTABLE": 4,
+        "INSUFFICIENT": 5,
+    }
+
+    def ranking(row: dict) -> tuple:
+        net = row["robust_net_repeat_adjusted_separation"]
+        return (robust_order[row["robust_classification"]],
+                -net if net is not None else 0, row["item"])
+
+    return sorted(diagnostics, key=ranking)
+
+
 def _hierarchical_difference_interval(left_rows: list[dict], right_rows: list[dict],
                                       items: list[str], seed: str) -> dict | None:
     """Resample respondents and items so repeat instability enters the effect interval."""
@@ -681,8 +839,10 @@ def analyze_runs(run_dirs: list[Path]) -> dict:
                 matrix, group["models"], aliases),
             "items": _item_metrics(matrix),
             "item_relationships": _item_relationships(matrix),
+            "item_repeat_separation": _item_repeat_separation(
+                matrix, group["models"]),
         })
-    return {"schema_version": 4, "source_runs": len(run_dirs), "groups": analyses}
+    return {"schema_version": 5, "source_runs": len(run_dirs), "groups": analyses}
 
 
 def _percent(value: float | None) -> str:
@@ -710,6 +870,7 @@ def render_analysis(analysis: dict) -> str:
         pairwise = group["pairwise"]
         comparisons = group["configuration_comparisons"]
         relationships = group["item_relationships"]
+        repeat_separation = group["item_repeat_separation"]
         decisive = sum(row["classification"] in {"LEFT_HIGHER", "RIGHT_HIGHER"}
                        for row in comparisons)
         lines += [
@@ -808,6 +969,26 @@ def render_analysis(analysis: dict) -> str:
                       "the JSON artifact retains every item pair."]
         if not displayed:
             lines.append("| none | 0 | 0 | n/a | n/a | n/a | n/a | n/a |")
+        robust_separating = sum(
+            row["robust_classification"] == "ROBUST_SEPARATING"
+            for row in repeat_separation)
+        lines += [
+            "", "### Repeat-adjusted item separation", "",
+            f"Robustly separating items: **{robust_separating}/{len(repeat_separation)}**.",
+            "",
+            "| Item | Configs / repeated / robust | Independent units | Between separation | Repeat instability | Net separation | Robust net [95%] | Observed | Robust |",
+            "|---|---:|---:|---:|---:|---:|---:|---|---|",
+        ]
+        for row in repeat_separation:
+            lines.append(
+                f"| {row['item']} | {row['configurations']}/"
+                f"{row['repeat_configurations']}/{row['robust_configurations']} | "
+                f"{row['independent_units']} | "
+                f"{_percent(row['between_configuration_separation'])} | "
+                f"{_percent(row['within_configuration_instability'])} | "
+                f"{_percent(row['net_repeat_adjusted_separation'])} | "
+                f"{_estimate_interval(row['robust_net_repeat_adjusted_separation'], row['net_separation_interval95'], percent=True)} | "
+                f"{row['classification']} | {row['robust_classification']} |")
         lines += ["",]
     lines += [
         "## Interpretation", "",
@@ -828,6 +1009,14 @@ def render_analysis(analysis: dict) -> str:
         "  beyond that threshold and still require content review before removal.",
         "- Opposing candidates may reveal complementary skills, ambiguity, or grader polarity.",
         "  The Markdown table is capped at 20 candidates; JSON retains every pair.",
+        "- Repeat-adjusted item separation compares equal-weight configuration pass-rate",
+        "  differences with same-configuration cluster disagreement on that item. Both",
+        "  observed estimates require two configurations with repeats.",
+        f"- `ROBUST_SEPARATING` requires at least {MIN_CONFIGURATION_RESPONDENTS} independent",
+        "  units for each of two configurations and the complete bootstrap interval at or",
+        f"  above {ITEM_NET_SEPARATION_THRESHOLD}. `ROBUST_NOISE_DOMINATED` requires the",
+        "  interval below zero. `ROBUST_NO_SEPARATION` means every eligible repeat had",
+        "  the same outcome across configurations. Other cases remain uncertain or insufficient.",
         f"- Pair comparisons require at least {MIN_PAIR_ITEMS} commonly scored items.",
         "- Between-configuration disagreement measures observed separation. Within-configuration",
         "  disagreement measures repeat instability. Net separation requires both.",

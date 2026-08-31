@@ -6,6 +6,9 @@ project does not automatically collect telemetry or local campaign data.
 - `schema-v1.json` documents the public result shape.
 - `submissions/` contains one canonical JSON document per accepted bundle.
 - `INDEX.md` is generated from accepted submissions and contains descriptive examples.
+- `pilot-schema-v1.json` documents the sanitized Round 5 summary shape.
+- `pilots/` contains accepted Round 5 pilot summaries.
+- `PILOTS.md` is the separately generated Round 5 community index.
 
 Submitters must preview the exact payload, remove anything they do not want public,
 and open a pull request. Submissions are repository contributions under the project
@@ -18,6 +21,9 @@ Maintainers and contributors can reproduce repository checks locally:
 llm-hardtest results validate
 llm-hardtest results build
 llm-hardtest results build --check
+llm-hardtest results pilots validate
+llm-hardtest results pilots build
+llm-hardtest results pilots build --check
 ```
 
 The index groups only identical public configurations and pack fingerprints. An

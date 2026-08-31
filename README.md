@@ -4,11 +4,11 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-**Current release: 2.5.0** — compares Round 5 model separation against repeat
-instability across eight independently verified outcome axes. It also includes
-controlled persistent-session evidence collection, calibration analysis, privacy-safe
-voluntary result sharing, focused replay, and reusable benchmark packs. Canonical
-Round 1–4 questions and grading contracts are unchanged.
+**Current release: 2.6.0** — adds explicit, privacy-safe Round 5 pilot export and
+GitHub pull-request submission, plus a separately validated community pilot index.
+It also includes eight-axis cross-pilot analysis, controlled persistent-session
+evidence collection, calibration analysis, focused replay, and reusable benchmark
+packs. Canonical Round 1–4 questions and grading contracts are unchanged.
 
 LLM Hardtest Report is a local-first command-line benchmark for comparing language
 models as reasoners, coding workers, and safe handoff agents. Point it at one or more
@@ -169,6 +169,18 @@ llm-hardtest export runs/my-run --public --output result-bundle.zip
 llm-hardtest submit result-bundle.zip --preview
 # Only after reviewing every displayed field:
 llm-hardtest submit result-bundle.zip --open-pr --yes
+```
+
+Round 5 uses a separate schema and repository index. The exporter first revalidates
+the local raw grades, transcripts, and patch evidence, then emits only allowlisted
+summary fields. The published summary cannot reconstruct or independently reproduce
+the withheld raw evidence.
+
+```bash
+llm-hardtest pilot export runs/my-round5-pilot --public --output pilot-bundle.zip
+llm-hardtest pilot submit pilot-bundle.zip --preview
+# Only after reviewing every displayed field:
+llm-hardtest pilot submit pilot-bundle.zip --open-pr --yes
 ```
 
 ## Live terminal dashboard

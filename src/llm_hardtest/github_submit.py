@@ -9,7 +9,8 @@ import time
 from pathlib import Path
 from urllib.parse import quote
 
-from .public_results import load_public_bundle
+from .public_pilots import load_public_pilot_bundle, validate_public_pilot_result
+from .public_results import load_public_bundle, validate_public_result
 
 
 DEFAULT_REPOSITORY = "rannte85/llm-hardtest-report"
@@ -21,7 +22,8 @@ def submission_relative_path(payload: dict) -> str:
     digest = payload["bundle_id"].removeprefix("sha256:")
     if re.fullmatch(r"[0-9a-f]{64}", digest) is None:
         raise ValueError("submission has an invalid bundle ID")
-    return f"results/submissions/{digest}.json"
+    directory = "pilots" if "pilot" in payload else "submissions"
+    return f"results/{directory}/{digest}.json"
 
 
 def submission_document(payload: dict) -> str:
@@ -30,6 +32,11 @@ def submission_document(payload: dict) -> str:
 
 def preview_submission(path: Path) -> tuple[dict, str, str]:
     payload = load_public_bundle(path)
+    return payload, submission_relative_path(payload), submission_document(payload)
+
+
+def preview_pilot_submission(path: Path) -> tuple[dict, str, str]:
+    payload = load_public_pilot_bundle(path)
     return payload, submission_relative_path(payload), submission_document(payload)
 
 
@@ -68,6 +75,10 @@ def open_submission_pr(payload: dict, repository: str = DEFAULT_REPOSITORY,
                        client: GitHubCLI | None = None,
                        wait_seconds: int = 30) -> str:
     """Create one result file and PR after the caller has obtained explicit consent."""
+    if "pilot" in payload:
+        validate_public_pilot_result(payload)
+    else:
+        validate_public_result(payload)
     owner, name = _repository(repository)
     relative = submission_relative_path(payload)
     document = submission_document(payload)
@@ -121,11 +132,18 @@ def open_submission_pr(payload: dict, repository: str = DEFAULT_REPOSITORY,
     model_names = ", ".join(
         "`" + model["public_name"].replace("`", "'") + "`"
         for model in payload["models"])
+    if "pilot" in payload:
+        heading = "Voluntary public Round 5 pilot result"
+        scope = (f"- Pilot: `{payload['pilot']['id']}`\n"
+                 f"- Pack: `{payload['pilot']['pack']}`\n")
+    else:
+        heading = "Voluntary public result"
+        scope = f"- Rounds: {payload['benchmark']['rounds']}\n"
     body = (
-        "## Voluntary public result\n\n"
+        f"## {heading}\n\n"
         f"- Bundle: `{payload['bundle_id']}`\n"
         f"- Models: {model_names}\n"
-        f"- Rounds: {payload['benchmark']['rounds']}\n\n"
+        f"{scope}\n"
         "I previewed the complete submission JSON and intentionally publish these "
         "allowlisted aggregate fields. No raw run artifacts are included.\n"
     )

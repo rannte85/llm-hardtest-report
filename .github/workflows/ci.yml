@@ -37,6 +37,8 @@ jobs:
         run: |
           PYTHONPATH=src ./llm-hardtest results validate
           PYTHONPATH=src ./llm-hardtest results build --check
+          PYTHONPATH=src ./llm-hardtest results pilots validate
+          PYTHONPATH=src ./llm-hardtest results pilots build --check
       - name: Installed package smoke test
         run: |
           python -m pip install .

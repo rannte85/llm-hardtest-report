@@ -5,6 +5,17 @@ out separately from harness features.
 
 ## Unreleased
 
+## 2.6.0 — 2026-09-01
+
+- Added explicit-opt-in, allowlist-only Round 5 public exports that revalidate local
+  raw evidence before excluding transcripts, diffs, paths, credentials, endpoints,
+  private labels, and tool names from deterministic bundles.
+- Added preview-first GitHub pull-request submission for Round 5 summaries, with all
+  external writes gated by `--open-pr --yes`.
+- Added a separately validated community Round 5 index that groups exact public
+  configurations and pack fingerprints, preserves unobserved 0/0 suites, and
+  withholds descriptive baselines below five distinct accepted bundles.
+
 ## 2.5.0 — 2026-09-01
 
 - Added anonymous-by-default Round 5 cross-pilot analysis with eight-axis outcome

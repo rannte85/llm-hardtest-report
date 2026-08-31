@@ -16,6 +16,10 @@ Publishing a result makes the submitted fields, GitHub account, and pull-request
 history public. Deleting a merged file later cannot guarantee removal from Git history,
 forks, caches, or downstream copies.
 
+Round 5 follows the same consent boundary with `pilot export --public`,
+`pilot submit --preview`, and `pilot submit --open-pr --yes`. Nothing is uploaded
+automatically.
+
 ## Public schema v1
 
 Each submission contains only aggregate benchmark results and an allowlisted set of
@@ -76,3 +80,28 @@ in that exact group. Duplicate entries inside one bundle count only once toward 
 threshold. A future predictive model would require substantially more
 representative data, uncertainty reporting, abuse controls, and an explicit statement
 of the population it claims to predict.
+
+## Round 5 public pilot summaries
+
+Round 5 submissions use `results/pilot-schema-v1.json`, live under `results/pilots/`,
+and are aggregated into `results/PILOTS.md`:
+
+```bash
+llm-hardtest pilot export runs/my-pilot --public --output pilot-bundle.zip
+llm-hardtest pilot submit pilot-bundle.zip --preview
+llm-hardtest pilot submit pilot-bundle.zip --open-pr --yes
+```
+
+Before export, the tool revalidates the saved raw grade against bounded transcripts,
+patch evidence, transport state, sandbox sequence, test results, report claims, and
+release-readiness invariants. The public bundle contains only status, completed-turn
+count, authority and evidence-revision flags, public/hidden aggregate scores, release
+and report flags, protocol-error counts, timing, tokens, and allowlisted public model
+configuration.
+
+It never contains transcripts, messages, prompts, response text, diffs, changed-file
+names, tool names, endpoints, credentials, environment-variable names, run paths, or
+private labels. Because those raw artifacts remain local, repository validation can
+verify the public schema, hash, privacy rules, and internal consistency but cannot
+independently reproduce a submitter's raw evidence. Community values are descriptive
+and remain labeled `withheld` until five distinct comparable bundles are accepted.

@@ -28,14 +28,20 @@ from llm_hardtest.public_results import (
     validate_public_result,
 )
 from llm_hardtest.github_submit import (
-    open_submission_pr, preview_submission, submission_document,
+    open_submission_pr, preview_pilot_submission, preview_submission, submission_document,
     submission_relative_path,
 )
 from llm_hardtest.community_results import (
-    aggregate_submissions, build_index, load_submission_directory, render_index,
+    aggregate_pilot_submissions, aggregate_submissions, build_index,
+    build_pilot_index, load_pilot_submission_directory, load_submission_directory,
+    render_index, render_pilot_index,
 )
 from llm_hardtest.calibration import analyze_runs, render_analysis, write_analysis
 from llm_hardtest.pilot_analysis import analyze_pilots, write_pilot_analysis
+from llm_hardtest.public_pilots import (
+    build_public_pilot_result, export_public_pilot_bundle,
+    load_public_pilot_bundle, validate_public_pilot_result,
+)
 from llm_hardtest.round5 import run_pilot
 from llm_hardtest.round12 import run as run_round12
 from llm_hardtest.round3 import _fields, _grade
@@ -1107,6 +1113,149 @@ class PilotAnalysisTests(unittest.TestCase):
             run = self._pilot_run(Path(tmp) / "pilot")
             with self.assertRaisesRegex(ValueError, r"\.md"):
                 write_pilot_analysis([run], Path(tmp) / "analysis.json")
+
+
+class PublicPilotResultTests(unittest.TestCase):
+    def _run(self, root: Path) -> Path:
+        run = PilotAnalysisTests()._pilot_run(root)
+        config = load_json(run / "config.json")
+        for index, model in enumerate(config["models"], 1):
+            model.update({
+                "public_name": f"example/model-{index}",
+                "base_url": "http://127.0.0.1:9999/v1",
+                "api_key_env": "PRIVATE_PILOT_KEY",
+                "reasoning_effort": "high",
+                "max_tokens": 4096,
+            })
+        save_json(run / "config.json", config)
+        return run
+
+    def test_export_is_allowlist_only_and_deterministic(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            run = self._run(root / "run")
+            first, second = root / "first.zip", root / "second.zip"
+            _, payload, warnings = export_public_pilot_bundle(run, first)
+            export_public_pilot_bundle(run, second)
+            loaded = load_public_pilot_bundle(first)
+            first_bytes, second_bytes = first.read_bytes(), second.read_bytes()
+        self.assertEqual(first_bytes, second_bytes)
+        self.assertEqual(loaded, payload)
+        self.assertFalse(warnings)
+        text = json.dumps(payload)
+        for private in ("Private Strong", "private/strong", "127.0.0.1",
+                        "PRIVATE_PILOT_KEY", "normal transcript", "sessions.py"):
+            self.assertNotIn(private, text)
+        self.assertEqual(payload["models"][0]["attempts"][0]["public"], {
+            "passed": 4, "total": 4, "timed_out": False,
+        })
+
+    def test_rehashed_semantic_tampering_is_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            payload, _ = build_public_pilot_result(self._run(Path(tmp) / "run"))
+        payload["models"][0]["attempts"][0]["release_ready"] = False
+        from llm_hardtest.public_results import _bundle_id
+        body = {key: value for key, value in payload.items() if key != "bundle_id"}
+        payload["bundle_id"] = _bundle_id(body)
+        with self.assertRaisesRegex(ValueError, "release_ready"):
+            validate_public_pilot_result(payload)
+
+    def test_bundle_rejects_unexpected_archive_content(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "bad.zip"
+            with zipfile.ZipFile(path, "w") as archive:
+                archive.writestr("submission.json", "{}")
+                archive.writestr("PRIVACY.txt", "notice")
+                archive.writestr("transcript.txt", "private")
+            with self.assertRaisesRegex(ValueError, "unexpected files"):
+                load_public_pilot_bundle(path)
+
+    def test_preview_path_and_explicit_consent_guard(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run = self._run(Path(tmp) / "run")
+            bundle = Path(tmp) / "pilot.zip"
+            _, payload, _ = export_public_pilot_bundle(run, bundle)
+            previewed, relative, document = preview_pilot_submission(bundle)
+            self.assertEqual(previewed, payload)
+            self.assertTrue(relative.startswith("results/pilots/"))
+            self.assertEqual(json.loads(document), payload)
+            with patch("llm_hardtest.cli.open_submission_pr") as opened:
+                self.assertEqual(main([
+                    "pilot", "submit", str(bundle), "--open-pr"]), 2)
+                opened.assert_not_called()
+
+    def test_github_submission_targets_pilot_directory_and_labels_pr(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            payload, _ = build_public_pilot_result(self._run(Path(tmp) / "run"))
+
+        class RecordingClient:
+            def __init__(self):
+                self.calls = []
+
+            def request(self, method, endpoint, fields=None, allow_missing=False):
+                self.calls.append((method, endpoint, fields, allow_missing))
+                if endpoint == "user":
+                    return {"login": "owner"}
+                if endpoint == "repos/owner/repo":
+                    return {"default_branch": "main"}
+                if "/contents/results/pilots/" in endpoint and method == "GET":
+                    return None
+                if endpoint.endswith("/git/ref/heads/main"):
+                    return {"object": {"sha": "abc123"}}
+                if endpoint == "repos/owner/repo/pulls":
+                    return {"html_url": "https://github.com/owner/repo/pull/9"}
+                return {}
+
+        client = RecordingClient()
+        self.assertEqual(open_submission_pr(payload, "owner/repo", client),
+                         "https://github.com/owner/repo/pull/9")
+        put_endpoint = next(endpoint for method, endpoint, _, _ in client.calls
+                            if method == "PUT")
+        self.assertIn("/contents/results/pilots/", put_endpoint)
+        pull = next(fields for method, endpoint, fields, _ in client.calls
+                    if method == "POST" and endpoint == "repos/owner/repo/pulls")
+        self.assertIn("Round 5 pilot", pull["body"])
+        self.assertIn(payload["pilot"]["pack"], pull["body"])
+
+    def test_community_index_withholds_sparse_baseline_and_preserves_unobserved(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            run = self._run(root / "run")
+            payload, _ = build_public_pilot_result(run)
+            for attempt in payload["models"][1]["attempts"]:
+                attempt["public"] = {"passed": 0, "total": 0, "timed_out": True}
+            from llm_hardtest.public_results import _bundle_id
+            body = {key: value for key, value in payload.items() if key != "bundle_id"}
+            payload["bundle_id"] = _bundle_id(body)
+            validate_public_pilot_result(payload)
+            directory = root / "pilots"
+            directory.mkdir()
+            digest = payload["bundle_id"].removeprefix("sha256:")
+            (directory / f"{digest}.json").write_text(
+                submission_document(payload), encoding="utf-8")
+            loaded = load_pilot_submission_directory(directory)
+            rows = aggregate_pilot_submissions(loaded)
+            document = render_pilot_index(loaded)
+            output = root / "PILOTS.md"
+            self.assertEqual(build_pilot_index(directory, output), (1, 2))
+            self.assertEqual(build_pilot_index(directory, output, check=True), (1, 2))
+        self.assertEqual(len(rows), 2)
+        self.assertIn("withheld (<5 bundles)", document)
+        self.assertIn("n/a", document)
+
+    def test_baseline_requires_five_distinct_bundles(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            original, _ = build_public_pilot_result(self._run(Path(tmp) / "run"))
+        from llm_hardtest.public_results import _bundle_id
+        submissions = []
+        for index in range(5):
+            payload = json.loads(json.dumps(original))
+            payload["tool"]["version"] = f"2.6.{index}"
+            body = {key: value for key, value in payload.items() if key != "bundle_id"}
+            payload["bundle_id"] = _bundle_id(body)
+            validate_public_pilot_result(payload)
+            submissions.append(payload)
+        self.assertIn("| observed |", render_pilot_index(submissions))
 
 
 class CalibrationTests(unittest.TestCase):

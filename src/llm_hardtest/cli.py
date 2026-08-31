@@ -18,11 +18,18 @@ from .inspection import inspect_run, render_inspection
 from .replay import make_replay_config
 from .packs import validate_pack
 from .public_results import export_public_bundle
-from .github_submit import DEFAULT_REPOSITORY, open_submission_pr, preview_submission
-from .community_results import build_index, load_submission_directory
+from .github_submit import (
+    DEFAULT_REPOSITORY, open_submission_pr, preview_pilot_submission,
+    preview_submission,
+)
+from .community_results import (
+    build_index, build_pilot_index, load_pilot_submission_directory,
+    load_submission_directory,
+)
 from .calibration import write_analysis
 from .round5 import run_pilot
 from .pilot_analysis import write_pilot_analysis
+from .public_pilots import export_public_pilot_bundle
 
 
 SELFTEST_EXCLUDED_ROOTS = {
@@ -308,6 +315,20 @@ def main(argv=None) -> int:
     p_results_build.add_argument("directory", nargs="?", default="results/submissions")
     p_results_build.add_argument("--output", default="results/INDEX.md")
     p_results_build.add_argument("--check", action="store_true")
+    p_results_pilots = results_commands.add_parser(
+        "pilots", help="validate or aggregate voluntary Round 5 pilot summaries")
+    pilot_result_commands = p_results_pilots.add_subparsers(
+        dest="pilot_results_command", required=True)
+    p_results_pilots_validate = pilot_result_commands.add_parser(
+        "validate", help="validate public pilot submission files")
+    p_results_pilots_validate.add_argument(
+        "directory", nargs="?", default="results/pilots")
+    p_results_pilots_build = pilot_result_commands.add_parser(
+        "build", help="rebuild the community Round 5 pilot index")
+    p_results_pilots_build.add_argument(
+        "directory", nargs="?", default="results/pilots")
+    p_results_pilots_build.add_argument("--output", default="results/PILOTS.md")
+    p_results_pilots_build.add_argument("--check", action="store_true")
     p_pilot = sub.add_parser("pilot", help="run non-canonical research pilots")
     pilot_commands = p_pilot.add_subparsers(dest="pilot_command", required=True)
     p_pilot_r5 = pilot_commands.add_parser(
@@ -326,6 +347,21 @@ def main(argv=None) -> int:
     p_pilot_analyze.add_argument(
         "--include-model-labels", action="store_true",
         help="copy configured model labels into the local analysis report")
+    p_pilot_export = pilot_commands.add_parser(
+        "export", help="create an explicitly public sanitized Round 5 summary")
+    p_pilot_export.add_argument("run_dir")
+    p_pilot_export.add_argument("--public", action="store_true",
+                                help="confirm the sanitized bundle is intended for review")
+    p_pilot_export.add_argument("--output", default="llm-hardtest-public-pilot.zip")
+    p_pilot_submit = pilot_commands.add_parser(
+        "submit", help="preview or voluntarily submit a public Round 5 bundle")
+    p_pilot_submit.add_argument("bundle")
+    pilot_submit_mode = p_pilot_submit.add_mutually_exclusive_group(required=True)
+    pilot_submit_mode.add_argument("--preview", action="store_true")
+    pilot_submit_mode.add_argument("--open-pr", action="store_true")
+    p_pilot_submit.add_argument("--yes", action="store_true",
+                                help="confirm the external GitHub branch, file, and PR writes")
+    p_pilot_submit.add_argument("--repo", default=DEFAULT_REPOSITORY)
     sub.add_parser("selftest", help="validate datasets and graders without calling a model")
     args = parser.parse_args(argv)
     try:
@@ -403,6 +439,17 @@ def main(argv=None) -> int:
             print(f"Pull request: {url}")
             return 0
         if args.command == "results":
+            if args.results_command == "pilots":
+                directory = Path(args.directory)
+                if args.pilot_results_command == "validate":
+                    submissions = load_pilot_submission_directory(directory)
+                    print(f"VALID: {len(submissions)} public pilot bundle(s)")
+                    return 0
+                bundles, groups = build_pilot_index(
+                    directory, Path(args.output), check=args.check)
+                action = "VALID" if args.check else "BUILT"
+                print(f"{action}: {args.output} ({bundles} bundle(s), {groups} group(s))")
+                return 0
             directory = Path(args.directory)
             if args.results_command == "validate":
                 submissions = load_submission_directory(directory)
@@ -421,6 +468,29 @@ def main(argv=None) -> int:
                 print(f"Round 5 analysis: {md}")
                 print(f"Machine-readable analysis: {machine}")
                 print(f"Comparable pilot groups: {len(analysis['groups'])}")
+                return 0
+            if args.pilot_command == "export":
+                if not args.public:
+                    raise ValueError("public pilot export requires the explicit --public flag")
+                path, payload, warnings = export_public_pilot_bundle(
+                    Path(args.run_dir), Path(args.output))
+                print(f"Public pilot bundle: {path}")
+                print(f'Bundle ID: {payload["bundle_id"]}')
+                for warning in warnings:
+                    print("WARNING: " + warning)
+                print(f"Preview before submission: llm-hardtest pilot submit {path} --preview")
+                return 0
+            if args.pilot_command == "submit":
+                payload, relative, document = preview_pilot_submission(Path(args.bundle))
+                print(document, end="")
+                print(f"Proposed repository path: {relative}")
+                if args.preview:
+                    print("PREVIEW ONLY: no network request or GitHub write was made")
+                    return 0
+                if not args.yes:
+                    raise ValueError("opening a GitHub pull request requires --open-pr --yes")
+                url = open_submission_pr(payload, args.repo)
+                print(f"Pull request: {url}")
                 return 0
             config = load_json(Path(args.config))
             run_dir = run_pilot(

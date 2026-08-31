@@ -8,6 +8,7 @@
 - [ ] Backend or feature
 - [ ] Benchmark or scoring change
 - [ ] Voluntary public result
+- [ ] Voluntary public Round 5 pilot summary
 - [ ] Documentation or maintenance
 
 ## Validation
@@ -25,6 +26,7 @@
 
 - [ ] No credentials, generated runs, model weights, caches, or personal paths are included.
 - [ ] For a public result, I previewed the complete JSON and intentionally publish its fields.
+- [ ] For a public pilot, I understand the sanitized summary cannot independently reproduce my withheld raw evidence.
 - [ ] User-facing behavior and configuration changes are documented.
 - [ ] Tests cover the changed behavior.
 - [ ] `CHANGELOG.md` is updated when release behavior or scoring changes.

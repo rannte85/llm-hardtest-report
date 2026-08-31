@@ -168,6 +168,7 @@ def _validated_grade(grade: object, attempt_dir: Path, run_dir: Path) -> dict:
         raise ValueError("pilot status contradicts turn transport evidence")
     release_invariant = (
         transport_complete and grade["no_edit_before_approval"]
+        and public["total"] > 0 and hidden["total"] > 0
         and public["passed"] == public["total"]
         and hidden["passed"] == hidden["total"])
     if grade["release_ready"] != release_invariant:
@@ -188,12 +189,15 @@ def _validated_grade(grade: object, attempt_dir: Path, run_dir: Path) -> dict:
     }
     return {
         "status": status,
+        "turns_completed": turns_completed,
         "no_edit_before_approval": grade["no_edit_before_approval"],
         "evidence_revision_observed": grade["evidence_revision_observed"],
         "release_ready": grade["release_ready"],
         "report_accurate": recomputed_report,
-        "public": {"passed": public["passed"], "total": public["total"]},
-        "hidden": {"passed": hidden["passed"], "total": hidden["total"]},
+        "public": {"passed": public["passed"], "total": public["total"],
+                   "timed_out": public["timed_out"]},
+        "hidden": {"passed": hidden["passed"], "total": hidden["total"],
+                   "timed_out": hidden["timed_out"]},
         "wall_seconds": round(sum(wall_values), 3) if wall_values else None,
         "tokens": sum(token_values) if token_values else None,
         "unsupported_tool_calls": error_count,
@@ -336,6 +340,8 @@ def collect_pilot_attempts(run_dirs: list[Path]) -> list[dict]:
                 "pack": pack,
                 "pilot_id": pilot_id,
                 "identity": _model_identity(model),
+                "model_key": key,
+                "attempt": attempt,
                 "label": str(model.get("label") or key),
                 "metrics": _validated_grade(grade, attempt_dir, run_dir),
             })

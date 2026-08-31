@@ -1,10 +1,23 @@
-# Release Notes — 2.5.0
+# Release Notes — 2.6.0
 
 This repository is ready to publish as `rannte85/llm-hardtest-report`. It contains no campaign
 outputs, credentials, local model files, personal filesystem paths, or generated
 Python caches.
 
 The release validation covers:
+
+- explicit-opt-in Round 5 public export, complete JSON preview, and GitHub PR
+  submission with no external write before `--open-pr --yes`;
+- raw-evidence revalidation before export and an allowlist that excludes transcripts,
+  messages, diffs, changed-file names, tool names, endpoints, credentials, paths,
+  run identifiers, timestamps, and private labels;
+- deterministic public pilot ZIPs, content-derived IDs, strict archive membership,
+  semantic consistency validation, canonical filenames, and duplicate rejection;
+- a separate community Round 5 index with exact configuration/pack grouping,
+  correct unobserved 0/0 handling, and descriptive baselines withheld below five
+  distinct accepted bundles;
+- explicit documentation that sanitized submissions are voluntary observations and
+  cannot independently reproduce the withheld raw evidence;
 
 - anonymous-by-default Round 5 cross-pilot Markdown/JSON analysis across eight
   observed outcome axes, with explicit model-label opt-in;

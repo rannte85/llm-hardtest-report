@@ -71,3 +71,12 @@ By default, output configurations are named `config-1`, `config-2`, and so on. R
 prompts, model responses, endpoints, filesystem paths, credentials, and model labels
 are not copied. `--include-model-labels` is an explicit opt-in for local diagnosis;
 it should not be used for a report intended to remain anonymous.
+
+## Voluntary publication
+
+After local analysis, a user may create an allowlist-only public summary with
+`llm-hardtest pilot export RUN_DIR --public`. The export path is entirely separate
+from the raw analysis files. Preview it with `llm-hardtest pilot submit BUNDLE
+--preview`; GitHub writes require the additional explicit `--open-pr --yes` consent.
+See [Voluntary Public Results](PUBLIC_RESULTS.md) for the exact privacy and verification
+limits.

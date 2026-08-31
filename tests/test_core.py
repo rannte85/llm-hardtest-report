@@ -2530,8 +2530,10 @@ class PublicResultTests(unittest.TestCase):
             self._run(root)
             payload, _ = build_public_result(root)
         from llm_hardtest.public_results import _bundle_id
+        false_os = "Linux" if payload["environment"]["os"] != "Linux" else "Darwin"
         for serving, message in (
-                ({"scope": "same_host", "os": "Linux", "architecture": "x86_64"},
+                ({"scope": "same_host", "os": false_os,
+                  "architecture": payload["environment"]["architecture"]},
                  "contradicts runner"),
                 ({"scope": "unreported", "os": "Linux", "architecture": None},
                  "has coordinates")):

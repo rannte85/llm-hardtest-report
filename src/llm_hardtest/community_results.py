@@ -22,8 +22,8 @@ MIN_BASELINE_SUBMISSIONS = 5
 RECOMMENDATION_SCHEMA_VERSION = 1
 RECOMMENDATION_OBJECTIVES = {"accuracy", "completion", "latency", "throughput"}
 RECOMMENDATION_CONSTRAINTS = {
-    "os", "architecture", "transport", "accelerator", "server", "quantization",
-    "model_format", "max_memory_gb", "max_system_memory_gb",
+    "model", "os", "architecture", "transport", "accelerator", "server",
+    "quantization", "model_format", "max_memory_gb", "max_system_memory_gb",
     "max_parameter_count_b",
 }
 PACK_FINGERPRINT = re.compile(r"^sha256:[0-9a-f]{64}$")
@@ -194,6 +194,8 @@ def aggregate_submissions(submissions: list[dict]) -> list[dict]:
 
 
 def _constraint_value(row: dict, key: str):
+    if key == "model":
+        return row.get("model")
     if key in {"os", "architecture"}:
         return row["environment"].get(key)
     if key == "transport":

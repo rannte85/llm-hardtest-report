@@ -26,7 +26,8 @@ from .community_results import (
     build_index, build_pilot_index, load_pilot_submission_directory,
     load_submission_directory, recommend_configurations, render_recommendation,
 )
-from .community_database import build_database, recommend_database
+from .community_database import build_database, catalog_database, recommend_database
+from .serving_catalog import catalog_submissions, render_catalog
 from .calibration import write_analysis
 from .round5 import run_pilot
 from .pilot_analysis import write_pilot_analysis
@@ -342,6 +343,20 @@ def main(argv=None) -> int:
     p_results_database.add_argument(
         "--check", action="store_true",
         help="verify that an existing database exactly matches the submissions")
+    p_results_catalog = results_commands.add_parser(
+        "catalog", help="discover observed models, environments, and serving settings")
+    p_results_catalog.add_argument(
+        "directory", nargs="?",
+        help="public submission directory (default: results/submissions)")
+    p_results_catalog.add_argument(
+        "--database", help="query a normalized SQLite database instead of JSON")
+    p_results_catalog.add_argument("--round", type=int)
+    p_results_catalog.add_argument(
+        "--pack", help="optional exact sha256 pack fingerprint")
+    p_results_catalog.add_argument(
+        "--json", action="store_true", help="emit machine-readable JSON")
+    p_results_catalog.add_argument(
+        "--output", help="write the catalog to this path instead of stdout")
     p_results_recommend = results_commands.add_parser(
         "recommend", help="query gated Pareto candidates from public observations")
     p_results_recommend.add_argument(
@@ -357,6 +372,7 @@ def main(argv=None) -> int:
         choices=("accuracy", "completion", "latency", "throughput"),
         help="Pareto objective; repeat for multiple axes (default: accuracy)")
     p_results_recommend.add_argument("--accuracy-floor", type=float)
+    p_results_recommend.add_argument("--model")
     p_results_recommend.add_argument("--os")
     p_results_recommend.add_argument("--architecture")
     p_results_recommend.add_argument(
@@ -539,12 +555,38 @@ def main(argv=None) -> int:
                     f"{summary['task_observations']} task observation(s))")
                 print(f"Content fingerprint: {summary['content_fingerprint']}")
                 return 0
+            if args.results_command == "catalog":
+                if args.database and args.directory is not None:
+                    raise ValueError(
+                        "catalog accepts either a submission directory or --database")
+                if args.database:
+                    result = catalog_database(
+                        Path(args.database), round_number=args.round, pack=args.pack)
+                else:
+                    submissions = load_submission_directory(directory)
+                    result = catalog_submissions(
+                        submissions, round_number=args.round, pack=args.pack)
+                document = (json.dumps(result, indent=2, sort_keys=True,
+                                       ensure_ascii=False) + "\n"
+                            if args.json else render_catalog(result))
+                if args.output:
+                    output = Path(args.output)
+                    if output.exists() or output.is_symlink():
+                        raise ValueError(
+                            f"refusing to overwrite existing catalog: {output}")
+                    output.parent.mkdir(parents=True, exist_ok=True)
+                    output.write_text(document, encoding="utf-8")
+                    print(f"Catalog: {output}")
+                else:
+                    print(document, end="")
+                return 0
             if args.results_command == "recommend":
                 if args.database and args.directory is not None:
                     raise ValueError(
                         "recommend accepts either a submission directory or --database")
                 constraints = {
                     key: value for key, value in {
+                        "model": args.model,
                         "os": args.os,
                         "architecture": args.architecture,
                         "transport": args.transport,

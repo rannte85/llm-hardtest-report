@@ -114,6 +114,25 @@ These queries are descriptive. A serving service must still use bundle-clustered
 uncertainty, exact pack filters, held-out validation, drift and abuse review, explicit
 user constraints, and an insufficient-evidence outcome before making predictions.
 
+## Discoverable serving space
+
+Before constructing a candidate query, inspect the exact values and evidence currently
+available in the verified snapshot:
+
+```bash
+llm-hardtest results catalog \
+  --database results/community.sqlite3 \
+  --round 1 --json
+```
+
+The response follows [`results/catalog-schema-v1.json`](../results/catalog-schema-v1.json)
+and exposes public configuration coordinates, round/pack observations, independent-
+bundle counts, conservative metrics, objective-readiness flags, facets, and missing-
+metadata counts. It omits bundle IDs and contributor/tool history. Its JSON is identical
+to a catalog built directly from the canonical submissions directory. `EMPTY` and
+`NO_MATCH` remain distinct so a service can distinguish an unpopulated source from an
+unsupported filter.
+
 ## Direct candidate query
 
 The existing gated Pareto recommender can read the verified database directly:
@@ -123,6 +142,7 @@ llm-hardtest results recommend \
   --database results/community.sqlite3 \
   --round 1 \
   --pack sha256:<exact-pack-fingerprint> \
+  --model "org/model" \
   --accelerator "Example GPU" \
   --max-memory-gb 24 \
   --objective accuracy --objective latency --json

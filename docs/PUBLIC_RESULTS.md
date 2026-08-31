@@ -148,6 +148,24 @@ Schema v2 independently recomputes its numeric-normalized fingerprint and valida
 relational semantics before returning a result. A schema-v1 file from version 2.18 must
 be rebuilt from canonical JSON.
 
+## Observed serving catalog
+
+Use the catalog to discover valid query values and evidence coverage without reading
+SQLite tables or guessing spelling:
+
+```bash
+llm-hardtest results catalog results/submissions --round 1
+llm-hardtest results catalog --database results/community.sqlite3 --json
+```
+
+It lists exact public configurations and facets for model, OS, architecture, transport,
+accelerator, server, quantization, and model format. Each round/pack observation shows
+its independent-bundle count, conservative metrics, and readiness for accuracy,
+completion, latency, and throughput. Optional metadata that was not declared is counted
+separately and never converted into a match. JSON follows
+`results/catalog-schema-v1.json`; it contains no bundle IDs, contributor identity, or
+tool-version history. Canonical JSON and a verified database produce identical output.
+
 ## Descriptive serving-candidate query
 
 `results recommend` is read-only: it validates accepted JSON and writes nothing unless
@@ -156,6 +174,7 @@ an explicit `--output` path is supplied. It never contacts submitters or a model
 ```bash
 llm-hardtest results recommend results/submissions \
   --round 1 --pack sha256:<full-pack-fingerprint> \
+  --model "org/model" \
   --objective accuracy --objective throughput --json
 ```
 

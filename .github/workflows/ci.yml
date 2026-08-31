@@ -41,6 +41,8 @@ jobs:
             --output "${RUNNER_TEMP}/community.sqlite3"
           PYTHONPATH=src ./llm-hardtest results database \
             --output "${RUNNER_TEMP}/community.sqlite3" --check
+          PYTHONPATH=src ./llm-hardtest results catalog \
+            --database "${RUNNER_TEMP}/community.sqlite3" --json
           PYTHONPATH=src ./llm-hardtest results recommend \
             --database "${RUNNER_TEMP}/community.sqlite3" --round 1 --json
           PYTHONPATH=src ./llm-hardtest results pilots validate
@@ -53,6 +55,7 @@ jobs:
           mkdir submissions
           llm-hardtest results database submissions --output community.sqlite3
           llm-hardtest results database submissions --output community.sqlite3 --check
+          llm-hardtest results catalog --database community.sqlite3 --json
           llm-hardtest results recommend \
             --database community.sqlite3 --round 1 --json
       - name: Harness self-test

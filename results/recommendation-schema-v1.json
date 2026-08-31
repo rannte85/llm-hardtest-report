@@ -67,6 +67,7 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "model": {"$ref": "#/$defs/safeText"},
         "os": {"$ref": "#/$defs/safeText"},
         "architecture": {"$ref": "#/$defs/safeText"},
         "transport": {"enum": ["openai_compat", "codex_cli"]},

@@ -39,7 +39,10 @@ from llm_hardtest.community_results import (
 )
 from llm_hardtest.community_database import (
     SCHEMA_SQL, _content_fingerprint, aggregate_database, build_database,
-    load_database, normalize_submissions, recommend_database,
+    catalog_database, load_database, normalize_submissions, recommend_database,
+)
+from llm_hardtest.serving_catalog import (
+    build_catalog, catalog_submissions, render_catalog,
 )
 from llm_hardtest.calibration import (
     _configuration_comparisons, _configuration_item_coverage,
@@ -2783,6 +2786,149 @@ class PublicResultTests(unittest.TestCase):
                 accuracy_floor=0.3)
         self.assertEqual(database_rows, source_rows)
         self.assertEqual(database_result, source_result)
+
+    def test_catalog_discovers_exact_settings_and_readiness_without_provenance(self):
+        submissions = self._recommendation_submissions()
+        catalog = catalog_submissions(submissions)
+        self.assertEqual(catalog["status"], "OBSERVED")
+        self.assertEqual(catalog["summary"], {
+            "configurations": 2,
+            "observations": 2,
+            "models": 2,
+            "rounds": [1],
+            "packs": ["sha256:" + "a" * 64],
+            "recommendation_ready_observations": 2,
+        })
+        self.assertEqual(
+            [row["value"] for row in catalog["facets"]["model"]],
+            ["org/accurate", "org/fast"])
+        self.assertEqual(catalog["facets"]["server"][0]["value"],
+                         "Example Server")
+        self.assertEqual(catalog["facets"]["server"][0]["configurations"], 2)
+        self.assertEqual(catalog["missing_metadata"]["model_format"], {
+            "configurations": 2, "observations": 2,
+        })
+        for configuration in catalog["configurations"]:
+            observation = configuration["observations"][0]
+            self.assertEqual(observation["independent_bundles"], 5)
+            self.assertEqual(observation["readiness"], {
+                "accuracy": True, "completion": True,
+                "latency": True, "throughput": True,
+            })
+        serialized = json.dumps(catalog)
+        self.assertNotIn("bundle_id", serialized)
+        self.assertNotIn("recommendation-control", serialized)
+        rendered = render_catalog(catalog)
+        self.assertIn("Observed Serving Catalog", rendered)
+        self.assertIn("--model", rendered)
+        catalog["configurations"][0]["model"] = "org/model | injected"
+        self.assertIn("org/model \\| injected", render_catalog(catalog))
+
+    def test_catalog_filters_validate_and_distinguish_empty_from_no_match(self):
+        empty = build_catalog([])
+        no_match = catalog_submissions(
+            self._recommendation_submissions(), round_number=2)
+        self.assertEqual(empty["status"], "EMPTY")
+        self.assertEqual(no_match["status"], "NO_MATCH")
+        self.assertFalse(no_match["configurations"])
+        with self.assertRaisesRegex(ValueError, "one of 1, 2, 3, or 4"):
+            build_catalog([], round_number=5)
+        with self.assertRaisesRegex(ValueError, "exact sha256"):
+            build_catalog([], pack="latest")
+
+    def test_sparse_catalog_never_promotes_point_estimates_to_readiness(self):
+        catalog = catalog_submissions(self._recommendation_submissions(1))
+        self.assertEqual(catalog["summary"]["recommendation_ready_observations"], 0)
+        self.assertEqual(catalog["facets"]["model"][0][
+            "recommendation_ready_observations"], 0)
+        for configuration in catalog["configurations"]:
+            observation = configuration["observations"][0]
+            self.assertEqual(observation["independent_bundles"], 1)
+            self.assertFalse(any(observation["readiness"].values()))
+            self.assertIsNone(observation["metrics"]["accuracy_observed"])
+
+    def test_catalog_facets_merge_only_case_spelling_not_configurations(self):
+        submissions = self._recommendation_submissions()
+        changed = submissions[-1]
+        for model in changed["models"]:
+            model["public_metadata"]["server"] = "example server"
+        from llm_hardtest.public_results import _bundle_id
+        body = {key: value for key, value in changed.items() if key != "bundle_id"}
+        changed["bundle_id"] = _bundle_id(body)
+        validate_public_result(changed)
+        catalog = catalog_submissions(submissions)
+        self.assertEqual(len(catalog["facets"]["server"]), 1)
+        self.assertEqual(catalog["facets"]["server"][0]["value"], "Example Server")
+        self.assertEqual(catalog["facets"]["server"][0]["configurations"], 4)
+        self.assertEqual(catalog["summary"]["configurations"], 4)
+
+    def test_database_and_json_catalogs_are_identical(self):
+        submissions = self._recommendation_submissions()
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp) / "submissions"
+            directory.mkdir()
+            for payload in submissions:
+                digest = payload["bundle_id"].removeprefix("sha256:")
+                (directory / f"{digest}.json").write_text(
+                    submission_document(payload), encoding="utf-8")
+            database = Path(tmp) / "community.sqlite3"
+            build_database(directory, database)
+            source = catalog_submissions(
+                submissions, round_number=1, pack="sha256:" + "a" * 64)
+            materialized = catalog_database(
+                database, round_number=1, pack="sha256:" + "a" * 64)
+        self.assertEqual(materialized, source)
+
+    def test_catalog_cli_database_matches_json_and_rejects_two_sources(self):
+        submissions = self._recommendation_submissions()
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp) / "submissions"
+            directory.mkdir()
+            for payload in submissions:
+                digest = payload["bundle_id"].removeprefix("sha256:")
+                (directory / f"{digest}.json").write_text(
+                    submission_document(payload), encoding="utf-8")
+            database = Path(tmp) / "community.sqlite3"
+            build_database(directory, database)
+            json_stdout = io.StringIO()
+            database_stdout = io.StringIO()
+            with patch("sys.stdout", json_stdout):
+                self.assertEqual(main([
+                    "results", "catalog", str(directory), "--round", "1", "--json"]), 0)
+            with patch("sys.stdout", database_stdout):
+                self.assertEqual(main([
+                    "results", "catalog", "--database", str(database),
+                    "--round", "1", "--json"]), 0)
+            with patch("sys.stderr", io.StringIO()):
+                self.assertEqual(main([
+                    "results", "catalog", str(directory), "--database", str(database),
+                    "--json"]), 2)
+            occupied = Path(tmp) / "occupied.json"
+            occupied.write_text("preserve", encoding="utf-8")
+            with patch("sys.stderr", io.StringIO()):
+                self.assertEqual(main([
+                    "results", "catalog", str(directory), "--json",
+                    "--output", str(occupied)]), 2)
+            self.assertEqual(occupied.read_text(encoding="utf-8"), "preserve")
+        self.assertEqual(database_stdout.getvalue(), json_stdout.getvalue())
+
+    def test_published_catalog_schema_has_the_runtime_contract(self):
+        schema = json.loads((repo_root() / "results/catalog-schema-v1.json").read_text(
+            encoding="utf-8"))
+        self.assertEqual(schema["properties"]["schema_version"]["const"], 1)
+        self.assertEqual(schema["properties"]["kind"]["const"],
+                         "observed_serving_catalog")
+        self.assertEqual(
+            set(schema["properties"]["facets"]["required"]),
+            {"model", "os", "architecture", "transport", "accelerator", "server",
+             "quantization", "model_format"})
+
+    def test_recommendation_can_select_one_exact_model_case_insensitively(self):
+        result = recommend_configurations(
+            self._recommendation_submissions(), round_number=1,
+            constraints={"model": "ORG/FAST"}, objectives=["accuracy"])
+        self.assertEqual(result["status"], "SINGLE_ELIGIBLE_CONFIGURATION")
+        self.assertEqual(result["candidates"][0]["model"], "org/fast")
 
     def test_database_and_json_require_the_same_exact_pack(self):
         submissions = self._recommendation_submissions()

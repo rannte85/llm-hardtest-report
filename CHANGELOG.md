@@ -5,6 +5,21 @@ out separately from harness features.
 
 ## Unreleased
 
+## 2.20.0 — 2026-09-01
+
+- Added `results catalog` for deterministic discovery of observed models, servers,
+  accelerators, quantizations, formats, operating systems, architectures, transports,
+  exact configurations, rounds, and pack fingerprints before composing a query.
+- Added per-observation independent-bundle counts, objective readiness, conservative
+  metrics, case-insensitive facet aggregation, and explicit missing-metadata counts.
+- Added `--model` as an exact, case-insensitive serving-candidate constraint.
+- Made canonical JSON and verified SQLite catalog responses byte-identical, with
+  explicit `EMPTY`, `NO_MATCH`, and `OBSERVED` states and no bundle or contributor IDs.
+- Published catalog schema v1 and added filter, privacy, sparse-evidence, conflicting-
+  source, installed-package, and cross-adapter controls.
+- Kept database schema v2, public result schema v2, recommendation schema v1, and
+  canonical Round 1–4 content and grading unchanged.
+
 ## 2.19.0 — 2026-09-01
 
 - Added `results recommend --database` for gated Pareto queries directly from normalized

@@ -4,13 +4,13 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-**Current release: 2.19.0** — connects the normalized SQLite database directly to the
-serving-candidate recommender. JSON and database inputs now produce the same cluster-
-aware metrics, gates, exclusions, and Pareto candidates. Database schema v2 adds a
-recomputable numeric-normalized fingerprint, and standalone queries reject corrupt,
-stale, structurally altered, or semantically inconsistent rows before analysis.
-Canonical Round 1–4 questions, grading contracts, and public submission schema are
-unchanged.
+**Current release: 2.20.0** — adds an observed-serving catalog so users and future APIs
+can discover the exact models, servers, accelerators, quantizations, environments,
+rounds, and packs present in canonical JSON or verified SQLite before requesting a
+recommendation. It reports independent evidence and objective readiness, exposes
+missing metadata, and adds exact `--model` filtering without leaking bundle or
+contributor identity. Canonical Round 1–4 questions, grading contracts, public
+submission schema, and database schema remain unchanged.
 
 LLM Hardtest Report is a local-first command-line benchmark for comparing language
 models as reasoners, coding workers, and safe handoff agents. Point it at one or more
@@ -267,6 +267,27 @@ model rows. See the [database contract](docs/COMMUNITY_DATABASE.md) and publishe
 [`database-schema-v2.sql`](results/database-schema-v2.sql). Databases produced by
 v2.18 use schema v1 and must be rebuilt from their canonical submission JSON.
 
+## Discover observed serving settings
+
+List the exact values that can be used in a recommendation query before guessing a
+model, server name, accelerator, quantization, round, or pack:
+
+```bash
+llm-hardtest results catalog \
+  --database results/community.sqlite3
+
+llm-hardtest results catalog results/submissions \
+  --round 1 --json
+```
+
+The catalog groups case-insensitive facet spellings, preserves each exact configuration,
+shows independent-bundle counts and which objectives have enough evidence, and counts
+missing optional metadata explicitly. Canonical JSON and a verified SQLite snapshot
+produce identical machine-readable output. The published contract is
+[`results/catalog-schema-v1.json`](results/catalog-schema-v1.json). `EMPTY` means the
+source contains no observations; `NO_MATCH` means observations exist but none match the
+optional round/pack filter.
+
 ## Query observed serving candidates
 
 After validated submissions have accumulated, query only configurations observed on
@@ -276,6 +297,7 @@ one exact benchmark pack. Repeat `--objective` to request a multi-axis Pareto se
 llm-hardtest results recommend results/submissions \
   --round 1 \
   --pack sha256:<full-pack-fingerprint> \
+  --model "org/model" \
   --accelerator "Example GPU" \
   --max-memory-gb 24 \
   --accuracy-floor 0.60 \

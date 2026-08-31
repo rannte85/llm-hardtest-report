@@ -15,6 +15,7 @@ from .community_results import (
     _cluster_interval, _configuration_id, _percentile, _recommend_aggregate_rows,
     load_submission_directory,
 )
+from .serving_catalog import build_catalog
 from .public_results import (
     FINGERPRINT, MODEL_PARAMETER_FIELDS, PUBLIC_ITEM_STATUSES,
     PUBLIC_METADATA_FIELDS, PUBLIC_METADATA_NUMERIC_FIELDS, _public_text,
@@ -652,6 +653,13 @@ def recommend_database(path: Path, *, round_number: int,
         aggregate_database(load_database(path)), round_number=round_number,
         pack=pack, constraints=constraints, objectives=objectives,
         accuracy_floor=accuracy_floor)
+
+
+def catalog_database(path: Path, *, round_number: int | None = None,
+                     pack: str | None = None) -> dict:
+    """Build the serving-space catalog directly from a verified SQLite snapshot."""
+    return build_catalog(
+        aggregate_database(load_database(path)), round_number=round_number, pack=pack)
 
 
 def build_database(directory: Path, output: Path, *, check: bool = False) -> dict:

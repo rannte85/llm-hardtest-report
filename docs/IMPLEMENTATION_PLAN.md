@@ -529,3 +529,30 @@ Acceptance checks:
   a freshly recomputed fingerprint, or two simultaneous input sources is rejected.
 - Source and installed-package CI exercise empty database build, check, and recommendation
   paths on Linux Python 3.10/3.12 and macOS Python 3.12.
+
+## Phase 20 — Discoverable serving evidence
+
+Goal: let users and service clients discover the exact observed query space before
+specifying model, runtime, hardware, pack, or objective constraints.
+
+Deliverables:
+
+1. Add one deterministic catalog contract over normalized aggregate rows, shared by
+   canonical JSON and verified SQLite adapters.
+2. Enumerate exact public configurations and case-insensitive model, environment,
+   transport, server, accelerator, quantization, and model-format facets.
+3. Show independent-bundle counts, conservative metrics, per-objective readiness, and
+   missing optional metadata without emitting bundle IDs or contributor history.
+4. Distinguish empty sources from valid round/pack filters with no observations.
+5. Add an exact case-insensitive model constraint to the existing Pareto query.
+
+Acceptance checks:
+
+- Five two-configuration bundles expose two configurations whose four objectives are
+  ready, while one bundle leaves every objective unready.
+- JSON and database adapters produce byte-identical catalogs under the same filters.
+- Missing values are counted separately, never rendered as selectable facet values.
+- Invalid rounds, non-exact pack aliases, conflicting sources, and overwrite attempts
+  fail without output mutation.
+- Catalog JSON and Markdown contain no bundle IDs, tool versions, or private evidence.
+- Source and installed-package CI exercise an empty verified database catalog.

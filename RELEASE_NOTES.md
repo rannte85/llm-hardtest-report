@@ -1,10 +1,20 @@
-# Release Notes — 2.19.0
+# Release Notes — 2.20.0
 
 This repository is ready to publish as `rannte85/llm-hardtest-report`. It contains no campaign
 outputs, credentials, local model files, personal filesystem paths, or generated
 Python caches.
 
 The release validation covers:
+
+- deterministic observed-serving catalogs from canonical JSON or verified SQLite,
+  including exact configurations, queryable facets, evidence counts, conservative
+  metrics, per-objective readiness, and explicit missing-metadata coverage;
+- byte-identical cross-adapter catalog JSON with separate empty-source and filtered-
+  no-match states, no bundle/contributor history, and a published schema-v1 contract;
+- exact case-insensitive `--model` candidate filtering plus CLI discovery that removes
+  the need to guess model, server, hardware, quantization, round, or pack values;
+- adversarial privacy, sparse-readiness, invalid-filter, conflicting-source, Markdown,
+  installed-package, and cross-adapter controls;
 
 - direct gated Pareto recommendations from verified normalized SQLite databases;
 - one shared recommendation implementation for canonical JSON and database aggregate

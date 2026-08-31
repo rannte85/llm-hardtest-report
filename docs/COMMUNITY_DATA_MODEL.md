@@ -133,3 +133,11 @@ aggregates and Pareto results. Standalone reads recompute the logical fingerprin
 revalidate public identities, canonical configuration JSON, flattened coordinates,
 numeric domains, and relational links before analysis. This makes the snapshot usable
 as a service input while retaining the same descriptive-evidence limits.
+
+Version 2.20 adds `results catalog` over the same aggregate-row boundary. It lets a
+human or service discover exact model, server, hardware, format, quantization, transport,
+round, and pack values before forming constraints. Per-observation readiness means only
+that the existing five-independent-bundle descriptive gate is met; it is not predictive
+promotion. Catalog JSON omits bundle and contributor history, reports missing metadata
+instead of guessing it, and is identical for canonical JSON and verified SQLite inputs.
+The recommender also accepts an exact case-insensitive `--model` constraint.

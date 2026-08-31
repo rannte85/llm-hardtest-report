@@ -198,3 +198,28 @@ Acceptance checks:
 - Synthetic community observations reproduce known ceiling and negative-discrimination
   controls.
 - A real historical run exports every recorded item with no raw content leakage.
+
+## Phase 8 — Directional configuration evidence
+
+Goal: move from detecting that configurations disagree to determining whether one
+configuration is consistently better on the observed pack without mistaking repeat
+noise or multiple testing for a winner.
+
+Deliverables:
+
+1. Add privacy-safe configuration aliases and input coordinates to local analysis.
+2. Report respondent-cluster scorecards, completion, and bounded 95% intervals.
+3. Compare every configuration pair on common items with effect size and item
+   win/loss/tie counts.
+4. Apply exact two-sided sign tests and Holm family-wise correction.
+5. Resample both respondents and items, and require the hierarchical interval to
+   exclude zero before emitting a directional result.
+
+Acceptance checks:
+
+- Five stable strong-vs-weak repeats produce a directional result.
+- Fewer than five scored respondents withhold inference.
+- A nominal item-level winner with unstable repeats remains `UNCERTAIN`.
+- Multiple pair comparisons use corrected—not raw—p-values.
+- Real historical evidence remains readable and private names, endpoints, paths, and
+  response content do not enter Markdown or JSON output.

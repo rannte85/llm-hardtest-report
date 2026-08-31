@@ -266,7 +266,8 @@ def main(argv=None) -> int:
     p_report = sub.add_parser("report", help="regenerate a completed campaign report")
     p_report.add_argument("run_dir")
     p_analyze = sub.add_parser(
-        "analyze", help="measure item discrimination and repeat stability across runs")
+        "analyze",
+        help="measure item discrimination, repeat stability, and configuration evidence")
     p_analyze.add_argument("run_dirs", nargs="+")
     p_analyze.add_argument("--output", default="HARDTEST_ANALYSIS.md")
     p_inspect = sub.add_parser("inspect", help="show unresolved campaign items")

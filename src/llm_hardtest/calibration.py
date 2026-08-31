@@ -16,6 +16,25 @@ from .results import item_status
 SCORED = {"PASS", "FAIL"}
 MIN_ITEM_OBSERVATIONS = 5
 MIN_PAIR_ITEMS = 2
+MIN_COMPARISON_ITEMS = 5
+MIN_CONFIGURATION_RESPONDENTS = 5
+BOOTSTRAP_SAMPLES = 2_000
+
+
+class _HashSampler:
+    """Cross-version deterministic sampler backed only by SHA-256."""
+
+    def __init__(self, seed: str):
+        self.seed = hashlib.sha256(seed.encode("utf-8")).digest()
+        self.counter = 0
+
+    def choice(self, values: list):
+        if not values:
+            raise ValueError("cannot sample an empty collection")
+        block = hashlib.sha256(
+            self.seed + self.counter.to_bytes(16, "big")).digest()
+        self.counter += 1
+        return values[int.from_bytes(block, "big") % len(values)]
 
 
 def _model_identity(model: dict) -> str:
@@ -234,20 +253,211 @@ def _pairwise_stability(matrix: dict, models: dict) -> dict:
     }
 
 
+def _percentile(values: list[float], probability: float) -> float:
+    ordered = sorted(values)
+    index = max(0, min(len(ordered) - 1,
+                       math.ceil(probability * len(ordered)) - 1))
+    return ordered[index]
+
+
+def _hierarchical_difference_interval(left_rows: list[dict], right_rows: list[dict],
+                                      items: list[str], seed: str) -> dict | None:
+    """Resample respondents and items so repeat instability enters the effect interval."""
+    generator = _HashSampler(seed)
+    means = []
+    for _ in range(BOOTSTRAP_SAMPLES):
+        sampled_left = [generator.choice(left_rows) for _ in left_rows]
+        sampled_right = [generator.choice(right_rows) for _ in right_rows]
+        differences = []
+        for item in (generator.choice(items) for _ in items):
+            left = [row[item] == "PASS" for row in sampled_left
+                    if row.get(item) in SCORED]
+            right = [row[item] == "PASS" for row in sampled_right
+                     if row.get(item) in SCORED]
+            if left and right:
+                differences.append(statistics.mean(left) - statistics.mean(right))
+        if differences:
+            means.append(statistics.mean(differences))
+    if not means:
+        return None
+    return {
+        "low": round(_percentile(means, 0.025), 6),
+        "high": round(_percentile(means, 0.975), 6),
+        "method": "hierarchical_respondent_item_bootstrap_95",
+        "samples": BOOTSTRAP_SAMPLES,
+    }
+
+
+def _cluster_rate_interval(values: list[float]) -> dict | None:
+    """Conservative Wilson-style interval across respondent-level rates."""
+    if len(values) < MIN_CONFIGURATION_RESPONDENTS:
+        return None
+    z = 1.96
+    sample_size = len(values)
+    estimate = statistics.mean(values)
+    denominator = 1 + z ** 2 / sample_size
+    center = (estimate + z ** 2 / (2 * sample_size)) / denominator
+    margin = z / denominator * math.sqrt(
+        estimate * (1 - estimate) / sample_size
+        + z ** 2 / (4 * sample_size ** 2))
+    return {
+        "low": round(max(0.0, center - margin), 6),
+        "high": round(min(1.0, center + margin), 6),
+        "method": "respondent_cluster_wilson_95",
+    }
+
+
+def _configuration_aliases(matrix: dict, models: dict) -> dict[str, str]:
+    first_seen = {}
+    for respondent in sorted(matrix):
+        identity = models[respondent]
+        first_seen.setdefault(identity, respondent)
+    ordered = sorted(first_seen, key=lambda identity: first_seen[identity])
+    return {identity: f"C{index}" for index, identity in enumerate(ordered, 1)}
+
+
+def _configuration_scorecards(matrix: dict, models: dict,
+                              aliases: dict[str, str]) -> list[dict]:
+    respondents = defaultdict(list)
+    status_counts = defaultdict(lambda: defaultdict(int))
+    sources = defaultdict(set)
+    for respondent, rows in matrix.items():
+        identity = models[respondent]
+        sources[identity].add((respondent[0], respondent[1]))
+        scored = [status for status in rows.values() if status in SCORED]
+        if scored:
+            respondents[identity].append(
+                sum(status == "PASS" for status in scored) / len(scored))
+        for status in rows.values():
+            status_counts[identity][status] += 1
+    scorecards = []
+    for identity, alias in sorted(
+            aliases.items(), key=lambda pair: int(pair[1].removeprefix("C"))):
+        rates = respondents[identity]
+        counts = status_counts[identity]
+        scored = counts["PASS"] + counts["FAIL"]
+        attempted = scored + counts["INCOMPLETE"] + counts["REVIEW"] + counts["INVALID"]
+        scorecards.append({
+            "configuration": alias,
+            "sources": [f"r{run}/m{model}" for run, model in sorted(sources[identity])],
+            "respondents": len(rates),
+            "scored": scored,
+            "pass": counts["PASS"],
+            "fail": counts["FAIL"],
+            "incomplete": counts["INCOMPLETE"],
+            "review": counts["REVIEW"],
+            "invalid": counts["INVALID"],
+            "mean_respondent_pass_rate": (
+                round(statistics.mean(rates), 6) if rates else None),
+            "respondent_pass_rate_interval95": _cluster_rate_interval(rates),
+            "completion_rate": round(scored / attempted, 6) if attempted else None,
+        })
+    return scorecards
+
+
+def _exact_sign_pvalue(wins: int, losses: int) -> float | None:
+    trials = wins + losses
+    if not trials:
+        return None
+    tail = sum(math.comb(trials, index) for index in range(min(wins, losses) + 1))
+    return min(1.0, 2 * tail / (2 ** trials))
+
+
+def _configuration_comparisons(matrix: dict, models: dict,
+                               aliases: dict[str, str]) -> list[dict]:
+    by_configuration = defaultdict(lambda: defaultdict(list))
+    rows_by_configuration = defaultdict(list)
+    respondent_counts = defaultdict(set)
+    for respondent, rows in matrix.items():
+        identity = models[respondent]
+        if any(status in SCORED for status in rows.values()):
+            respondent_counts[identity].add(respondent)
+            rows_by_configuration[identity].append(rows)
+        for item, status in rows.items():
+            if status in SCORED:
+                by_configuration[identity][item].append(status == "PASS")
+
+    comparisons = []
+    identities = sorted(
+        aliases, key=lambda identity: int(aliases[identity].removeprefix("C")))
+    for left, right in combinations(identities, 2):
+        common = sorted(set(by_configuration[left]) & set(by_configuration[right]))
+        differences = []
+        for item in common:
+            left_rate = statistics.mean(by_configuration[left][item])
+            right_rate = statistics.mean(by_configuration[right][item])
+            differences.append(left_rate - right_rate)
+        wins = sum(value > 0 for value in differences)
+        losses = sum(value < 0 for value in differences)
+        ties = sum(value == 0 for value in differences)
+        effect = statistics.mean(differences) if differences else None
+        raw_p = _exact_sign_pvalue(wins, losses)
+        enough = (
+            len(common) >= MIN_COMPARISON_ITEMS
+            and len(respondent_counts[left]) >= MIN_CONFIGURATION_RESPONDENTS
+            and len(respondent_counts[right]) >= MIN_CONFIGURATION_RESPONDENTS
+        )
+        comparisons.append({
+            "left": aliases[left],
+            "right": aliases[right],
+            "left_respondents": len(respondent_counts[left]),
+            "right_respondents": len(respondent_counts[right]),
+            "common_items": len(common),
+            "left_item_wins": wins,
+            "right_item_wins": losses,
+            "item_ties": ties,
+            "mean_pass_rate_difference": round(effect, 6) if effect is not None else None,
+            "difference_interval95": (
+                _hierarchical_difference_interval(
+                    rows_by_configuration[left], rows_by_configuration[right], common,
+                    f"comparison:{left}:{right}")
+                if enough else None),
+            "sign_test_p_raw": round(raw_p, 6) if raw_p is not None else None,
+            "sign_test_p_holm": None,
+            "classification": "INSUFFICIENT" if not enough else "UNCERTAIN",
+        })
+
+    eligible = [(index, _exact_sign_pvalue(
+                    row["left_item_wins"], row["right_item_wins"]))
+                for index, row in enumerate(comparisons)
+                if row["classification"] != "INSUFFICIENT"
+                and row["sign_test_p_raw"] is not None]
+    previous = 0.0
+    for rank, (index, p_value) in enumerate(
+            sorted(eligible, key=lambda pair: (pair[1], pair[0])), 1):
+        adjusted = min(1.0, max(previous, p_value * (len(eligible) - rank + 1)))
+        previous = adjusted
+        row = comparisons[index]
+        row["sign_test_p_holm"] = round(adjusted, 6)
+        interval = row["difference_interval95"]
+        if adjusted < 0.05 and interval is not None:
+            difference = row["mean_pass_rate_difference"]
+            if difference > 0 and interval["low"] > 0:
+                row["classification"] = "LEFT_HIGHER"
+            elif difference < 0 and interval["high"] < 0:
+                row["classification"] = "RIGHT_HIGHER"
+    return comparisons
+
+
 def analyze_runs(run_dirs: list[Path]) -> dict:
     groups = collect_observations(run_dirs)
     analyses = []
     for (round_number, pack), group in sorted(groups.items()):
         matrix = group["matrix"]
+        aliases = _configuration_aliases(matrix, group["models"])
         analyses.append({
             "round": round_number,
             "pack": pack,
             "respondents": len(matrix),
             "model_configurations": len(set(group["models"].values())),
             "pairwise": _pairwise_stability(matrix, group["models"]),
+            "configurations": _configuration_scorecards(
+                matrix, group["models"], aliases),
+            "configuration_comparisons": _configuration_comparisons(
+                matrix, group["models"], aliases),
             "items": _item_metrics(matrix),
         })
-    return {"schema_version": 1, "source_runs": len(run_dirs), "groups": analyses}
+    return {"schema_version": 2, "source_runs": len(run_dirs), "groups": analyses}
 
 
 def _percent(value: float | None) -> str:
@@ -263,6 +473,9 @@ def render_analysis(analysis: dict) -> str:
     ]
     for group in analysis["groups"]:
         pairwise = group["pairwise"]
+        comparisons = group["configuration_comparisons"]
+        decisive = sum(row["classification"] in {"LEFT_HIGHER", "RIGHT_HIGHER"}
+                       for row in comparisons)
         lines += [
             f"## Round {group['round']} — `{group['pack']}`", "",
             f"Respondents: **{group['respondents']}**; distinct model configurations: "
@@ -274,6 +487,43 @@ def render_analysis(analysis: dict) -> str:
             f"{_percent(pairwise['within_configuration_disagreement'])} "
             f"across {pairwise['within_configuration_pairs']} comparable pair(s).",
             f"- Net separation (between minus within): {_percent(pairwise['net_separation'])}.", "",
+            "### Configuration scorecards", "",
+            "Aliases follow first appearance in the supplied run/config order and do not copy",
+            "private model labels or endpoints into this analysis.", "",
+            "| Config | Input source(s) | Respondents | Scored | Mean respondent pass | 95% interval | Completion | Incomplete | Review | Invalid |",
+            "|---|---|---:|---:|---:|---|---:|---:|---:|---:|",
+        ]
+        for row in group["configurations"]:
+            interval = row["respondent_pass_rate_interval95"]
+            interval_text = (f"{_percent(interval['low'])}–{_percent(interval['high'])}"
+                             if interval else "withheld")
+            lines.append(
+                f"| {row['configuration']} | {', '.join(row['sources'])} | "
+                f"{row['respondents']} | {row['scored']} | "
+                f"{_percent(row['mean_respondent_pass_rate'])} | {interval_text} | "
+                f"{_percent(row['completion_rate'])} | {row['incomplete']} | "
+                f"{row['review']} | {row['invalid']} |")
+        lines += [
+            "", "### Head-to-head configuration evidence", "",
+            f"Decisive after Holm correction: **{decisive}/{len(comparisons)}** comparison(s).", "",
+            "| Left | Right | Respondents | Common items | Item W–L–T | Mean difference | 95% interval | Holm p | Result |",
+            "|---|---|---:|---:|---:|---:|---|---:|---|",
+        ]
+        for row in comparisons:
+            interval = row["difference_interval95"]
+            interval_text = (f"{_percent(interval['low'])}–{_percent(interval['high'])}"
+                             if interval else "withheld")
+            p_value = row["sign_test_p_holm"]
+            lines.append(
+                f"| {row['left']} | {row['right']} | "
+                f"{row['left_respondents']}/{row['right_respondents']} | "
+                f"{row['common_items']} | {row['left_item_wins']}–"
+                f"{row['right_item_wins']}–{row['item_ties']} | "
+                f"{_percent(row['mean_pass_rate_difference'])} | {interval_text} | "
+                f"{p_value if p_value is not None else 'n/a'} | "
+                f"{row['classification']} |")
+        lines += [
+            "", "### Item diagnostics", "",
             "| Item | Scored | Pass rate | Difficulty balance | Corrected discrimination | "
             "Incomplete | Review | Invalid | Missing | Signal |",
             "|---|---:|---:|---:|---:|---:|---:|---:|---:|---|",
@@ -298,6 +548,14 @@ def render_analysis(analysis: dict) -> str:
         f"- Pair comparisons require at least {MIN_PAIR_ITEMS} commonly scored items.",
         "- Between-configuration disagreement measures observed separation. Within-configuration",
         "  disagreement measures repeat instability. Net separation requires both.",
+        f"- Head-to-head inference requires at least {MIN_COMPARISON_ITEMS} common items and",
+        f"  {MIN_CONFIGURATION_RESPONDENTS} scored respondents per configuration. It compares",
+        "  item-level pass-rate differences, uses an exact two-sided sign test, and applies",
+        "  Holm family-wise correction across all eligible configuration pairs.",
+        "- Scorecard intervals use a conservative Wilson-style calculation across respondent",
+        "  rates. Head-to-head intervals use a deterministic hierarchical bootstrap over both",
+        "  respondents and common items, so repeat instability widens the effect interval.",
+        "  Directional claims require both a Holm-adjusted p < 0.05 and an interval excluding 0.",
         "- These descriptive diagnostics are not an IRT fit, causal attribution, or a score",
         "  prediction for an untested model.", "",
     ]

@@ -5,6 +5,18 @@ out separately from harness features.
 
 ## Unreleased
 
+## 2.8.0 — 2026-09-01
+
+- Added anonymous configuration scorecards with respondent-level pass rates,
+  completion evidence, and bounded 95% intervals withheld below five respondents.
+- Added directional head-to-head comparisons with common-item effect sizes,
+  win/loss/tie counts, exact two-sided sign tests, and Holm multiple-test correction.
+- Added hierarchical respondent/item bootstrap intervals and require both corrected
+  significance and an interval excluding zero before reporting a higher configuration.
+- Added privacy-safe run/model input coordinates while continuing to exclude model
+  labels, endpoint URLs, paths, credentials, prompts, and responses from analysis.
+- Kept all benchmark questions and canonical grading contracts unchanged.
+
 ## 2.7.0 — 2026-09-01
 
 - Added public result schema v2, collecting every sanitized item status, attempt,

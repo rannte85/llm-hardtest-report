@@ -36,7 +36,9 @@ from llm_hardtest.community_results import (
     build_pilot_index, load_pilot_submission_directory, load_submission_directory,
     render_index, render_pilot_index,
 )
-from llm_hardtest.calibration import analyze_runs, render_analysis, write_analysis
+from llm_hardtest.calibration import (
+    _configuration_comparisons, analyze_runs, render_analysis, write_analysis,
+)
 from llm_hardtest.pilot_analysis import analyze_pilots, write_pilot_analysis
 from llm_hardtest.public_pilots import (
     build_public_pilot_result, export_public_pilot_bundle,
@@ -1304,6 +1306,105 @@ class CalibrationTests(unittest.TestCase):
         self.assertEqual(items["q5"]["classification"], "CEILING")
         self.assertEqual(items["q6"]["classification"], "INSUFFICIENT")
         self.assertEqual(items["q6"]["incomplete"], 6)
+
+    def test_calibration_proves_directional_configuration_separation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runs = []
+            for repeat in range(1, 6):
+                run = root / f"run-{repeat}"
+                models = [
+                    {"key": "strong", "label": "Secret Strong", "model": "private/a",
+                     "transport": "openai_compat", "base_url": "http://secret-a/v1"},
+                    {"key": "weak", "label": "Secret Weak", "model": "private/b",
+                     "transport": "openai_compat", "base_url": "http://secret-b/v1"},
+                ]
+                save_json(run / "config.json", {
+                    "name": "directional", "repetitions": 1,
+                    "rounds": [1], "models": models,
+                })
+                save_json(run / "summary.json", {"packs": {"1": self.PACK_A}})
+                for model, correct in zip(models, (True, False)):
+                    save_json(run / model["key"] / "round1/attempt-1/result.json", {
+                        "attempt": 1,
+                        "results": [{"id": item, "correct": correct}
+                                    for item in range(1, 11)],
+                    })
+                runs.append(run)
+            analysis = analyze_runs(runs)
+            rendered = render_analysis(analysis)
+
+        group = analysis["groups"][0]
+        self.assertEqual(
+            [(row["configuration"], row["sources"], row["respondents"])
+             for row in group["configurations"]],
+            [("C1", ["r1/m1", "r2/m1", "r3/m1", "r4/m1", "r5/m1"], 5),
+             ("C2", ["r1/m2", "r2/m2", "r3/m2", "r4/m2", "r5/m2"], 5)],
+        )
+        self.assertEqual(
+            group["configurations"][0]["respondent_pass_rate_interval95"]["low"],
+            0.565509,
+        )
+        comparison = group["configuration_comparisons"][0]
+        self.assertEqual(comparison["classification"], "LEFT_HIGHER")
+        self.assertEqual(comparison["common_items"], 10)
+        self.assertEqual(
+            (comparison["left_item_wins"], comparison["right_item_wins"],
+             comparison["item_ties"]), (10, 0, 0))
+        self.assertEqual(comparison["mean_pass_rate_difference"], 1.0)
+        self.assertEqual(comparison["difference_interval95"]["low"], 1.0)
+        self.assertEqual(comparison["sign_test_p_holm"], 0.001953)
+        self.assertIn("Decisive after Holm correction: **1/1**", rendered)
+        for private in ("Secret Strong", "private/a", "secret-a"):
+            self.assertNotIn(private, rendered)
+
+    def test_calibration_withholds_direction_below_repeat_gate(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run = self._calibration_run(Path(tmp) / "run", model_count=2)
+            group = analyze_runs([run])["groups"][0]
+        comparison = group["configuration_comparisons"][0]
+        self.assertEqual(comparison["classification"], "INSUFFICIENT")
+        self.assertIsNone(comparison["difference_interval95"])
+        self.assertIsNone(comparison["sign_test_p_holm"])
+
+    def test_calibration_holm_correction_prevents_pairwise_false_winners(self):
+        matrix, models = {}, {}
+        patterns = {
+            "a": [True] * 10,
+            "b": [False] * 10,
+            "c": [index % 2 == 0 for index in range(10)],
+        }
+        for config_index, (identity, outcomes) in enumerate(patterns.items(), 1):
+            for attempt in range(1, 6):
+                respondent = (1, config_index, str(attempt))
+                models[respondent] = identity
+                matrix[respondent] = {
+                    f"q{item}": "PASS" if outcome else "FAIL"
+                    for item, outcome in enumerate(outcomes, 1)
+                }
+        rows = _configuration_comparisons(
+            matrix, models, {"a": "C1", "b": "C2", "c": "C3"})
+        by_pair = {(row["left"], row["right"]): row for row in rows}
+        self.assertEqual(by_pair[("C1", "C2")]["classification"], "LEFT_HIGHER")
+        self.assertEqual(by_pair[("C1", "C2")]["sign_test_p_holm"], 0.005859)
+        self.assertEqual(by_pair[("C1", "C3")]["classification"], "UNCERTAIN")
+        self.assertEqual(by_pair[("C2", "C3")]["classification"], "UNCERTAIN")
+
+    def test_calibration_repeat_instability_blocks_fragile_item_winner(self):
+        matrix, models = {}, {}
+        for config_index, identity in enumerate(("a", "b"), 1):
+            passing_respondents = 3 if identity == "a" else 2
+            for attempt in range(1, 6):
+                respondent = (1, config_index, str(attempt))
+                models[respondent] = identity
+                outcome = "PASS" if attempt <= passing_respondents else "FAIL"
+                matrix[respondent] = {f"q{item}": outcome for item in range(1, 11)}
+        row = _configuration_comparisons(
+            matrix, models, {"a": "C1", "b": "C2"})[0]
+        self.assertLess(row["sign_test_p_holm"], 0.05)
+        self.assertLessEqual(row["difference_interval95"]["low"], 0)
+        self.assertGreaterEqual(row["difference_interval95"]["high"], 0)
+        self.assertEqual(row["classification"], "UNCERTAIN")
 
     def test_calibration_separates_pack_fingerprints(self):
         with tempfile.TemporaryDirectory() as tmp:

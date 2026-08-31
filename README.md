@@ -4,10 +4,10 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-**Current release: 2.7.0** — collects every sanitized item outcome in public bundles,
-recomputes community item discrimination, and reports uncertainty across independent
-submissions without overweighting repeated attempts. It also records opt-in serving
-metadata and latency/token observations for a future environment-aware model recommender.
+**Current release: 2.8.0** — adds privacy-safe configuration scorecards and directional
+head-to-head evidence. It requires five scored respondents per configuration, combines
+Holm-corrected exact sign tests with hierarchical respondent/item bootstrap intervals,
+and refuses to name a winner when repeat instability makes the apparent lead fragile.
 Canonical Round 1–4 questions and grading contracts are unchanged.
 
 LLM Hardtest Report is a local-first command-line benchmark for comparing language
@@ -137,9 +137,13 @@ llm-hardtest analyze runs/campaign-a runs/campaign-b --output calibration.md
 
 The Markdown and JSON reports separate benchmark pack fingerprints, rank items by
 corrected item-total correlation, flag ceiling/floor/negative-signal items, and compare
-between-configuration disagreement with within-configuration repeat disagreement. `INCOMPLETE`,
-`REVIEW`, and `INVALID` remain separate and never become wrong answers. The analysis
-copies no prompts, raw responses, model identifiers, local paths, or credentials.
+between-configuration disagreement with within-configuration repeat disagreement. They
+also assign private aliases such as `C1`, report configuration-level uncertainty and
+completion, and test every configuration pair directionally. A winner is reported only
+when the Holm-adjusted exact sign test is below 0.05 and a hierarchical bootstrap over
+both respondents and items excludes zero. `INCOMPLETE`, `REVIEW`, and `INVALID` remain
+separate and never become wrong answers. The analysis copies no prompts, raw responses,
+model identifiers, local paths, or credentials.
 See [Calibration and Discrimination Analysis](docs/CALIBRATION.md) for formulas,
 sample limitations, and a recommended study design.
 

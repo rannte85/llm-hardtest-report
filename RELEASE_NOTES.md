@@ -1,10 +1,24 @@
-# Release Notes — 2.7.0
+# Release Notes — 2.8.0
 
 This repository is ready to publish as `rannte85/llm-hardtest-report`. It contains no campaign
 outputs, credentials, local model files, personal filesystem paths, or generated
 Python caches.
 
 The release validation covers:
+
+- analysis schema v2 with anonymous `C1`-style configuration aliases and safe
+  run/model input coordinates for mapping results back to the supplied configuration;
+- per-configuration respondent counts, completion evidence, mean respondent pass
+  rates, and conservative 95% intervals withheld below five scored respondents;
+- directional pairwise effect sizes and item win/loss/tie counts across commonly
+  scored items without converting incomplete, review, or invalid work into failures;
+- exact two-sided sign tests with Holm family-wise correction across every eligible
+  configuration pair;
+- deterministic hierarchical bootstrap intervals that resample respondents and items,
+  preventing an unstable nominal item winner from becoming a directional claim;
+- a dual evidence gate requiring both adjusted p < 0.05 and an effect interval that
+  excludes zero, with `UNCERTAIN` and `INSUFFICIENT` retained explicitly;
+- unchanged canonical Round 1–4 questions and grading contracts;
 
 - schema-v2 public bundles with every item status, attempt number, wall time, and
   completion-token count, plus backward validation of aggregate-only schema v1;

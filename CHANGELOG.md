@@ -5,6 +5,8 @@ out separately from harness features.
 
 ## Unreleased
 
+## 2.5.0 — 2026-09-01
+
 - Added anonymous-by-default Round 5 cross-pilot analysis with eight-axis outcome
   distance, within-configuration instability, between-configuration separation,
   empirical review gates, Markdown/JSON output, and explicit non-canonical limits.

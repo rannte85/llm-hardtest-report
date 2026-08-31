@@ -4,8 +4,8 @@ title: "LLM Hardtest Report"
 type: software
 authors:
   - name: "LLM Hardtest Report Contributors"
-version: 2.4.0
-date-released: 2026-08-31
+version: 2.5.0
+date-released: 2026-09-01
 url: "https://github.com/rannte85/llm-hardtest-report"
 repository-code: "https://github.com/rannte85/llm-hardtest-report"
 license: MIT

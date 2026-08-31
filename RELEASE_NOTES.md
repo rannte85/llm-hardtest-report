@@ -1,4 +1,4 @@
-# Release Notes — 2.4.0
+# Release Notes — 2.5.0
 
 This repository is ready to publish as `rannte85/llm-hardtest-report`. It contains no campaign
 outputs, credentials, local model files, personal filesystem paths, or generated
@@ -6,6 +6,16 @@ Python caches.
 
 The release validation covers:
 
+- anonymous-by-default Round 5 cross-pilot Markdown/JSON analysis across eight
+  observed outcome axes, with explicit model-label opt-in;
+- within-configuration repeat distance, between-configuration distance, net observed
+  separation, exact-repeat agreement, and automatic minimum-evidence gates;
+- independent revalidation of summary/raw-grade equality, turn completion, sandbox
+  authority, release-readiness invariants, final-report facts, changed-file evidence,
+  transcript size, evidence symlink boundaries, and unsupported Codex tool calls;
+- correct preservation of unobserved `0/0` test suites as missing evidence rather
+  than model failures, plus explicit refusal to predict untested models or promote
+  Round 5 without manual ambiguity review;
 - a dedicated non-canonical Round 5 command that preserves three persistent-session
   turns, uses read-only sandboxes until explicit approval, and keeps the complete
   workspace, transcripts, messages, diffs, public tests, and held-back grades;

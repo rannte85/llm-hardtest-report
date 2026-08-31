@@ -4,11 +4,11 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-**Current release: 2.4.0** — adds controlled, persistent-session Round 5 research
-evidence collection with authority boundaries, hidden grading, and factual handoff
-checks. It also includes calibration analysis, privacy-safe voluntary result sharing,
-explicit incomplete-generation scoring, focused replay, and reusable benchmark packs.
-Canonical Round 1–4 questions and grading contracts are unchanged.
+**Current release: 2.5.0** — compares Round 5 model separation against repeat
+instability across eight independently verified outcome axes. It also includes
+controlled persistent-session evidence collection, calibration analysis, privacy-safe
+voluntary result sharing, focused replay, and reusable benchmark packs. Canonical
+Round 1–4 questions and grading contracts are unchanged.
 
 LLM Hardtest Report is a local-first command-line benchmark for comparing language
 models as reasoners, coding workers, and safe handoff agents. Point it at one or more

@@ -1,4 +1,4 @@
-# Release Notes — 2.1.0
+# Release Notes — 2.2.0
 
 This repository is ready to publish as `rannte85/llm-hardtest-report`. It contains no campaign
 outputs, credentials, local model files, personal filesystem paths, or generated
@@ -6,6 +6,15 @@ Python caches.
 
 The release validation covers:
 
+- local-only, allowlist-based public exports with deterministic bundle IDs and no
+  telemetry, raw responses, endpoint URLs, credentials, paths, run IDs, or timestamps;
+- an exact JSON preview and an explicit `--open-pr --yes` consent boundary before any
+  GitHub branch, file, fork, or pull-request write;
+- owner and contributor-fork submission flows exercised with simulated GitHub APIs;
+- CI validation of public schemas, content hashes, canonical filenames, privacy
+  invariants, duplicate IDs, and a deterministic community result index;
+- comparison groups separated by environment, model configuration, round, and pack
+  fingerprint, with sparse descriptive baselines withheld below five distinct bundles;
 - explicit incomplete-generation scoring, legacy-result compatibility, failure
   inspection, and focused replay into a new evidence directory;
 - reusable manifests and stable content fingerprints for all bundled benchmark packs;

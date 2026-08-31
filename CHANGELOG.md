@@ -5,6 +5,8 @@ out separately from harness features.
 
 ## Unreleased
 
+## 2.2.0 — 2026-08-31
+
 - Added explicit, allowlist-only public result exports with deterministic bundle IDs,
   privacy validation, stable ZIP output, and no telemetry or automatic submission.
 - Added local submission previews and an explicitly confirmed GitHub pull-request

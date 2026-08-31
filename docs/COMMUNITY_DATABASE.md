@@ -125,10 +125,10 @@ llm-hardtest results catalog \
   --round 1 --json
 ```
 
-The response follows [`results/catalog-schema-v1.json`](../results/catalog-schema-v1.json)
-and exposes public configuration coordinates, round/pack observations, independent-
-bundle counts, conservative metrics, objective-readiness flags, facets, and missing-
-metadata counts. It omits bundle IDs and contributor/tool history. Its JSON is identical
+The response follows [`results/catalog-schema-v2.json`](../results/catalog-schema-v2.json)
+and exposes every public configuration coordinate, round/pack observations, independent-
+bundle counts, conservative metrics, objective-readiness flags, text/numeric facets,
+and missing-coordinate counts. It omits bundle IDs and contributor/tool history. Its JSON is identical
 to a catalog built directly from the canonical submissions directory. `EMPTY` and
 `NO_MATCH` remain distinct so a service can distinguish an unpopulated source from an
 unsupported filter.
@@ -142,7 +142,10 @@ llm-hardtest results recommend \
   --database results/community.sqlite3 \
   --round 1 \
   --pack sha256:<exact-pack-fingerprint> \
+  --configuration 0123456789 \
   --model "org/model" \
+  --server-version "1.2.3" \
+  --context-window 32768 \
   --accelerator "Example GPU" \
   --max-memory-gb 24 \
   --objective accuracy --objective latency --json
@@ -152,3 +155,9 @@ The database and canonical-JSON paths share one final recommendation implementat
 They produce identical aggregate rows and machine-readable results for identical
 evidence. The response still omits bundle IDs and contributor history. Passing both a
 submission directory and `--database` is an error.
+
+Recommendation schema v2 accepts an exact filter for every configuration-table
+coordinate. Text comparisons are case-insensitive except the lowercase stable
+configuration ID; numeric settings compare by value, so SQLite's `8`/`8.0` affinity is
+not a false mismatch. Capacity ceilings remain distinct from exact memory and model-size
+filters. Missing coordinates never match.

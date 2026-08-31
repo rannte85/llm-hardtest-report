@@ -1,4 +1,7 @@
 graft rounds
+recursive-include docs *.md
+recursive-include results *.json *.sql *.md
+include CHANGELOG.md RELEASE_NOTES.md CONTRIBUTING.md SECURITY.md SUPPORT.md
 prune rounds/round4/out
 prune rounds/round4/.codex_omlx
 exclude rounds/round4/.v4_baselines.json

@@ -44,7 +44,9 @@ jobs:
           PYTHONPATH=src ./llm-hardtest results catalog \
             --database "${RUNNER_TEMP}/community.sqlite3" --json
           PYTHONPATH=src ./llm-hardtest results recommend \
-            --database "${RUNNER_TEMP}/community.sqlite3" --round 1 --json
+            --database "${RUNNER_TEMP}/community.sqlite3" --round 1 \
+            --configuration 0123456789 --python-version 3.12 \
+            --context-window 4096 --server-version 1.0 --json
           PYTHONPATH=src ./llm-hardtest results pilots validate
           PYTHONPATH=src ./llm-hardtest results pilots build --check
       - name: Installed package smoke test
@@ -57,7 +59,9 @@ jobs:
           llm-hardtest results database submissions --output community.sqlite3 --check
           llm-hardtest results catalog --database community.sqlite3 --json
           llm-hardtest results recommend \
-            --database community.sqlite3 --round 1 --json
+            --database community.sqlite3 --round 1 \
+            --configuration 0123456789 --python-version 3.12 \
+            --context-window 4096 --server-version 1.0 --json
       - name: Harness self-test
         run: ./llm-hardtest selftest
       - name: Q30v2 trap proof

@@ -19,14 +19,29 @@ from .public_results import load_public_bundle
 
 
 MIN_BASELINE_SUBMISSIONS = 5
-RECOMMENDATION_SCHEMA_VERSION = 1
+RECOMMENDATION_SCHEMA_VERSION = 2
 RECOMMENDATION_OBJECTIVES = {"accuracy", "completion", "latency", "throughput"}
-RECOMMENDATION_CONSTRAINTS = {
-    "model", "os", "architecture", "transport", "accelerator", "server",
-    "quantization", "model_format", "max_memory_gb", "max_system_memory_gb",
-    "max_parameter_count_b",
+RECOMMENDATION_TEXT_CONSTRAINTS = {
+    "configuration", "model", "os", "architecture", "python", "transport",
+    "reasoning_effort", "model_revision", "quantization", "model_format",
+    "server", "server_version", "accelerator",
+}
+RECOMMENDATION_NUMERIC_CONSTRAINTS = {
+    "context_window", "max_tokens", "temperature", "top_p", "top_k", "min_p",
+    "parameter_count_b", "accelerator_count", "memory_gb", "system_memory_gb",
+}
+RECOMMENDATION_MAX_CONSTRAINTS = {
+    "max_memory_gb", "max_system_memory_gb", "max_parameter_count_b",
+}
+RECOMMENDATION_CONSTRAINTS = (
+    RECOMMENDATION_TEXT_CONSTRAINTS | RECOMMENDATION_NUMERIC_CONSTRAINTS
+    | RECOMMENDATION_MAX_CONSTRAINTS)
+PARAMETER_CONSTRAINTS = {
+    "reasoning_effort", "context_window", "max_tokens", "temperature", "top_p",
+    "top_k", "min_p",
 }
 PACK_FINGERPRINT = re.compile(r"^sha256:[0-9a-f]{64}$")
+CONFIGURATION_ID = re.compile(r"^[0-9a-f]{10}$")
 
 
 def _cluster_interval(rates: list[float]) -> dict | None:
@@ -194,14 +209,19 @@ def aggregate_submissions(submissions: list[dict]) -> list[dict]:
 
 
 def _constraint_value(row: dict, key: str):
+    if key == "configuration":
+        return row.get("configuration")
     if key == "model":
         return row.get("model")
-    if key in {"os", "architecture"}:
+    if key in {"os", "architecture", "python"}:
         return row["environment"].get(key)
     if key == "transport":
         return row.get("transport")
-    metadata_key = key.removeprefix("max_")
-    return row["public_metadata"].get(metadata_key)
+    if key in PARAMETER_CONSTRAINTS:
+        return row["parameters"].get(key)
+    if key in RECOMMENDATION_MAX_CONSTRAINTS:
+        return row["public_metadata"].get(key.removeprefix("max_"))
+    return row["public_metadata"].get(key)
 
 
 def _matches_constraints(row: dict, constraints: dict) -> bool:
@@ -209,7 +229,7 @@ def _matches_constraints(row: dict, constraints: dict) -> bool:
         actual = _constraint_value(row, key)
         if actual is None:
             return False
-        if key.startswith("max_"):
+        if key in RECOMMENDATION_MAX_CONSTRAINTS:
             if (isinstance(actual, bool) or not isinstance(actual, (int, float))
                     or actual > expected):
                 return False
@@ -279,23 +299,45 @@ def _recommend_aggregate_rows(aggregate_rows: list[dict], *, round_number: int,
     if constraints is not None and not isinstance(constraints, dict):
         raise ValueError("recommendation constraints must be an object")
     constraints = dict(constraints or {})
+    if any(not isinstance(key, str) for key in constraints):
+        raise ValueError("recommendation constraint keys must be strings")
     unknown_constraints = set(constraints) - RECOMMENDATION_CONSTRAINTS
     if unknown_constraints:
         raise ValueError(
             "unknown recommendation constraint(s): "
             + ", ".join(sorted(unknown_constraints)))
-    for key in ("max_memory_gb", "max_system_memory_gb", "max_parameter_count_b"):
-        value = constraints.get(key)
-        if value is not None and (isinstance(value, bool)
-                                  or not isinstance(value, (int, float))
-                                  or not math.isfinite(value) or value <= 0):
+    for key in RECOMMENDATION_MAX_CONSTRAINTS:
+        if key not in constraints:
+            continue
+        value = constraints[key]
+        if (isinstance(value, bool) or not isinstance(value, (int, float))
+                or not math.isfinite(value) or value <= 0):
             raise ValueError(f"recommendation constraint {key} must be positive")
-    for key in set(constraints) - {
-            "max_memory_gb", "max_system_memory_gb", "max_parameter_count_b"}:
+    for key in RECOMMENDATION_NUMERIC_CONSTRAINTS:
+        if key not in constraints:
+            continue
+        value = constraints[key]
+        if (isinstance(value, bool) or not isinstance(value, (int, float))
+                or not math.isfinite(value)):
+            raise ValueError(f"recommendation constraint {key} must be finite numeric")
+    for key in RECOMMENDATION_TEXT_CONSTRAINTS:
+        if key not in constraints:
+            continue
         value = constraints[key]
         if (not isinstance(value, str) or not value.strip() or len(value) > 160
                 or any(ord(char) < 32 for char in value)):
             raise ValueError(f"recommendation constraint {key} must be safe text")
+    if ("configuration" in constraints
+            and CONFIGURATION_ID.fullmatch(constraints["configuration"]) is None):
+        raise ValueError(
+            "recommendation constraint configuration must be an exact 10-character ID")
+    if ("python" in constraints
+            and re.fullmatch(r"[0-9]+\.[0-9]+", constraints["python"]) is None):
+        raise ValueError(
+            "recommendation constraint python must be a major.minor version")
+    if ("transport" in constraints
+            and constraints["transport"] not in {"openai_compat", "codex_cli"}):
+        raise ValueError("recommendation constraint transport is unsupported")
     if isinstance(objectives, str):
         raise ValueError("recommendation objectives must be a list")
     objectives = list(objectives or ["accuracy"])
@@ -420,19 +462,21 @@ def _configuration_summary(candidate: dict) -> str:
     environment = candidate["environment"]
     metadata = candidate["public_metadata"]
     parameters = candidate["parameters"]
-    parts = [f"{environment['os']}/{environment['architecture']}",
+    parts = [f"{environment['os']}/{environment['architecture']}/py{environment['python']}",
              candidate["transport"]]
     for key, label in (
+            ("model_revision", "revision"), ("quantization", "quant"),
+            ("model_format", "format"), ("parameter_count_b", "parameters B"),
             ("server", "server"), ("server_version", "server version"),
-            ("quantization", "quant"), ("accelerator", "accelerator"),
-            ("accelerator_count", "accelerators"), ("memory_gb", "memory GB"),
-            ("system_memory_gb", "system GB")):
+            ("accelerator", "accelerator"), ("accelerator_count", "accelerators"),
+            ("memory_gb", "memory GB"), ("system_memory_gb", "system GB")):
         if key in metadata:
             parts.append(f"{label}={metadata[key]}")
     for key, label in (("reasoning_effort", "reasoning"),
                        ("context_window", "context"),
                        ("max_tokens", "max tokens"),
-                       ("temperature", "temperature")):
+                       ("temperature", "temperature"), ("top_p", "top p"),
+                       ("top_k", "top k"), ("min_p", "min p")):
         if key in parameters:
             parts.append(f"{label}={parameters[key]}")
     return "; ".join(parts)

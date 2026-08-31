@@ -556,3 +556,33 @@ Acceptance checks:
   fail without output mutation.
 - Catalog JSON and Markdown contain no bundle IDs, tool versions, or private evidence.
 - Source and installed-package CI exercise an empty verified database catalog.
+
+## Phase 21 — Full configuration-coordinate queries
+
+Goal: make every public coordinate that defines a configuration both discoverable and
+filterable, so a service never has to guess or silently collapse generation, runtime,
+revision, or hardware settings.
+
+Deliverables:
+
+1. Add exact constraints for stable configuration ID, Python version, every generation
+   parameter, every model/server metadata field, and exact hardware/capacity values.
+2. Retain case-insensitive text comparison, exact numeric comparison, and distinct
+   maximum-capacity constraints without treating an omitted value as a match.
+3. Expand the catalog to text and numeric facets for every identity coordinate and
+   report every missing optional parameter or metadata coordinate.
+4. Publish catalog and recommendation schema v2 while preserving the immutable v1 files.
+5. Harden direct API validation against null/non-finite numerics, malformed IDs, and
+   non-string keys.
+
+Acceptance checks:
+
+- One query specifying all 23 configuration coordinates selects exactly one observed
+  setup and returns the same JSON through canonical submissions and SQLite.
+- A conflicting server version, generation parameter, or stable ID produces `NO_MATCH`;
+  missing values are never inferred.
+- Integer JSON settings and SQLite REAL affinity compare consistently and produce
+  byte-identical catalogs with normalized numeric facets.
+- Runtime constraint/facet sets exactly equal the published schema-v2 property sets.
+- Historical v1 schemas remain byte-for-byte unchanged.
+- Null, NaN, malformed IDs, non-string keys, and ambiguous input sources fail cleanly.

@@ -98,7 +98,7 @@ bundle-cluster interval lower bounds. Latency is the p90 across bundle-level mea
 latencies; throughput is the p50 across bundle-level mean item token rates. Sparse
 performance observations are not promoted merely because accuracy has enough data.
 
-The machine-readable result follows `results/recommendation-schema-v1.json`. It omits
+The current machine-readable result follows `results/recommendation-schema-v2.json`. It omits
 bundle IDs and contributor history, retains only public configuration coordinates,
 and has explicit `PACK_REQUIRED`, `NO_MATCH`, `INSUFFICIENT_EVIDENCE`,
 `SINGLE_ELIGIBLE_CONFIGURATION`, and `DESCRIPTIVE_CANDIDATES` states. A declared
@@ -141,3 +141,12 @@ that the existing five-independent-bundle descriptive gate is met; it is not pre
 promotion. Catalog JSON omits bundle and contributor history, reports missing metadata
 instead of guessing it, and is identical for canonical JSON and verified SQLite inputs.
 The recommender also accepts an exact case-insensitive `--model` constraint.
+
+Version 2.21 closes the remaining query-identity gap. Catalog schema v2 exposes a facet
+for every exact configuration coordinate and reports every missing optional parameter
+or metadata field. Recommendation schema v2 accepts those same coordinates, including
+the stable configuration ID, Python version, all generation parameters, model/server
+revisions, and exact hardware/capacity values. Text values compare case-insensitively;
+the lowercase configuration ID and numeric values compare exactly. The original three
+capacity ceilings remain separate filters. Both adapters still share the same final
+filtering implementation and withhold sparse evidence.

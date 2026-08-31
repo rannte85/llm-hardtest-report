@@ -372,15 +372,30 @@ def main(argv=None) -> int:
         choices=("accuracy", "completion", "latency", "throughput"),
         help="Pareto objective; repeat for multiple axes (default: accuracy)")
     p_results_recommend.add_argument("--accuracy-floor", type=float)
+    p_results_recommend.add_argument("--configuration")
     p_results_recommend.add_argument("--model")
     p_results_recommend.add_argument("--os")
     p_results_recommend.add_argument("--architecture")
+    p_results_recommend.add_argument("--python-version", dest="python_version")
     p_results_recommend.add_argument(
         "--transport", choices=("openai_compat", "codex_cli"))
-    p_results_recommend.add_argument("--accelerator")
-    p_results_recommend.add_argument("--server")
+    p_results_recommend.add_argument("--reasoning-effort")
+    p_results_recommend.add_argument("--context-window", type=float)
+    p_results_recommend.add_argument("--max-tokens", type=float)
+    p_results_recommend.add_argument("--temperature", type=float)
+    p_results_recommend.add_argument("--top-p", type=float)
+    p_results_recommend.add_argument("--top-k", type=float)
+    p_results_recommend.add_argument("--min-p", type=float)
+    p_results_recommend.add_argument("--model-revision")
     p_results_recommend.add_argument("--quantization")
     p_results_recommend.add_argument("--model-format")
+    p_results_recommend.add_argument("--parameter-count-b", type=float)
+    p_results_recommend.add_argument("--server")
+    p_results_recommend.add_argument("--server-version")
+    p_results_recommend.add_argument("--accelerator")
+    p_results_recommend.add_argument("--accelerator-count", type=float)
+    p_results_recommend.add_argument("--memory-gb", type=float)
+    p_results_recommend.add_argument("--system-memory-gb", type=float)
     p_results_recommend.add_argument("--max-memory-gb", type=float)
     p_results_recommend.add_argument("--max-system-memory-gb", type=float)
     p_results_recommend.add_argument("--max-parameter-count-b", type=float)
@@ -586,14 +601,29 @@ def main(argv=None) -> int:
                         "recommend accepts either a submission directory or --database")
                 constraints = {
                     key: value for key, value in {
+                        "configuration": args.configuration,
                         "model": args.model,
                         "os": args.os,
                         "architecture": args.architecture,
+                        "python": args.python_version,
                         "transport": args.transport,
-                        "accelerator": args.accelerator,
-                        "server": args.server,
+                        "reasoning_effort": args.reasoning_effort,
+                        "context_window": args.context_window,
+                        "max_tokens": args.max_tokens,
+                        "temperature": args.temperature,
+                        "top_p": args.top_p,
+                        "top_k": args.top_k,
+                        "min_p": args.min_p,
+                        "model_revision": args.model_revision,
                         "quantization": args.quantization,
                         "model_format": args.model_format,
+                        "parameter_count_b": args.parameter_count_b,
+                        "server": args.server,
+                        "server_version": args.server_version,
+                        "accelerator": args.accelerator,
+                        "accelerator_count": args.accelerator_count,
+                        "memory_gb": args.memory_gb,
+                        "system_memory_gb": args.system_memory_gb,
                         "max_memory_gb": args.max_memory_gb,
                         "max_system_memory_gb": args.max_system_memory_gb,
                         "max_parameter_count_b": args.max_parameter_count_b,

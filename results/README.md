@@ -7,7 +7,10 @@ project does not automatically collect telemetry or local campaign data.
 - `schema-v2.json` documents the current item-level, content-free public result shape.
 - `submissions/` contains one canonical JSON document per accepted bundle.
 - `INDEX.md` is generated from accepted submissions and contains descriptive examples.
-- `recommendation-schema-v1.json` documents the deterministic serving-candidate query.
+- `recommendation-schema-v2.json` documents the current full-coordinate deterministic
+  serving-candidate query; v1 is retained for historical clients.
+- `catalog-schema-v2.json` documents current observed-coordinate discovery; v1 is
+  retained for historical clients.
 - `database-schema-v2.sql` documents the current normalized SQLite observation schema.
 - `database-schema-v1.sql` documents the v2.18 generated-database format; rebuild it
   with the current CLI before querying.

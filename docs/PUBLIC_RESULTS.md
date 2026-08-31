@@ -158,12 +158,13 @@ llm-hardtest results catalog results/submissions --round 1
 llm-hardtest results catalog --database results/community.sqlite3 --json
 ```
 
-It lists exact public configurations and facets for model, OS, architecture, transport,
-accelerator, server, quantization, and model format. Each round/pack observation shows
-its independent-bundle count, conservative metrics, and readiness for accuracy,
-completion, latency, and throughput. Optional metadata that was not declared is counted
-separately and never converted into a match. JSON follows
-`results/catalog-schema-v1.json`; it contains no bundle IDs, contributor identity, or
+It lists exact public configurations and facets for the configuration ID, model,
+OS/architecture/Python, transport, every generation parameter, model revision/format,
+quantization, server/version, accelerator/count, and declared memory/model size. Each
+round/pack observation shows its independent-bundle count, conservative metrics, and
+readiness for accuracy, completion, latency, and throughput. Every missing optional
+coordinate is counted separately and never converted into a match. JSON follows
+`results/catalog-schema-v2.json`; it contains no bundle IDs, contributor identity, or
 tool-version history. Canonical JSON and a verified database produce identical output.
 
 ## Descriptive serving-candidate query
@@ -174,7 +175,9 @@ an explicit `--output` path is supplied. It never contacts submitters or a model
 ```bash
 llm-hardtest results recommend results/submissions \
   --round 1 --pack sha256:<full-pack-fingerprint> \
+  --configuration 0123456789 \
   --model "org/model" \
+  --server-version "1.2.3" --context-window 32768 --temperature 0 \
   --objective accuracy --objective throughput --json
 ```
 
@@ -183,6 +186,10 @@ an optional accuracy floor to the 95% lower bound, and returns the non-dominated
 Repeated attempts or duplicate model rows inside one bundle cannot unlock a candidate.
 Constraints with missing metadata do not match. Results remain descriptive for the
 exact pack and public configuration; they are not predictions for untested hardware.
+The machine-readable result follows `results/recommendation-schema-v2.json`. Exact
+filters cover every allowlisted configuration coordinate; `max-memory-gb`,
+`max-system-memory-gb`, and `max-parameter-count-b` remain ceiling filters rather than
+exact settings.
 
 ## Round 5 public pilot summaries
 

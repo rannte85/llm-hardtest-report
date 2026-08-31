@@ -5,6 +5,26 @@ out separately from harness features.
 
 ## Unreleased
 
+## 2.21.0 — 2026-09-01
+
+- Made every allowlisted configuration-identity coordinate discoverable and exactly
+  filterable: configuration ID, model, environment/Python, transport, all seven
+  generation parameters, and all ten model/server/hardware metadata fields.
+- Added exact numeric facets and explicit missing-coordinate counts while retaining
+  case-insensitive grouping for text values and separate capacity-ceiling constraints.
+- Added `--configuration`, `--python-version`, generation-setting, revision,
+  server-version, accelerator-count, and exact memory/model-size CLI filters.
+- Published catalog schema v2 and recommendation schema v2 without rewriting the
+  historical v1 contracts.
+- Included public schemas, SQL DDL, result guides, and project documentation in the
+  Python source distribution.
+- Hardened API validation for null numeric values, non-finite numbers, malformed
+  configuration IDs, and non-string constraint keys.
+- Added full-coordinate JSON/SQLite, CLI, schema, numeric-affinity, conflicting-value,
+  missing-value, and installed-package controls.
+- Kept database schema v2, public result schema v2, and canonical Round 1–4 content and
+  grading unchanged.
+
 ## 2.20.0 — 2026-09-01
 
 - Added `results catalog` for deterministic discovery of observed models, servers,

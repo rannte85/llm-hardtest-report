@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from collections import defaultdict
 
 from .community_results import (
@@ -8,12 +9,24 @@ from .community_results import (
 )
 
 
-CATALOG_SCHEMA_VERSION = 1
+CATALOG_SCHEMA_VERSION = 2
 FACET_FIELDS = (
-    "model", "os", "architecture", "transport", "accelerator", "server",
-    "quantization", "model_format",
+    "configuration", "model", "os", "architecture", "python", "transport",
+    "reasoning_effort", "context_window", "max_tokens", "temperature", "top_p",
+    "top_k", "min_p", "model_revision", "quantization", "model_format",
+    "parameter_count_b", "server", "server_version", "accelerator",
+    "accelerator_count", "memory_gb", "system_memory_gb",
 )
-OPTIONAL_FACETS = {"accelerator", "server", "quantization", "model_format"}
+PARAMETER_FACETS = {
+    "reasoning_effort", "context_window", "max_tokens", "temperature", "top_p",
+    "top_k", "min_p",
+}
+METADATA_FACETS = {
+    "model_revision", "quantization", "model_format", "parameter_count_b", "server",
+    "server_version", "accelerator", "accelerator_count", "memory_gb",
+    "system_memory_gb",
+}
+OPTIONAL_FACETS = PARAMETER_FACETS | METADATA_FACETS
 
 
 def _validate_filters(round_number: int | None, pack: str | None) -> None:
@@ -26,12 +39,16 @@ def _validate_filters(round_number: int | None, pack: str | None) -> None:
 
 
 def _facet_value(row: dict, field: str):
+    if field == "configuration":
+        return row["configuration"]
     if field == "model":
         return row["model"]
-    if field in {"os", "architecture"}:
+    if field in {"os", "architecture", "python"}:
         return row["environment"][field]
     if field == "transport":
         return row["transport"]
+    if field in PARAMETER_FACETS:
+        return row["parameters"].get(field)
     return row["public_metadata"].get(field)
 
 
@@ -70,7 +87,8 @@ def _facet_rows(rows: list[dict], field: str) -> tuple[list[dict], dict | None]:
             missing_configurations.add(row["configuration"])
             missing_observations += 1
             continue
-        identity = value.casefold()
+        identity = (("text", value.casefold()) if isinstance(value, str)
+                    else ("number", float(value)))
         group = values[identity]
         group["spellings"].add(value)
         group["configurations"].add(row["configuration"])
@@ -81,8 +99,11 @@ def _facet_rows(rows: list[dict], field: str) -> tuple[list[dict], dict | None]:
             group["recommendation_ready_observations"] += 1
     result = []
     for identity, group in sorted(values.items()):
+        representative = (
+            sorted(group["spellings"], key=lambda item: (item.casefold(), item))[0]
+            if identity[0] == "text" else float(identity[1]))
         result.append({
-            "value": sorted(group["spellings"], key=lambda item: (item.casefold(), item))[0],
+            "value": representative,
             "configurations": len(group["configurations"]),
             "observations": group["observations"],
             "max_independent_bundles": group["max_independent_bundles"],
@@ -127,11 +148,11 @@ def build_catalog(aggregate_rows: list[dict], *, round_number: int | None = None
         current["observations"].append(_observation(row))
 
     facets = {}
-    missing_metadata = {}
+    missing_coordinates = {}
     for field in FACET_FIELDS:
         facets[field], missing = _facet_rows(rows, field)
         if missing is not None:
-            missing_metadata[field] = missing
+            missing_coordinates[field] = missing
     status = "OBSERVED"
     if not rows:
         status = "EMPTY" if source_observations == 0 else "NO_MATCH"
@@ -151,7 +172,7 @@ def build_catalog(aggregate_rows: list[dict], *, round_number: int | None = None
                 row["bundle_pass_rate_interval95"] is not None for row in rows),
         },
         "facets": facets,
-        "missing_metadata": missing_metadata,
+        "missing_coordinates": missing_coordinates,
         "configurations": sorted(
             configurations.values(),
             key=lambda row: (row["model"].casefold(), row["configuration"])),
@@ -180,7 +201,7 @@ def render_catalog(catalog: dict) -> str:
     ]
     if catalog["configurations"]:
         lines += [
-            "| Model | Config | Environment | Server | Quantization | Round / pack | Bundles | Ready objectives |",
+            "| Model | Config | Environment | Serving / build | Generation settings | Round / pack | Bundles | Ready objectives |",
             "|---|---|---|---|---|---|---:|---|",
         ]
         for configuration in catalog["configurations"]:
@@ -189,13 +210,20 @@ def render_catalog(catalog: dict) -> str:
             for index, observation in enumerate(configuration["observations"]):
                 ready = ", ".join(
                     key for key, value in observation["readiness"].items() if value) or "none"
+                server = metadata.get("server", "unspecified")
+                if "server_version" in metadata:
+                    server += "@" + metadata["server_version"]
+                build = "/".join(filter(None, (
+                    metadata.get("quantization"), metadata.get("model_format"))))
+                serving = server + (f" · {build}" if build else "")
                 lines.append(
                     f"| {_cell(configuration['model']) if index == 0 else '↳'} | "
                     f"`{configuration['configuration']}` | "
-                    f"{_cell(environment['os'])}/{_cell(environment['architecture'])} · "
+                    f"{_cell(environment['os'])}/{_cell(environment['architecture'])}/"
+                    f"py{_cell(environment['python'])} · "
                     f"{_cell(metadata.get('accelerator', 'unspecified'))} | "
-                    f"{_cell(metadata.get('server', 'unspecified'))} | "
-                    f"{_cell(metadata.get('quantization', 'unspecified'))} | "
+                    f"{_cell(serving)} | "
+                    f"{_cell(json.dumps(configuration['parameters'], sort_keys=True))} | "
                     f"{observation['round']} / `{observation['pack']}` | "
                     f"{observation['independent_bundles']} | {ready} |")
     else:
@@ -203,9 +231,10 @@ def render_catalog(catalog: dict) -> str:
     lines += [
         "", "## Use", "",
         "Copy exact values from this catalog into `results recommend` constraints such",
-        "as `--model`, `--server`, `--accelerator`, and `--quantization`. Readiness means",
+        "as `--configuration`, `--model`, `--server-version`, `--context-window`, and",
+        "`--quantization`. Readiness means",
         "the observation has the five independent bundles required by the descriptive",
-        "recommender; it is not a prediction for an untested setup. Missing metadata is",
-        "shown as unspecified and never satisfies a requested constraint.", "",
+        "recommender; it is not a prediction for an untested setup. A missing coordinate",
+        "is shown as unspecified and never satisfies a requested constraint.", "",
     ]
     return "\n".join(lines)

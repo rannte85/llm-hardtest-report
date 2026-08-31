@@ -2307,6 +2307,27 @@ class PublicResultTests(unittest.TestCase):
             submissions.append(payload)
         return submissions
 
+    def _full_coordinate_submissions(self, count=5):
+        submissions = self._recommendation_submissions(count)
+        from llm_hardtest.public_results import _bundle_id
+        for payload in submissions:
+            for model in payload["models"]:
+                model["parameters"] = {
+                    "reasoning_effort": "high", "context_window": 8192,
+                    "max_tokens": 2048, "temperature": 0.0, "top_p": 0.9,
+                    "top_k": 40, "min_p": 0.05,
+                }
+                model["public_metadata"].update({
+                    "model_revision": "rev-1", "model_format": "GGUF",
+                    "parameter_count_b": 9 if model["public_name"] == "org/accurate" else 7,
+                    "server_version": "1.2.3", "accelerator_count": 1,
+                    "system_memory_gb": 64,
+                })
+            body = {key: value for key, value in payload.items() if key != "bundle_id"}
+            payload["bundle_id"] = _bundle_id(body)
+            validate_public_result(payload)
+        return submissions
+
     def test_public_export_is_allowlist_only_and_deterministic(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "run"
@@ -2805,7 +2826,12 @@ class PublicResultTests(unittest.TestCase):
         self.assertEqual(catalog["facets"]["server"][0]["value"],
                          "Example Server")
         self.assertEqual(catalog["facets"]["server"][0]["configurations"], 2)
-        self.assertEqual(catalog["missing_metadata"]["model_format"], {
+        self.assertEqual(catalog["schema_version"], 2)
+        self.assertEqual(catalog["missing_coordinates"]["model_format"], {
+            "configurations": 2, "observations": 2,
+        })
+        self.assertEqual(catalog["facets"]["max_tokens"][0]["value"], 2048.0)
+        self.assertEqual(catalog["missing_coordinates"]["reasoning_effort"], {
             "configurations": 2, "observations": 2,
         })
         for configuration in catalog["configurations"]:
@@ -2820,7 +2846,7 @@ class PublicResultTests(unittest.TestCase):
         self.assertNotIn("recommendation-control", serialized)
         rendered = render_catalog(catalog)
         self.assertIn("Observed Serving Catalog", rendered)
-        self.assertIn("--model", rendered)
+        self.assertIn("--configuration", rendered)
         catalog["configurations"][0]["model"] = "org/model | injected"
         self.assertIn("org/model \\| injected", render_catalog(catalog))
 
@@ -2862,8 +2888,33 @@ class PublicResultTests(unittest.TestCase):
         self.assertEqual(catalog["facets"]["server"][0]["configurations"], 4)
         self.assertEqual(catalog["summary"]["configurations"], 4)
 
+    def test_catalog_numeric_facets_normalize_integer_and_real_affinity(self):
+        submissions = self._full_coordinate_submissions()
+        changed = submissions[-1]
+        for model in changed["models"]:
+            model["parameters"]["context_window"] = 8192.0
+        from llm_hardtest.public_results import _bundle_id
+        body = {key: value for key, value in changed.items() if key != "bundle_id"}
+        changed["bundle_id"] = _bundle_id(body)
+        validate_public_result(changed)
+        source = catalog_submissions(submissions)
+        self.assertEqual(len(source["facets"]["context_window"]), 1)
+        self.assertEqual(source["facets"]["context_window"][0]["value"], 8192.0)
+        self.assertEqual(source["facets"]["context_window"][0]["configurations"], 4)
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp) / "submissions"
+            directory.mkdir()
+            for payload in submissions:
+                digest = payload["bundle_id"].removeprefix("sha256:")
+                (directory / f"{digest}.json").write_text(
+                    submission_document(payload), encoding="utf-8")
+            database = Path(tmp) / "community.sqlite3"
+            build_database(directory, database)
+            materialized = catalog_database(database)
+        self.assertEqual(materialized, source)
+
     def test_database_and_json_catalogs_are_identical(self):
-        submissions = self._recommendation_submissions()
+        submissions = self._full_coordinate_submissions()
         with tempfile.TemporaryDirectory() as tmp:
             directory = Path(tmp) / "submissions"
             directory.mkdir()
@@ -2913,15 +2964,27 @@ class PublicResultTests(unittest.TestCase):
         self.assertEqual(database_stdout.getvalue(), json_stdout.getvalue())
 
     def test_published_catalog_schema_has_the_runtime_contract(self):
-        schema = json.loads((repo_root() / "results/catalog-schema-v1.json").read_text(
+        from llm_hardtest.serving_catalog import FACET_FIELDS, OPTIONAL_FACETS
+        schema = json.loads((repo_root() / "results/catalog-schema-v2.json").read_text(
             encoding="utf-8"))
-        self.assertEqual(schema["properties"]["schema_version"]["const"], 1)
+        self.assertEqual(schema["properties"]["schema_version"]["const"], 2)
         self.assertEqual(schema["properties"]["kind"]["const"],
                          "observed_serving_catalog")
         self.assertEqual(
             set(schema["properties"]["facets"]["required"]),
-            {"model", "os", "architecture", "transport", "accelerator", "server",
-             "quantization", "model_format"})
+            set(FACET_FIELDS))
+        self.assertEqual(
+            set(schema["properties"]["missing_coordinates"]["required"]),
+            OPTIONAL_FACETS)
+
+    def test_published_recommendation_schema_has_every_runtime_constraint(self):
+        from llm_hardtest.community_results import RECOMMENDATION_CONSTRAINTS
+        schema = json.loads((
+            repo_root() / "results/recommendation-schema-v2.json").read_text(
+                encoding="utf-8"))
+        self.assertEqual(schema["properties"]["schema_version"]["const"], 2)
+        self.assertEqual(set(schema["$defs"]["constraints"]["properties"]),
+                         RECOMMENDATION_CONSTRAINTS)
 
     def test_recommendation_can_select_one_exact_model_case_insensitively(self):
         result = recommend_configurations(
@@ -2929,6 +2992,92 @@ class PublicResultTests(unittest.TestCase):
             constraints={"model": "ORG/FAST"}, objectives=["accuracy"])
         self.assertEqual(result["status"], "SINGLE_ELIGIBLE_CONFIGURATION")
         self.assertEqual(result["candidates"][0]["model"], "org/fast")
+
+    def test_recommendation_filters_every_exact_configuration_coordinate(self):
+        submissions = self._full_coordinate_submissions()
+        catalog = catalog_submissions(submissions)
+        selected = next(row for row in catalog["configurations"]
+                        if row["model"] == "org/fast")
+        constraints = {
+            "configuration": selected["configuration"],
+            "model": selected["model"].upper(),
+            "os": selected["environment"]["os"],
+            "architecture": selected["environment"]["architecture"],
+            "python": selected["environment"]["python"],
+            "transport": selected["transport"],
+            **selected["parameters"], **selected["public_metadata"],
+        }
+        result = recommend_configurations(
+            submissions, round_number=1, constraints=constraints)
+        self.assertEqual(result["schema_version"], 2)
+        self.assertEqual(result["status"], "SINGLE_ELIGIBLE_CONFIGURATION")
+        self.assertEqual(result["candidates"][0]["configuration"],
+                         selected["configuration"])
+        rendered = render_recommendation(result)
+        for expected in (
+                "py", "revision=rev-1", "format=GGUF", "parameters B=7",
+                "server version=1.2.3", "context=8192", "top p=0.9",
+                "top k=40", "min p=0.05"):
+            self.assertIn(expected, rendered)
+        for key, value in constraints.items():
+            if key == "configuration":
+                conflicting_value = value[:-1] + ("a" if value[-1] != "a" else "b")
+            elif key == "python":
+                conflicting_value = "99.99"
+            elif key == "transport":
+                conflicting_value = (
+                    "codex_cli" if value == "openai_compat" else "openai_compat")
+            elif isinstance(value, str):
+                conflicting_value = value + "-not-observed"
+            else:
+                conflicting_value = value + 0.125
+            with self.subTest(coordinate=key):
+                conflicting = {**constraints, key: conflicting_value}
+                self.assertEqual(recommend_configurations(
+                    submissions, round_number=1,
+                    constraints=conflicting)["status"], "NO_MATCH")
+
+    def test_full_coordinate_filters_match_between_cli_json_and_database(self):
+        submissions = self._full_coordinate_submissions()
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp) / "submissions"
+            directory.mkdir()
+            for payload in submissions:
+                digest = payload["bundle_id"].removeprefix("sha256:")
+                (directory / f"{digest}.json").write_text(
+                    submission_document(payload), encoding="utf-8")
+            database = Path(tmp) / "community.sqlite3"
+            build_database(directory, database)
+            selected = next(row for row in catalog_submissions(submissions)["configurations"]
+                            if row["model"] == "org/fast")
+            arguments = [
+                "--round", "1", "--configuration", selected["configuration"],
+                "--model", "ORG/FAST", "--os", selected["environment"]["os"],
+                "--architecture", selected["environment"]["architecture"],
+                "--python-version", selected["environment"]["python"],
+                "--transport", selected["transport"], "--reasoning-effort", "high",
+                "--context-window", "8192", "--max-tokens", "2048",
+                "--temperature", "0", "--top-p", "0.9", "--top-k", "40",
+                "--min-p", "0.05", "--model-revision", "rev-1",
+                "--quantization", "Q4_K_M", "--model-format", "GGUF",
+                "--parameter-count-b", "7", "--server", "Example Server",
+                "--server-version", "1.2.3", "--accelerator", "Example GPU",
+                "--accelerator-count", "1", "--memory-gb", "8",
+                "--system-memory-gb", "64", "--json",
+            ]
+            source_stdout = io.StringIO()
+            database_stdout = io.StringIO()
+            with patch("sys.stdout", source_stdout):
+                self.assertEqual(main([
+                    "results", "recommend", str(directory), *arguments]), 0)
+            with patch("sys.stdout", database_stdout):
+                self.assertEqual(main([
+                    "results", "recommend", "--database", str(database),
+                    *arguments]), 0)
+        self.assertEqual(database_stdout.getvalue(), source_stdout.getvalue())
+        result = json.loads(source_stdout.getvalue())
+        self.assertEqual(result["candidates"][0]["configuration"],
+                         selected["configuration"])
 
     def test_database_and_json_require_the_same_exact_pack(self):
         submissions = self._recommendation_submissions()
@@ -3167,6 +3316,27 @@ class PublicResultTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "safe text"):
             recommend_configurations(
                 submissions, round_number=1, constraints={"server": "\n"})
+        with self.assertRaisesRegex(ValueError, "finite numeric"):
+            recommend_configurations(
+                submissions, round_number=1, constraints={"context_window": None})
+        with self.assertRaisesRegex(ValueError, "finite numeric"):
+            recommend_configurations(
+                submissions, round_number=1, constraints={"temperature": float("nan")})
+        with self.assertRaisesRegex(ValueError, "must be positive"):
+            recommend_configurations(
+                submissions, round_number=1, constraints={"max_memory_gb": None})
+        with self.assertRaisesRegex(ValueError, "10-character ID"):
+            recommend_configurations(
+                submissions, round_number=1, constraints={"configuration": "latest"})
+        with self.assertRaisesRegex(ValueError, "major.minor"):
+            recommend_configurations(
+                submissions, round_number=1, constraints={"python": "latest"})
+        with self.assertRaisesRegex(ValueError, "transport is unsupported"):
+            recommend_configurations(
+                submissions, round_number=1, constraints={"transport": "custom"})
+        with self.assertRaisesRegex(ValueError, "keys must be strings"):
+            recommend_configurations(
+                submissions, round_number=1, constraints={1: "invalid"})
         with self.assertRaisesRegex(ValueError, "between 0 and 1"):
             recommend_configurations(
                 submissions, round_number=1, accuracy_floor=1.01)

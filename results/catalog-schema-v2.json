@@ -1,0 +1,622 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rannte85/llm-hardtest-report/results/catalog-schema-v2.json",
+  "title": "LLM Hardtest observed serving catalog v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "kind",
+    "filters",
+    "status",
+    "minimum_independent_bundles",
+    "summary",
+    "facets",
+    "missing_coordinates",
+    "configurations"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 2
+    },
+    "kind": {
+      "const": "observed_serving_catalog"
+    },
+    "filters": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "round",
+        "pack"
+      ],
+      "properties": {
+        "round": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1,
+          "maximum": 4
+        },
+        "pack": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      }
+    },
+    "status": {
+      "enum": [
+        "EMPTY",
+        "NO_MATCH",
+        "OBSERVED"
+      ]
+    },
+    "minimum_independent_bundles": {
+      "type": "integer",
+      "minimum": 5
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "configurations",
+        "observations",
+        "models",
+        "rounds",
+        "packs",
+        "recommendation_ready_observations"
+      ],
+      "properties": {
+        "configurations": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "observations": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "models": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "rounds": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 4
+          }
+        },
+        "packs": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          }
+        },
+        "recommendation_ready_observations": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "facets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "configuration",
+        "model",
+        "os",
+        "architecture",
+        "python",
+        "transport",
+        "reasoning_effort",
+        "context_window",
+        "max_tokens",
+        "temperature",
+        "top_p",
+        "top_k",
+        "min_p",
+        "model_revision",
+        "quantization",
+        "model_format",
+        "parameter_count_b",
+        "server",
+        "server_version",
+        "accelerator",
+        "accelerator_count",
+        "memory_gb",
+        "system_memory_gb"
+      ],
+      "properties": {
+        "configuration": {
+          "$ref": "#/$defs/facet"
+        },
+        "model": {
+          "$ref": "#/$defs/facet"
+        },
+        "os": {
+          "$ref": "#/$defs/facet"
+        },
+        "architecture": {
+          "$ref": "#/$defs/facet"
+        },
+        "python": {
+          "$ref": "#/$defs/facet"
+        },
+        "transport": {
+          "$ref": "#/$defs/facet"
+        },
+        "reasoning_effort": {
+          "$ref": "#/$defs/facet"
+        },
+        "context_window": {
+          "$ref": "#/$defs/facet"
+        },
+        "max_tokens": {
+          "$ref": "#/$defs/facet"
+        },
+        "temperature": {
+          "$ref": "#/$defs/facet"
+        },
+        "top_p": {
+          "$ref": "#/$defs/facet"
+        },
+        "top_k": {
+          "$ref": "#/$defs/facet"
+        },
+        "min_p": {
+          "$ref": "#/$defs/facet"
+        },
+        "model_revision": {
+          "$ref": "#/$defs/facet"
+        },
+        "quantization": {
+          "$ref": "#/$defs/facet"
+        },
+        "model_format": {
+          "$ref": "#/$defs/facet"
+        },
+        "parameter_count_b": {
+          "$ref": "#/$defs/facet"
+        },
+        "server": {
+          "$ref": "#/$defs/facet"
+        },
+        "server_version": {
+          "$ref": "#/$defs/facet"
+        },
+        "accelerator": {
+          "$ref": "#/$defs/facet"
+        },
+        "accelerator_count": {
+          "$ref": "#/$defs/facet"
+        },
+        "memory_gb": {
+          "$ref": "#/$defs/facet"
+        },
+        "system_memory_gb": {
+          "$ref": "#/$defs/facet"
+        }
+      }
+    },
+    "configurations": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/configuration"
+      }
+    },
+    "missing_coordinates": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "reasoning_effort",
+        "context_window",
+        "max_tokens",
+        "temperature",
+        "top_p",
+        "top_k",
+        "min_p",
+        "model_revision",
+        "quantization",
+        "model_format",
+        "parameter_count_b",
+        "server",
+        "server_version",
+        "accelerator",
+        "accelerator_count",
+        "memory_gb",
+        "system_memory_gb"
+      ],
+      "properties": {
+        "reasoning_effort": {
+          "$ref": "#/$defs/missing"
+        },
+        "context_window": {
+          "$ref": "#/$defs/missing"
+        },
+        "max_tokens": {
+          "$ref": "#/$defs/missing"
+        },
+        "temperature": {
+          "$ref": "#/$defs/missing"
+        },
+        "top_p": {
+          "$ref": "#/$defs/missing"
+        },
+        "top_k": {
+          "$ref": "#/$defs/missing"
+        },
+        "min_p": {
+          "$ref": "#/$defs/missing"
+        },
+        "model_revision": {
+          "$ref": "#/$defs/missing"
+        },
+        "quantization": {
+          "$ref": "#/$defs/missing"
+        },
+        "model_format": {
+          "$ref": "#/$defs/missing"
+        },
+        "parameter_count_b": {
+          "$ref": "#/$defs/missing"
+        },
+        "server": {
+          "$ref": "#/$defs/missing"
+        },
+        "server_version": {
+          "$ref": "#/$defs/missing"
+        },
+        "accelerator": {
+          "$ref": "#/$defs/missing"
+        },
+        "accelerator_count": {
+          "$ref": "#/$defs/missing"
+        },
+        "memory_gb": {
+          "$ref": "#/$defs/missing"
+        },
+        "system_memory_gb": {
+          "$ref": "#/$defs/missing"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "safeText": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160
+    },
+    "facet": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "value",
+          "configurations",
+          "observations",
+          "max_independent_bundles",
+          "recommendation_ready_observations"
+        ],
+        "properties": {
+          "value": {
+            "oneOf": [
+              {
+                "$ref": "#/$defs/safeText"
+              },
+              {
+                "type": "number"
+              }
+            ]
+          },
+          "configurations": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "observations": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "max_independent_bundles": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "recommendation_ready_observations": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      }
+    },
+    "missing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "configurations",
+        "observations"
+      ],
+      "properties": {
+        "configurations": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "observations": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "environment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "os",
+        "architecture",
+        "python"
+      ],
+      "properties": {
+        "os": {
+          "enum": [
+            "Linux",
+            "Darwin",
+            "Windows",
+            "Other"
+          ]
+        },
+        "architecture": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32
+        },
+        "python": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+$"
+        }
+      }
+    },
+    "parameters": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "reasoning_effort": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32
+        },
+        "context_window": {
+          "type": "number"
+        },
+        "max_tokens": {
+          "type": "number"
+        },
+        "temperature": {
+          "type": "number"
+        },
+        "top_p": {
+          "type": "number"
+        },
+        "top_k": {
+          "type": "number"
+        },
+        "min_p": {
+          "type": "number"
+        }
+      }
+    },
+    "publicMetadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "model_revision": {
+          "$ref": "#/$defs/safeText"
+        },
+        "quantization": {
+          "$ref": "#/$defs/safeText"
+        },
+        "model_format": {
+          "$ref": "#/$defs/safeText"
+        },
+        "parameter_count_b": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "server": {
+          "$ref": "#/$defs/safeText"
+        },
+        "server_version": {
+          "$ref": "#/$defs/safeText"
+        },
+        "accelerator": {
+          "$ref": "#/$defs/safeText"
+        },
+        "accelerator_count": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "memory_gb": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "system_memory_gb": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        }
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "accuracy_lower95",
+        "accuracy_observed",
+        "completion_lower95",
+        "completion_observed",
+        "bundle_mean_item_latency_p90_seconds",
+        "latency_observed_bundles",
+        "bundle_mean_completion_tokens_per_second_p50",
+        "throughput_observed_bundles"
+      ],
+      "properties": {
+        "accuracy_lower95": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "accuracy_observed": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "completion_lower95": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "completion_observed": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "bundle_mean_item_latency_p90_seconds": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "latency_observed_bundles": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "bundle_mean_completion_tokens_per_second_p50": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "throughput_observed_bundles": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "observation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "round",
+        "pack",
+        "independent_bundles",
+        "readiness",
+        "metrics"
+      ],
+      "properties": {
+        "round": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4
+        },
+        "pack": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "independent_bundles": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "readiness": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "accuracy",
+            "completion",
+            "latency",
+            "throughput"
+          ],
+          "properties": {
+            "accuracy": {
+              "type": "boolean"
+            },
+            "completion": {
+              "type": "boolean"
+            },
+            "latency": {
+              "type": "boolean"
+            },
+            "throughput": {
+              "type": "boolean"
+            }
+          }
+        },
+        "metrics": {
+          "$ref": "#/$defs/metrics"
+        }
+      }
+    },
+    "configuration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "configuration",
+        "model",
+        "environment",
+        "transport",
+        "parameters",
+        "public_metadata",
+        "observations"
+      ],
+      "properties": {
+        "configuration": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{10}$"
+        },
+        "model": {
+          "$ref": "#/$defs/safeText"
+        },
+        "environment": {
+          "$ref": "#/$defs/environment"
+        },
+        "transport": {
+          "enum": [
+            "openai_compat",
+            "codex_cli"
+          ]
+        },
+        "parameters": {
+          "$ref": "#/$defs/parameters"
+        },
+        "public_metadata": {
+          "$ref": "#/$defs/publicMetadata"
+        },
+        "observations": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/observation"
+          }
+        }
+      }
+    }
+  }
+}

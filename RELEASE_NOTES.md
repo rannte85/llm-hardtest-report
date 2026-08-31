@@ -1,10 +1,22 @@
-# Release Notes — 2.20.0
+# Release Notes — 2.21.0
 
 This repository is ready to publish as `rannte85/llm-hardtest-report`. It contains no campaign
 outputs, credentials, local model files, personal filesystem paths, or generated
 Python caches.
 
 The release validation covers:
+
+- exact discovery and filtering for every public configuration coordinate, including
+  stable configuration ID, environment/Python, generation settings, model revision,
+  serving version, accelerator count, and exact or maximum capacity values;
+- catalog schema v2 and recommendation schema v2, with historical v1 contracts left
+  intact and JSON/SQLite adapters producing identical full-coordinate responses;
+- public schemas, SQLite DDL, result guides, and project documentation shipped inside
+  the Python source distribution;
+- numeric facet normalization plus explicit missing-coordinate coverage for every
+  optional parameter and serving/hardware field;
+- adversarial null/non-finite numeric, non-string key, malformed configuration ID,
+  conflicting-coordinate, numeric-affinity, CLI, and installed-package controls;
 
 - deterministic observed-serving catalogs from canonical JSON or verified SQLite,
   including exact configurations, queryable facets, evidence counts, conservative

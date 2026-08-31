@@ -129,3 +129,31 @@ Install the resulting wheel into a clean temporary virtual environment and run
 `llm-hardtest selftest`, configuration validation, inspection, and a dry campaign
 outside the source checkout. Finish with a secret/path scan, a Markdown-link check,
 and an adversarial review of resume and scoring behavior.
+
+## Phase 6 — Empirical discrimination analysis
+
+Goal: distinguish a benchmark that is merely difficult from one that reliably
+separates model configurations beyond their own repeat instability.
+
+Deliverables:
+
+1. Analyze item-level evidence from multiple completed run directories without
+   copying prompts, raw responses, model identifiers, paths, or credentials.
+2. Never pool different benchmark pack fingerprints or count the same resolved run
+   twice.
+3. Keep incomplete, manual-review, and infrastructure-invalid observations outside
+   correctness and correlation calculations.
+4. Report pass rate, normalized difficulty balance, corrected item-total correlation,
+   ceiling/floor/negative-signal review flags, configuration separation, and repeat
+   instability in deterministic Markdown and JSON.
+5. Reject evidence symlinks that escape their run directory and document sample-size
+   and interpretation limits.
+
+Acceptance checks:
+
+- Synthetic positive, ceiling, negative-discrimination, and incomplete controls are
+  classified independently.
+- Repeated identical configurations contribute to within-configuration instability;
+  materially different configurations contribute to between-configuration separation.
+- Round 4 release outcomes and Round 1–3 item statuses use the same analysis contract.
+- An installed wheel can analyze a real historical run outside the source checkout.

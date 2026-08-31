@@ -1,4 +1,4 @@
-# Release Notes — 2.2.0
+# Release Notes — 2.3.0
 
 This repository is ready to publish as `rannte85/llm-hardtest-report`. It contains no campaign
 outputs, credentials, local model files, personal filesystem paths, or generated
@@ -6,6 +6,14 @@ Python caches.
 
 The release validation covers:
 
+- status-only cross-run calibration reports that never copy prompts, responses,
+  model identifiers, endpoint URLs, paths, or credentials;
+- exact pack-fingerprint separation, duplicate-run and evidence-symlink rejection,
+  Round 1–4 item extraction, and deterministic Markdown plus JSON output;
+- corrected item-total discrimination, normalized difficulty balance, ceiling/floor
+  and negative-signal review flags, configuration separation, and repeat instability;
+- explicit small-sample limits and methodology documentation that avoid presenting
+  descriptive diagnostics as IRT estimates or predictions for untested models;
 - local-only, allowlist-based public exports with deterministic bundle IDs and no
   telemetry, raw responses, endpoint URLs, credentials, paths, run IDs, or timestamps;
 - an exact JSON preview and an explicit `--open-pr --yes` consent boundary before any

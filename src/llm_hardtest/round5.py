@@ -22,7 +22,8 @@ REPORT_FIELDS = {
     "FILES_CHANGED", "PUBLIC_TESTS", "CONFIDENCE", "REMAINING_RISKS",
 }
 UNSUPPORTED_CALL_PATTERN = re.compile(
-    r"unsupported call:\s*([A-Za-z0-9_.-]+)", re.I)
+    r"^.*\b(?:ERROR\s+codex_core::tools::router:\s+error=|"
+    r"tool router error:\s*)unsupported call:\s*([A-Za-z0-9_.-]+)", re.I | re.M)
 
 
 def _hashes(root: Path) -> dict[str, str]:

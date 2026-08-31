@@ -824,13 +824,15 @@ class RoundFiveResearchTests(unittest.TestCase):
             if self.mode == "empty" and turn == 1:
                 content = ""
             (evidence_dir / f"transcript_turn{turn}.txt").write_text(
-                content + ("\nERROR unsupported call: tool_code"
+                content + ("\nERROR codex_core::tools::router: "
+                           "error=unsupported call: tool_code"
                            if self.mode == "unsupported" and turn == 1 else ""),
                 encoding="utf-8")
             (evidence_dir / f"last_message_turn{turn}.txt").write_text(
                 content, encoding="utf-8")
             timed_out = self.mode == "timeout" and turn == 1
-            transcript = content + ("\nERROR unsupported call: tool_code"
+            transcript = content + ("\nERROR codex_core::tools::router: "
+                                    "error=unsupported call: tool_code"
                                     if self.mode == "unsupported" and turn == 1 else "")
             return {"content": content, "transcript": transcript,
                     "session_id": "00000000-0000-0000-0000-000000000001",
@@ -986,7 +988,10 @@ class PilotAnalysisTests(unittest.TestCase):
                 for turn in (1, 2, 3):
                     text = "normal transcript"
                     if model["key"] == "weak" and turn == 3:
-                        text += "\nERROR unsupported call: tool_code"
+                        text += ("\nERROR codex_core::tools::router: "
+                                 "error=unsupported call: tool_code")
+                    if model["key"] == "strong" and turn == 1:
+                        text += "\nmodel discussion: unsupported call: harmless"
                     (attempt_dir / f"transcript_turn{turn}.txt").write_text(
                         text, encoding="utf-8")
                 (attempt_dir / "changes.patch").write_text(

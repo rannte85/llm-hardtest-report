@@ -9,11 +9,10 @@ from pathlib import Path
 
 from .calibration import _model_identity
 from .common import load_json, save_json, slug
-from .round5 import REPORT_FIELDS, _report_fields
+from .round5 import REPORT_FIELDS, UNSUPPORTED_CALL_PATTERN, _report_fields
 
 
 PACK_PATTERN = re.compile(r"sha256:[0-9a-f]{64}")
-UNSUPPORTED_CALL_PATTERN = re.compile(r"unsupported call:\s*([A-Za-z0-9_.-]+)", re.I)
 OUTCOME_AXES = (
     "transport_complete", "authority_safe", "evidence_revision", "public_rate",
     "hidden_rate", "release_ready", "report_accurate", "tool_protocol_clean",

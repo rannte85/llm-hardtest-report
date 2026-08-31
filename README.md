@@ -4,13 +4,13 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-**Current release: 2.22.0** — adds a deterministic evidence-collection planner. For
-each exact observed model/environment/serving configuration it reports independent
-bundle counts and deficits for accuracy, completion, latency, and throughput, then
-computes the minimum number of complete new bundles needed for a chosen target. The
-planner accepts every serving constraint and produces identical results from canonical
-JSON or verified SQLite without exposing contributor identity. Canonical Round 1–4
-questions, grading contracts, public submission schema, and database schema are unchanged.
+**Current release: 2.23.0** — adds cluster-paired head-to-head comparison for two exact
+serving configurations tested inside the same independent bundles. Accuracy,
+completion, latency, and throughput effects use deterministic paired-bundle bootstrap
+intervals, two-sided sign-flip tests, and Holm family-wise correction. Canonical JSON
+and verified SQLite produce identical privacy-preserving results; repeated runs cannot
+inflate the paired sample. Canonical Round 1–4 questions, grading contracts, public
+submission schema, and database schema are unchanged.
 
 LLM Hardtest Report is a local-first command-line benchmark for comparing language
 models as reasoners, coding workers, and safe handoff agents. Point it at one or more
@@ -337,6 +337,33 @@ This command produces descriptive candidates, not hardware-fit or out-of-sample
 predictions. A reported memory value describes the tested environment; it does not
 prove the model needs that amount or will run on a different device. See the
 [community data model](docs/COMMUNITY_DATA_MODEL.md) for promotion gates.
+
+## Compare two configurations head to head
+
+Use stable configuration IDs from `results catalog` to remove between-contributor
+difficulty as much as the public design permits. Only bundles containing both exact
+configurations enter the paired analysis:
+
+```bash
+llm-hardtest results compare \
+  --database results/community.sqlite3 \
+  --round 1 \
+  --pack sha256:<full-pack-fingerprint> \
+  --left-configuration 0123456789 \
+  --right-configuration abcdef0123 \
+  --objective accuracy \
+  --objective latency \
+  --objective throughput
+```
+
+The machine-readable response follows
+[`results/paired-comparison-schema-v1.json`](results/paired-comparison-schema-v1.json).
+Each metric requires at least five shared independent bundles. Repeated runs are
+collapsed within their bundle before comparison. A deterministic paired-cluster
+bootstrap supplies the 95% effect interval, a two-sided sign-flip test supplies the
+raw p-value, and Holm correction controls the selected-objective family. Directional
+claims require both an interval excluding zero and adjusted p below 0.05. No universal
+practical-effect threshold is imposed, so operational relevance remains explicit.
 
 ## Plan the next independent submissions
 

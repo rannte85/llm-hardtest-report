@@ -162,6 +162,27 @@ configuration ID; numeric settings compare by value, so SQLite's `8`/`8.0` affin
 not a false mismatch. Capacity ceilings remain distinct from exact memory and model-size
 filters. Missing coordinates never match.
 
+## Paired configuration comparison
+
+Use shared bundle clusters to compare two exact configurations without treating
+different contributor populations as interchangeable:
+
+```bash
+llm-hardtest results compare \
+  --database results/community.sqlite3 \
+  --round 1 --pack sha256:<exact-pack-fingerprint> \
+  --left-configuration 0123456789 \
+  --right-configuration abcdef0123 \
+  --objective accuracy --objective latency --json
+```
+
+The database adapter first collapses repeated runs to one metric value per bundle and
+configuration, then retains only shared bundles for each selected objective. It feeds
+the same paired bootstrap, sign-flip, and Holm implementation as canonical JSON, so
+identical evidence produces byte-identical output. Standalone database integrity and
+semantic checks run before analysis. The response exposes neither pairing bundle IDs
+nor contributor history.
+
 ## Plan evidence acquisition
 
 The verified database can also answer which exact configurations need more independent

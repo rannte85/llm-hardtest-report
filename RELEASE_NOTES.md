@@ -1,10 +1,19 @@
-# Release Notes — 2.22.0
+# Release Notes — 2.23.0
 
 This repository is ready to publish as `rannte85/llm-hardtest-report`. It contains no campaign
 outputs, credentials, local model files, personal filesystem paths, or generated
 Python caches.
 
 The release validation covers:
+
+- shared-independent-bundle head-to-head comparison for two exact serving
+  configurations across accuracy, completion, latency, and throughput;
+- deterministic paired-cluster bootstrap intervals, exact or deterministic Monte
+  Carlo two-sided sign-flip tests, and Holm family-wise correction across objectives;
+- direction-invariant seeding and exact left/right symmetry, repeated-run collapse,
+  objective-specific missing-measurement gates, and explicit practical-effect caveats;
+- canonical JSON/verified SQLite parity, paired-comparison schema v1, privacy-preserving
+  Markdown/JSON output, and sparse/inconclusive/directional/mixed states;
 
 - deterministic independent-bundle acquisition plans for accuracy, completion,
   latency, and throughput, with separate observed counts and per-objective deficits;

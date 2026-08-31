@@ -39,14 +39,18 @@ from llm_hardtest.community_results import (
 )
 from llm_hardtest.community_database import (
     SCHEMA_SQL, _content_fingerprint, aggregate_database, build_database,
-    catalog_database, load_database, normalize_submissions, plan_database,
-    recommend_database,
+    catalog_database, compare_database, load_database, normalize_submissions,
+    paired_database_observations, plan_database, recommend_database,
 )
 from llm_hardtest.serving_catalog import (
     build_catalog, catalog_submissions, render_catalog,
 )
 from llm_hardtest.collection_plan import (
     build_collection_plan, plan_submissions, render_collection_plan,
+)
+from llm_hardtest.paired_comparison import (
+    _bundle_observations, _sign_flip_test, compare_paired_observations,
+    compare_submissions, render_paired_comparison,
 )
 from llm_hardtest.calibration import (
     _configuration_comparisons, _configuration_item_coverage,
@@ -3532,6 +3536,293 @@ class PublicResultTests(unittest.TestCase):
         objectives = set(schema["$defs"]["objective"]["enum"])
         self.assertEqual(set(result["configurations"][0][
             "observed_independent_bundles"]), objectives)
+
+    def test_paired_comparison_finds_holm_controlled_tradeoff(self):
+        submissions = self._recommendation_submissions(7)
+        configurations = {
+            row["model"]: row["configuration"]
+            for row in catalog_submissions(submissions)["configurations"]
+        }
+        result = compare_submissions(
+            submissions, round_number=1,
+            left_configuration=configurations["org/fast"],
+            right_configuration=configurations["org/accurate"],
+            objectives=["accuracy", "latency", "throughput"])
+        self.assertEqual(result["schema_version"], 1)
+        self.assertEqual(result["status"], "MIXED_DIRECTIONAL_EVIDENCE")
+        self.assertEqual(result["shared_configuration_bundles"], 7)
+        by_objective = {row["objective"]: row
+                        for row in result["objectives_result"]}
+        self.assertEqual(by_objective["accuracy"]["classification"], "RIGHT_BETTER")
+        self.assertEqual(by_objective["latency"]["classification"], "LEFT_BETTER")
+        self.assertEqual(by_objective["throughput"]["classification"], "LEFT_BETTER")
+        self.assertEqual({row["p_raw"] for row in by_objective.values()}, {0.015625})
+        self.assertEqual({row["p_holm"] for row in by_objective.values()}, {0.046875})
+        self.assertEqual(by_objective["latency"]["left_advantage"], 3.0)
+        self.assertEqual(by_objective["latency"]["effect_definition"],
+                         "right_minus_left_seconds_positive_favors_left")
+        document = render_paired_comparison(result)
+        self.assertIn("Holm-adjusted p < 0.05", document)
+        self.assertIn("No practical-effect threshold", document)
+        serialized = json.dumps(result)
+        self.assertNotIn("bundle_id", serialized)
+        self.assertNotIn("recommendation-control", serialized)
+
+    def test_paired_comparison_holm_blocks_two_nominal_directions(self):
+        submissions = self._recommendation_submissions(6)
+        configurations = {
+            row["model"]: row["configuration"]
+            for row in catalog_submissions(submissions)["configurations"]
+        }
+        result = compare_submissions(
+            submissions, round_number=1,
+            left_configuration=configurations["org/fast"],
+            right_configuration=configurations["org/accurate"],
+            objectives=["accuracy", "latency"])
+        self.assertEqual(result["status"], "INCONCLUSIVE")
+        self.assertEqual({row["p_raw"] for row in result["objectives_result"]},
+                         {0.03125})
+        self.assertEqual({row["p_holm"] for row in result["objectives_result"]},
+                         {0.0625})
+        self.assertEqual({row["classification"] for row in result["objectives_result"]},
+                         {"INCONCLUSIVE"})
+
+    def test_paired_comparison_is_exactly_symmetric_when_sides_swap(self):
+        submissions = self._recommendation_submissions(7)
+        configurations = {
+            row["model"]: row["configuration"]
+            for row in catalog_submissions(submissions)["configurations"]
+        }
+        left, right = configurations["org/fast"], configurations["org/accurate"]
+        forward = compare_submissions(
+            submissions, round_number=1, left_configuration=left,
+            right_configuration=right,
+            objectives=["accuracy", "completion", "latency", "throughput"])
+        reverse = compare_submissions(
+            submissions, round_number=1, left_configuration=right,
+            right_configuration=left,
+            objectives=["accuracy", "completion", "latency", "throughput"])
+        forward_rows = {row["objective"]: row
+                        for row in forward["objectives_result"]}
+        reverse_rows = {row["objective"]: row
+                        for row in reverse["objectives_result"]}
+        for objective, first in forward_rows.items():
+            second = reverse_rows[objective]
+            self.assertEqual(first["left_mean"], second["right_mean"])
+            self.assertEqual(first["right_mean"], second["left_mean"])
+            self.assertAlmostEqual(first["left_advantage"], -second["left_advantage"])
+            self.assertAlmostEqual(first["interval95"]["low"],
+                                   -second["interval95"]["high"])
+            self.assertAlmostEqual(first["interval95"]["high"],
+                                   -second["interval95"]["low"])
+            self.assertEqual(first["p_raw"], second["p_raw"])
+            self.assertEqual(first["p_holm"], second["p_holm"])
+            expected = {"LEFT_BETTER": "RIGHT_BETTER",
+                        "RIGHT_BETTER": "LEFT_BETTER",
+                        "INCONCLUSIVE": "INCONCLUSIVE"}[first["classification"]]
+            self.assertEqual(second["classification"], expected)
+
+    def test_paired_comparison_collapses_repeats_and_withholds_missing_metrics(self):
+        repeated = self._recommendation_submissions(1)
+        repeated[0]["models"] = repeated[0]["models"] * 50
+        from llm_hardtest.public_results import _bundle_id
+        body = {key: value for key, value in repeated[0].items() if key != "bundle_id"}
+        repeated[0]["bundle_id"] = _bundle_id(body)
+        validate_public_result(repeated[0])
+        configurations = {
+            row["model"]: row["configuration"]
+            for row in catalog_submissions(repeated)["configurations"]
+        }
+        sparse = compare_submissions(
+            repeated, round_number=1,
+            left_configuration=configurations["org/fast"],
+            right_configuration=configurations["org/accurate"],
+            objectives=["accuracy", "latency"])
+        self.assertEqual(sparse["shared_configuration_bundles"], 1)
+        self.assertEqual(sparse["status"], "INSUFFICIENT_EVIDENCE")
+        self.assertTrue(all(row["paired_bundles"] == 1
+                            for row in sparse["objectives_result"]))
+
+        submissions = self._recommendation_submissions(7)
+        for payload in submissions[-3:]:
+            for model in payload["models"]:
+                if model["public_name"] == "org/fast":
+                    for item in model["rounds"]["1"]["items"]:
+                        item["wall_seconds"] = None
+                        item["tokens"] = None
+            body = {key: value for key, value in payload.items() if key != "bundle_id"}
+            payload["bundle_id"] = _bundle_id(body)
+            validate_public_result(payload)
+        configurations = {
+            row["model"]: row["configuration"]
+            for row in catalog_submissions(submissions)["configurations"]
+        }
+        result = compare_submissions(
+            submissions, round_number=1,
+            left_configuration=configurations["org/fast"],
+            right_configuration=configurations["org/accurate"],
+            objectives=["accuracy", "latency"])
+        by_objective = {row["objective"]: row
+                        for row in result["objectives_result"]}
+        self.assertEqual(by_objective["accuracy"]["paired_bundles"], 7)
+        self.assertEqual(by_objective["latency"]["paired_bundles"], 4)
+        self.assertEqual(by_objective["latency"]["classification"], "INSUFFICIENT")
+
+    def test_paired_comparison_excludes_unpaired_bundle_populations(self):
+        submissions = self._recommendation_submissions(7)
+        from llm_hardtest.public_results import _bundle_id
+        for payload in submissions[-2:]:
+            payload["models"] = [
+                model for model in payload["models"]
+                if model["public_name"] == "org/fast"]
+            body = {key: value for key, value in payload.items() if key != "bundle_id"}
+            payload["bundle_id"] = _bundle_id(body)
+            validate_public_result(payload)
+        configurations = {
+            row["model"]: row["configuration"]
+            for row in catalog_submissions(submissions)["configurations"]
+        }
+        result = compare_submissions(
+            submissions, round_number=1,
+            left_configuration=configurations["org/fast"],
+            right_configuration=configurations["org/accurate"],
+            objectives=["accuracy"])
+        self.assertEqual(result["shared_configuration_bundles"], 5)
+        self.assertEqual(result["objectives_result"][0]["paired_bundles"], 5)
+        self.assertEqual(result["objectives_result"][0]["p_raw"], 0.0625)
+        self.assertEqual(result["status"], "INCONCLUSIVE")
+
+    def test_paired_sign_flip_monte_carlo_is_deterministic(self):
+        effects = [0.01 * (index + 1) for index in range(17)]
+        first = _sign_flip_test(effects, "paired-monte-carlo-control")
+        second = _sign_flip_test(effects, "paired-monte-carlo-control")
+        self.assertEqual(first, second)
+        self.assertEqual(first["method"],
+                         "deterministic_monte_carlo_paired_sign_flip_two_sided")
+        self.assertEqual(first["assignments"], 131072)
+        self.assertEqual(first["evaluated_permutations"], 20_000)
+
+    def test_paired_comparison_json_database_and_cli_are_identical(self):
+        submissions = self._full_coordinate_submissions(7)
+        configurations = {
+            row["model"]: row["configuration"]
+            for row in catalog_submissions(submissions)["configurations"]
+        }
+        arguments = {
+            "round_number": 1,
+            "left_configuration": configurations["org/fast"],
+            "right_configuration": configurations["org/accurate"],
+            "objectives": ["accuracy", "latency", "throughput"],
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp) / "submissions"
+            directory.mkdir()
+            for payload in submissions:
+                digest = payload["bundle_id"].removeprefix("sha256:")
+                (directory / f"{digest}.json").write_text(
+                    submission_document(payload), encoding="utf-8")
+            database = Path(tmp) / "community.sqlite3"
+            build_database(directory, database)
+            direct = compare_submissions(submissions, **arguments)
+            from_database = compare_database(database, **arguments)
+            source_stdout = io.StringIO()
+            database_stdout = io.StringIO()
+            cli_arguments = [
+                "--round", "1", "--left-configuration", configurations["org/fast"],
+                "--right-configuration", configurations["org/accurate"],
+                "--objective", "accuracy", "--objective", "latency",
+                "--objective", "throughput", "--json",
+            ]
+            with patch("sys.stdout", source_stdout):
+                self.assertEqual(main([
+                    "results", "compare", str(directory), *cli_arguments]), 0)
+            with patch("sys.stdout", database_stdout):
+                self.assertEqual(main([
+                    "results", "compare", "--database", str(database),
+                    *cli_arguments]), 0)
+            with patch("sys.stderr", io.StringIO()):
+                self.assertEqual(main([
+                    "results", "compare", str(directory), "--database", str(database),
+                    *cli_arguments]), 2)
+        self.assertEqual(direct, from_database)
+        self.assertEqual(source_stdout.getvalue(), database_stdout.getvalue())
+
+    def test_paired_comparison_states_and_contract_validation(self):
+        submissions = self._recommendation_submissions(1)
+        configurations = {
+            row["model"]: row["configuration"]
+            for row in catalog_submissions(submissions)["configurations"]
+        }
+        left, right = configurations["org/fast"], configurations["org/accurate"]
+        empty = compare_paired_observations(
+            [], round_number=1, left_configuration=left,
+            right_configuration=right)
+        self.assertEqual(empty["status"], "NO_OBSERVATIONS")
+        no_match = compare_submissions(
+            submissions, round_number=1, left_configuration="0" * 10,
+            right_configuration=right)
+        self.assertEqual(no_match["status"], "NO_MATCH")
+        with self.assertRaisesRegex(ValueError, "two distinct"):
+            compare_submissions(
+                submissions, round_number=1, left_configuration=left,
+                right_configuration=left)
+        with self.assertRaisesRegex(ValueError, "10-character"):
+            compare_submissions(
+                submissions, round_number=1, left_configuration="latest",
+                right_configuration=right)
+        with self.assertRaisesRegex(ValueError, "must be a list"):
+            compare_submissions(
+                submissions, round_number=1, left_configuration=left,
+                right_configuration=right, objectives="accuracy")
+        with self.assertRaisesRegex(ValueError, "unique values"):
+            compare_submissions(
+                submissions, round_number=1, left_configuration=left,
+                right_configuration=right, objectives=["accuracy", "accuracy"])
+        with self.assertRaisesRegex(ValueError, "exact sha256"):
+            compare_submissions(
+                submissions, round_number=1, left_configuration=left,
+                right_configuration=right, pack="latest")
+        with self.assertRaisesRegex(ValueError, "round must"):
+            compare_submissions(
+                submissions, round_number=5, left_configuration=left,
+                right_configuration=right)
+
+        mixed = json.loads(json.dumps(self._recommendation_submissions(2)))
+        from llm_hardtest.public_results import _bundle_id
+        mixed[1]["benchmark"]["packs"]["1"] = "sha256:" + "b" * 64
+        body = {key: value for key, value in mixed[1].items() if key != "bundle_id"}
+        mixed[1]["bundle_id"] = _bundle_id(body)
+        validate_public_result(mixed[1])
+        ambiguous = compare_submissions(
+            mixed, round_number=1, left_configuration=left,
+            right_configuration=right)
+        self.assertEqual(ambiguous["status"], "PACK_REQUIRED")
+        self.assertEqual(len(ambiguous["available_packs"]), 2)
+
+    def test_published_paired_comparison_schema_matches_runtime_contract(self):
+        schema = json.loads((
+            repo_root() / "results/paired-comparison-schema-v1.json").read_text(
+                encoding="utf-8"))
+        submissions = self._full_coordinate_submissions(7)
+        configurations = {
+            row["model"]: row["configuration"]
+            for row in catalog_submissions(submissions)["configurations"]
+        }
+        result = compare_submissions(
+            submissions, round_number=1,
+            left_configuration=configurations["org/fast"],
+            right_configuration=configurations["org/accurate"],
+            objectives=["accuracy", "completion", "latency", "throughput"])
+        self.assertEqual(set(result), set(schema["properties"]))
+        self.assertEqual(set(result), set(schema["required"]))
+        configuration_schema = schema["$defs"]["configuration"]
+        self.assertEqual(set(result["left"]), set(configuration_schema["properties"]))
+        self.assertEqual(set(result["left"]), set(configuration_schema["required"]))
+        objective_schema = schema["$defs"]["objectiveResult"]
+        self.assertEqual(set(result["objectives_result"][0]),
+                         set(objective_schema["properties"]))
+        self.assertEqual(set(result["objectives_result"][0]),
+                         set(objective_schema["required"]))
 
     def test_unobserved_bundles_do_not_unlock_a_baseline(self):
         with tempfile.TemporaryDirectory() as tmp:

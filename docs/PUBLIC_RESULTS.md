@@ -191,6 +191,40 @@ filters cover every allowlisted configuration coordinate; `max-memory-gb`,
 `max-system-memory-gb`, and `max-parameter-count-b` remain ceiling filters rather than
 exact settings.
 
+## Paired head-to-head comparison
+
+Marginal configuration summaries can mix contributions with different failure rates,
+hardware load, or operating conditions. When two exact configurations occur in the
+same public bundles, compare them within those shared independent units:
+
+```bash
+llm-hardtest results compare results/submissions \
+  --round 1 --pack sha256:<full-pack-fingerprint> \
+  --left-configuration 0123456789 \
+  --right-configuration abcdef0123 \
+  --objective accuracy --objective latency --json
+
+llm-hardtest results compare --database results/community.sqlite3 \
+  --round 1 --pack sha256:<full-pack-fingerprint> \
+  --left-configuration 0123456789 \
+  --right-configuration abcdef0123 \
+  --objective accuracy --objective latency --json
+```
+
+Each bundle contributes at most one aggregate value per configuration and objective,
+regardless of repeated runs or duplicate model rows. An objective is tested only with
+five shared bundles containing both measurements. Accuracy, completion, and throughput
+use left minus right; latency uses right minus left so positive advantage always favors
+the left configuration. The deterministic paired-bundle bootstrap interval and
+two-sided sign-flip p-value must both support a direction after Holm correction across
+all tested objectives.
+
+The response follows `results/paired-comparison-schema-v1.json`. It contains exact
+public configuration records, shared counts, effects, intervals, tests, and decisions,
+but never the bundle IDs that formed a pair or contributor/tool history. Left/right
+swaps reproduce the same p-values and exactly negated effects and intervals. Statistical
+direction is not a universal practical-effect claim or an untested-setting prediction.
+
 ## Evidence collection plan
 
 Use `results plan` to turn sparse observed configurations into a concrete, bounded

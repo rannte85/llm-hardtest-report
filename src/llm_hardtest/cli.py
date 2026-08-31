@@ -27,10 +27,12 @@ from .community_results import (
     load_submission_directory, recommend_configurations, render_recommendation,
 )
 from .community_database import (
-    build_database, catalog_database, plan_database, recommend_database,
+    build_database, catalog_database, compare_database, plan_database,
+    recommend_database,
 )
 from .serving_catalog import catalog_submissions, render_catalog
 from .collection_plan import plan_submissions, render_collection_plan
+from .paired_comparison import compare_submissions, render_paired_comparison
 from .calibration import write_analysis
 from .round5 import run_pilot
 from .pilot_analysis import write_pilot_analysis
@@ -461,6 +463,26 @@ def main(argv=None) -> int:
         "--json", action="store_true", help="emit machine-readable JSON")
     p_results_plan.add_argument(
         "--output", help="write the collection plan instead of stdout")
+    p_results_compare = results_commands.add_parser(
+        "compare", help="compare two exact configurations within shared bundles")
+    p_results_compare.add_argument(
+        "directory", nargs="?",
+        help="public submission directory (default: results/submissions)")
+    p_results_compare.add_argument(
+        "--database", help="query a normalized SQLite database instead of JSON")
+    p_results_compare.add_argument("--round", type=int, required=True)
+    p_results_compare.add_argument(
+        "--pack", help="exact sha256 pack fingerprint; required when multiple exist")
+    p_results_compare.add_argument("--left-configuration", required=True)
+    p_results_compare.add_argument("--right-configuration", required=True)
+    p_results_compare.add_argument(
+        "--objective", action="append",
+        choices=("accuracy", "completion", "latency", "throughput"),
+        help="paired objective; repeat for multiple axes (default: accuracy)")
+    p_results_compare.add_argument(
+        "--json", action="store_true", help="emit machine-readable JSON")
+    p_results_compare.add_argument(
+        "--output", help="write the paired comparison instead of stdout")
     p_results_pilots = results_commands.add_parser(
         "pilots", help="validate or aggregate voluntary Round 5 pilot summaries")
     pilot_result_commands = p_results_pilots.add_subparsers(
@@ -712,6 +734,38 @@ def main(argv=None) -> int:
                     output.parent.mkdir(parents=True, exist_ok=True)
                     output.write_text(document, encoding="utf-8")
                     print(f"Collection plan: {output}")
+                else:
+                    print(document, end="")
+                return 0
+            if args.results_command == "compare":
+                if args.database and args.directory is not None:
+                    raise ValueError(
+                        "compare accepts either a submission directory or --database")
+                comparison_arguments = {
+                    "round_number": args.round,
+                    "pack": args.pack,
+                    "left_configuration": args.left_configuration,
+                    "right_configuration": args.right_configuration,
+                    "objectives": args.objective,
+                }
+                if args.database:
+                    result = compare_database(
+                        Path(args.database), **comparison_arguments)
+                else:
+                    submissions = load_submission_directory(directory)
+                    result = compare_submissions(
+                        submissions, **comparison_arguments)
+                document = (json.dumps(result, indent=2, sort_keys=True,
+                                       ensure_ascii=False) + "\n"
+                            if args.json else render_paired_comparison(result))
+                if args.output:
+                    output = Path(args.output)
+                    if output.exists() or output.is_symlink():
+                        raise ValueError(
+                            f"refusing to overwrite existing comparison: {output}")
+                    output.parent.mkdir(parents=True, exist_ok=True)
+                    output.write_text(document, encoding="utf-8")
+                    print(f"Paired comparison: {output}")
                 else:
                     print(document, end="")
                 return 0

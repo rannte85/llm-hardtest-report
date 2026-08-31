@@ -13,6 +13,8 @@ project does not automatically collect telemetry or local campaign data.
   retained for historical clients.
 - `collection-plan-schema-v1.json` documents the independent-bundle evidence-gap and
   acquisition-plan response.
+- `paired-comparison-schema-v1.json` documents cluster-paired head-to-head comparison
+  of two exact observed serving configurations.
 - `database-schema-v2.sql` documents the current normalized SQLite observation schema.
 - `database-schema-v1.sql` documents the v2.18 generated-database format; rebuild it
   with the current CLI before querying.
@@ -37,6 +39,10 @@ llm-hardtest results recommend --round 1 --json
 llm-hardtest results recommend --database results/community.sqlite3 --round 1 --json
 llm-hardtest results plan --round 1 --json
 llm-hardtest results plan --database results/community.sqlite3 --round 1 --json
+llm-hardtest results compare --round 1 \
+  --left-configuration 0123456789 --right-configuration abcdef0123 --json
+llm-hardtest results compare --database results/community.sqlite3 --round 1 \
+  --left-configuration 0123456789 --right-configuration abcdef0123 --json
 llm-hardtest results pilots validate
 llm-hardtest results pilots build
 llm-hardtest results pilots build --check
@@ -72,3 +78,9 @@ new bundles are needed per exact configuration and selected objective. Accuracy,
 completion, latency, and throughput counts remain separate; the summed plan is a lower
 bound only when each new bundle contains every selected measurement. JSON and database
 inputs produce the same response, and no contributor or bundle identity is emitted.
+
+`results compare` uses only bundles containing both requested exact configurations.
+Repeated runs collapse within each bundle before paired effects, bootstrap intervals,
+and sign-flip tests are calculated. Holm correction covers every tested objective;
+directional results require the interval and adjusted p-value to agree. The result
+contains configuration identities and counts but no contributing bundle IDs.

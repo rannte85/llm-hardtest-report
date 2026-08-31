@@ -5,6 +5,23 @@ out separately from harness features.
 
 ## Unreleased
 
+## 2.23.0 — 2026-09-01
+
+- Added `results compare` for head-to-head analysis of two exact configurations using
+  only independent public bundles that contain both configurations.
+- Added per-objective paired accuracy, completion, latency, and throughput effects,
+  with latency oriented so positive advantage always favors the left configuration.
+- Added deterministic paired-bundle bootstrap 95% intervals, exact or SHA-256-seeded
+  Monte Carlo two-sided sign-flip tests, and Holm correction across tested objectives.
+- Added explicit sparse, inconclusive, left/right directional, and mixed-tradeoff
+  states without imposing an undocumented practical-effect threshold.
+- Added byte-identical canonical-JSON and verified-SQLite adapters, CLI/Markdown output,
+  and `paired-comparison-schema-v1.json` without bundle or contributor identities.
+- Added repeat-collapse, missing-metric, unpaired, multiplicity, side-symmetry,
+  deterministic Monte Carlo, pack, validation, privacy, and cross-adapter controls.
+- Kept canonical benchmark content, public result schema v2, SQLite schema v2, catalog
+  schema v2, recommendation schema v2, and collection-plan schema v1 unchanged.
+
 ## 2.22.0 — 2026-09-01
 
 - Added `results plan` to calculate exact per-objective independent-bundle deficits

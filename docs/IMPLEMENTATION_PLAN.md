@@ -622,3 +622,38 @@ Acceptance checks:
   outside 5–1000 fail, and ambiguous sources are rejected.
 - The public schema exactly covers runtime fields, plans expose no provenance, and
   installed-package CI exercises the empty-database path.
+
+## Phase 23 — Paired exact-configuration comparisons
+
+Goal: increase model discrimination while reducing between-contributor confounding by
+comparing two exact configurations only inside independent bundles that observed both.
+
+Deliverables:
+
+1. Collapse repeated runs and duplicate model rows to one accuracy, completion,
+   latency, and throughput value per bundle/configuration before pairing.
+2. Require five shared bundles per objective and report objective-specific missingness
+   without leaking the shared bundle IDs or contributor history.
+3. Estimate a deterministic paired-bundle bootstrap 95% interval and exact or fixed
+   SHA-256-seeded Monte Carlo two-sided sign-flip p-value for each eligible objective.
+4. Apply Holm family-wise correction across all tested objectives and require both the
+   adjusted p-value and interval direction for a directional classification.
+5. Add one shared JSON/SQLite comparison contract, CLI, Markdown report, public schema,
+   explicit sparse/inconclusive/directional/mixed states, and practical-effect caveat.
+
+Acceptance checks:
+
+- Seven shared bundles recover an accuracy-versus-speed tradeoff after three-objective
+  Holm correction, with positive latency advantage consistently meaning lower latency.
+- Two perfect six-bundle directions have raw p=0.03125 but Holm p=0.0625 and remain
+  inconclusive rather than becoming two false claims.
+- Fifty duplicate runs inside one bundle still count as one pair; missing performance
+  measurements reduce only latency or throughput paired counts.
+- Swapping left and right exactly swaps means and classifications, negates effects and
+  intervals, and preserves raw/adjusted p-values through a direction-invariant seed.
+- Large sign-flip spaces use deterministic 20,000-draw Monte Carlo with finite-sample
+  correction and reproduce byte-for-byte.
+- Canonical JSON and verified SQLite, including their CLI paths, return byte-identical
+  comparisons and reject ambiguous sources, invalid IDs, same-side IDs, and pack drift.
+- The public schema matches every runtime field, no output includes bundle identity,
+  and installed-package CI exercises an empty verified database.

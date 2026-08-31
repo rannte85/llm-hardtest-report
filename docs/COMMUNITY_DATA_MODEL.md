@@ -160,3 +160,13 @@ each contribution contains all selected measurements. Plans from canonical JSON 
 verified SQLite snapshot are identical. A separate accuracy prerequisite prevents a
 set of completion-only bundles from appearing recommendation-ready. Plans reveal no
 contributor history and never invent configurations that have not been observed.
+
+Version 2.23 adds paired head-to-head evidence for exact configurations observed in the
+same accepted bundles. This removes between-bundle level shifts from each paired effect
+instead of comparing only marginal means. Repeated runs collapse inside their bundle;
+missing timing or token measurements reduce only the corresponding objective's paired
+count. Deterministic cluster bootstrap intervals and two-sided sign-flip tests operate
+on the shared bundle differences, with Holm correction across selected objectives.
+Directional evidence requires the adjusted test and interval to agree. The result
+does not define universal practical importance and cannot extrapolate beyond the exact
+pack and configurations.

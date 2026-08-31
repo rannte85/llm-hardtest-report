@@ -50,6 +50,10 @@ jobs:
           PYTHONPATH=src ./llm-hardtest results plan \
             --database "${RUNNER_TEMP}/community.sqlite3" --round 1 \
             --objective accuracy --objective latency --target-bundles 10 --json
+          PYTHONPATH=src ./llm-hardtest results compare \
+            --database "${RUNNER_TEMP}/community.sqlite3" --round 1 \
+            --left-configuration 0123456789 \
+            --right-configuration abcdef0123 --objective accuracy --json
           PYTHONPATH=src ./llm-hardtest results pilots validate
           PYTHONPATH=src ./llm-hardtest results pilots build --check
       - name: Installed package smoke test
@@ -68,6 +72,10 @@ jobs:
           llm-hardtest results plan \
             --database community.sqlite3 --round 1 \
             --objective accuracy --objective latency --target-bundles 10 --json
+          llm-hardtest results compare \
+            --database community.sqlite3 --round 1 \
+            --left-configuration 0123456789 \
+            --right-configuration abcdef0123 --objective accuracy --json
       - name: Harness self-test
         run: ./llm-hardtest selftest
       - name: Q30v2 trap proof

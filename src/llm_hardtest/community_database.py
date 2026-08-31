@@ -17,6 +17,7 @@ from .community_results import (
 )
 from .serving_catalog import build_catalog
 from .collection_plan import build_collection_plan
+from .paired_comparison import compare_paired_observations
 from .public_results import (
     FINGERPRINT, MODEL_PARAMETER_FIELDS, PUBLIC_ITEM_STATUSES,
     PUBLIC_METADATA_FIELDS, PUBLIC_METADATA_NUMERIC_FIELDS, _public_text,
@@ -646,6 +647,69 @@ def aggregate_database(rows: dict[str, list[tuple]]) -> list[dict]:
     return result
 
 
+def paired_database_observations(rows: dict[str, list[tuple]]) -> list[dict]:
+    """Collapse database runs to paired bundle/configuration metric units."""
+    configurations = {
+        row["configuration_id"]: row
+        for row in _row_dicts(rows, "configurations")
+    }
+    items_by_run = defaultdict(list)
+    for item in _row_dicts(rows, "item_observations"):
+        items_by_run[item["run_id"]].append(item)
+    groups = defaultdict(lambda: {
+        "passed": 0.0, "total": 0.0, "incomplete": 0.0,
+        "manual_review": 0.0, "infrastructure_errors": 0.0,
+        "walls": [], "token_rates": [],
+    })
+    for run in _row_dicts(rows, "benchmark_runs"):
+        key = (run["bundle_id"], run["round"], run["pack"],
+               run["configuration_id"])
+        group = groups[key]
+        for target, source in (
+                ("passed", "scored_passed"), ("total", "scored_total"),
+                ("incomplete", "incomplete"),
+                ("manual_review", "manual_review"),
+                ("infrastructure_errors", "infrastructure_errors")):
+            if run[source] is not None:
+                group[target] += float(run[source])
+        for item in items_by_run[run["run_id"]]:
+            wall, tokens = item["wall_seconds"], item["completion_tokens"]
+            if wall is not None:
+                group["walls"].append(float(wall))
+                if wall > 0 and tokens is not None:
+                    group["token_rates"].append(tokens / wall)
+    observations = []
+    for (bundle, round_number, pack, configuration_id), group in sorted(groups.items()):
+        configuration = configurations[configuration_id]
+        attempted = (group["total"] + group["incomplete"]
+                     + group["manual_review"] + group["infrastructure_errors"])
+        observations.append({
+            "bundle": bundle,
+            "round": round_number,
+            "pack": pack,
+            "configuration": configuration_id,
+            "model": configuration["public_name"],
+            "environment": {
+                "os": configuration["os"],
+                "architecture": configuration["architecture"],
+                "python": configuration["python"],
+            },
+            "transport": configuration["transport"],
+            "parameters": json.loads(configuration["parameters_json"]),
+            "public_metadata": json.loads(configuration["public_metadata_json"]),
+            "metrics": {
+                "accuracy": (group["passed"] / group["total"]
+                             if group["total"] > 0 else None),
+                "completion": (group["total"] / attempted if attempted > 0 else None),
+                "latency": (statistics.mean(group["walls"])
+                            if group["walls"] else None),
+                "throughput": (statistics.mean(group["token_rates"])
+                               if group["token_rates"] else None),
+            },
+        })
+    return observations
+
+
 def recommend_database(path: Path, *, round_number: int,
                        pack: str | None = None,
                        constraints: dict | None = None,
@@ -668,6 +732,12 @@ def catalog_database(path: Path, *, round_number: int | None = None,
 def plan_database(path: Path, **kwargs) -> dict:
     """Build an acquisition plan directly from a verified SQLite snapshot."""
     return build_collection_plan(aggregate_database(load_database(path)), **kwargs)
+
+
+def compare_database(path: Path, **kwargs) -> dict:
+    """Run a paired comparison directly from a verified SQLite snapshot."""
+    return compare_paired_observations(
+        paired_database_observations(load_database(path)), **kwargs)
 
 
 def build_database(directory: Path, output: Path, *, check: bool = False) -> dict:

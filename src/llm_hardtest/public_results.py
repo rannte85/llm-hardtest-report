@@ -129,9 +129,12 @@ def _clean_rounds(rounds: dict) -> dict:
     return cleaned
 
 
-def _public_item_observations(run_dir: Path, model_key: str) -> dict[str, list[dict]]:
+def _public_item_observations(run_dir: Path, model: dict, warnings: list[str],
+                              model_number: int) -> dict[str, list[dict]]:
     """Collect every item outcome while excluding prompts and generated content."""
     observations = {}
+    excluded_ambiguous_tokens = 0
+    model_key = model["key"]
     for number in (1, 2, 3):
         rows = []
         for path in sorted((run_dir / model_key / f"round{number}").glob(
@@ -149,12 +152,18 @@ def _public_item_observations(run_dir: Path, model_key: str) -> dict[str, list[d
                     maximum=80)
                 if item is None:
                     raise ValueError(f"public export found an unsafe item ID in {path}")
+                tokens = result.get("completion_tokens")
+                if (model.get("transport") == "codex_cli"
+                        and result.get("token_measurement") != "completion"):
+                    if tokens is not None:
+                        excluded_ambiguous_tokens += 1
+                    tokens = None
                 rows.append({
                     "item": item,
                     "attempt": int(attempt),
                     "status": item_status(result),
                     "wall_seconds": result.get("wall"),
-                    "tokens": result.get("completion_tokens"),
+                    "tokens": tokens,
                 })
         if rows:
             observations[str(number)] = rows
@@ -172,8 +181,13 @@ def _public_item_observations(run_dir: Path, model_key: str) -> dict[str, list[d
             status = ("INVALID" if flags.get("model_timed_out") else
                       "PASS" if flags.get("attempt_pass") else "FAIL")
             meta = grade.get("run_meta") or {}
+            tokens = meta.get("tokens")
+            if model.get("transport") == "codex_cli":
+                if tokens is not None:
+                    excluded_ambiguous_tokens += 1
+                tokens = None
             rows.append({"item": item, "attempt": attempt, "status": status,
-                         "wall_seconds": meta.get("wall"), "tokens": meta.get("tokens")})
+                         "wall_seconds": meta.get("wall"), "tokens": tokens})
             graded.add((item, attempt))
         for error in payload.get("errors", []):
             item = _public_text(error.get("task"), maximum=80)
@@ -185,6 +199,10 @@ def _public_item_observations(run_dir: Path, model_key: str) -> dict[str, list[d
         if rows:
             observations["4"] = sorted(
                 rows, key=lambda row: (row["attempt"], row["item"], row["status"]))
+    if excluded_ambiguous_tokens:
+        warnings.append(
+            f"model-{model_number}: excluded {excluded_ambiguous_tokens} Codex "
+            "total-token measurements from completion-throughput evidence")
     return observations
 
 
@@ -223,7 +241,8 @@ def build_public_result(run_dir: Path) -> tuple[dict, list[str]]:
                 parameters[key] = value
         entry = by_key.get(model.get("key"), {"rounds": {}})
         rounds = _clean_rounds(entry.get("rounds", {}))
-        observations = _public_item_observations(run_dir, model["key"])
+        observations = _public_item_observations(
+            run_dir, model, warnings, index)
         for number in rounds:
             rounds[number]["items"] = observations.get(number, [])
         models.append({

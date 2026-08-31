@@ -1,0 +1,16 @@
+{
+  "name": "codex-luna-round1",
+  "repetitions": 1,
+  "rounds": [1],
+  "timeout_seconds": 900,
+  "models": [
+    {
+      "key": "gpt-5.6-luna-medium",
+      "label": "GPT-5.6 Luna — medium",
+      "model": "gpt-5.6-luna",
+      "transport": "codex_cli",
+      "codex_provider": "openai",
+      "reasoning_effort": "medium"
+    }
+  ]
+}

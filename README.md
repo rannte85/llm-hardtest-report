@@ -4,14 +4,13 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-**Current release: 2.24.0** — adds an executable predictive-serving readiness audit.
-It measures independent objective coverage, exact-configuration diversity, paired
-overlap, declared serving-environment diversity, and exact model-profile repetition
-across environments. Even when those operator targets pass, the tool refuses to
-authorize prediction until temporal holdout, abuse/implausibility review, and drift
-monitoring exist. Canonical JSON and verified SQLite produce identical, provenance-free
-results. Canonical Round 1–4 questions, grading contracts, public submission schema,
-and database schema are unchanged.
+**Current release: 2.25.0** — adds a measured GPT-5.6 Luna Round 1 control and fixes
+Codex token provenance. Rounds 1–3 now consume Codex JSONL usage and publish only
+measured output tokens as completion-throughput evidence. Legacy Codex totals are
+quarantined instead of being mislabeled. The first sanitized Luna observation is
+included in the community dataset with 20/20 accuracy and measured latency; its
+legacy total-token values are intentionally absent. Canonical Round 1–4 questions,
+grading contracts, public schema v2, and database schema v2 are unchanged.
 
 LLM Hardtest Report is a local-first command-line benchmark for comparing language
 models as reasoners, coding workers, and safe handoff agents. Point it at one or more
@@ -523,6 +522,17 @@ ${EDITOR:-vi} benchmark.json
 llm-hardtest validate --config benchmark.json
 llm-hardtest run --config benchmark.json
 ```
+
+A signed-in Codex control can be checked with the included one-repetition, Round 1
+configuration. Model availability and account usage remain provider-controlled:
+
+```bash
+llm-hardtest doctor --config configs/codex-luna-round1.json
+llm-hardtest run --config configs/codex-luna-round1.json --progress dashboard
+```
+
+This configuration runs exactly the 20 Round 1 items once. It does not run Rounds
+2–4 or the Round 5 research pilot.
 
 When local configurations share one accelerator or server, run them serially so
 resource contention does not distort latency and timeout results.

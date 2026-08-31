@@ -27,7 +27,7 @@ Repository JSON maps directly to five logical tables:
 | Bundle | content-derived bundle ID | schema/tool version, environment, consent declaration |
 | Configuration | configuration ID | model, serving, hardware, generation settings |
 | Benchmark run | bundle + configuration + round + pack | aggregate status counts and bundle-level rates |
-| Item observation | run + attempt + item | status, wall seconds, completion tokens |
+| Item observation | run + attempt + item | status, wall seconds, measured completion tokens |
 | Pilot attempt | bundle + configuration + pilot + attempt | authority, revision, tests, release, report, protocol |
 
 Prompts, responses, transcripts, patches, error messages, endpoint URLs, credentials,

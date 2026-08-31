@@ -259,6 +259,57 @@ class ProgressTests(unittest.TestCase):
 
 
 class BackendTests(unittest.TestCase):
+    def test_codex_completion_uses_structured_output_tokens(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            backend = CodexBackend({
+                "key": "m", "model": "gpt-test", "codex_provider": "openai",
+            }, Path(tmp))
+            commands = []
+
+            def successful_run(command, **_kwargs):
+                commands.append(command)
+                Path(command[command.index("-o") + 1]).write_text(
+                    "ANSWER: 42", encoding="utf-8")
+                events = (
+                    'diagnostic before JSON\n'
+                    '{"type":"turn.completed","usage":{"input_tokens":120,'
+                    '"cached_input_tokens":80,"output_tokens":7,'
+                    '"reasoning_output_tokens":3}}\n')
+                return type("Process", (), {
+                    "returncode": 0, "stdout": events, "stderr": "",
+                })()
+
+            with patch("subprocess.run", side_effect=successful_run):
+                result = backend.complete(
+                    [{"role": "user", "content": "test"}], 10)
+        self.assertIn("--json", commands[0])
+        self.assertEqual(result["prompt_tokens"], 120)
+        self.assertEqual(result["cached_input_tokens"], 80)
+        self.assertEqual(result["completion_tokens"], 7)
+        self.assertEqual(result["reasoning_output_tokens"], 3)
+        self.assertEqual(result["total_tokens"], 127)
+        self.assertEqual(result["token_measurement"], "completion")
+
+    def test_codex_legacy_total_is_not_completion_tokens(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            backend = CodexBackend({
+                "key": "m", "model": "gpt-test", "codex_provider": "openai",
+            }, Path(tmp))
+
+            def legacy_run(command, **_kwargs):
+                Path(command[command.index("-o") + 1]).write_text(
+                    "ANSWER: 42", encoding="utf-8")
+                return type("Process", (), {
+                    "returncode": 0, "stdout": "tokens used\n12,345\n", "stderr": "",
+                })()
+
+            with patch("subprocess.run", side_effect=legacy_run):
+                result = backend.complete(
+                    [{"role": "user", "content": "test"}], 10)
+        self.assertIsNone(result["completion_tokens"])
+        self.assertEqual(result["total_tokens"], 12345)
+        self.assertEqual(result["token_measurement"], "unavailable")
+
     def test_custom_codex_home_does_not_persist_real_key(self):
         with tempfile.TemporaryDirectory() as tmp:
             with patch.dict(os.environ, {"AUDIT_API_KEY": "real-secret"}):
@@ -2393,6 +2444,29 @@ class PublicResultTests(unittest.TestCase):
         }])
         self.assertFalse(warnings)
         self.assertEqual(loaded, payload)
+
+    def test_public_export_quarantines_legacy_codex_total_tokens(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "run"
+            self._run(root)
+            config = load_json(root / "config.json")
+            config["models"][0].update({
+                "transport": "codex_cli", "codex_provider": "openai",
+            })
+            save_json(root / "config.json", config)
+            payload, warnings = build_public_result(root)
+            self.assertIsNone(
+                payload["models"][0]["rounds"]["1"]["items"][0]["tokens"])
+            self.assertTrue(any("total-token" in warning for warning in warnings))
+
+            result_path = root / "private-user-key/round1/attempt-1/result.json"
+            result = load_json(result_path)
+            result["results"][0]["token_measurement"] = "completion"
+            save_json(result_path, result)
+            payload, warnings = build_public_result(root)
+            self.assertEqual(
+                payload["models"][0]["rounds"]["1"]["items"][0]["tokens"], 20)
+            self.assertFalse(any("total-token" in warning for warning in warnings))
 
     def test_private_model_path_is_replaced(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -30,6 +30,43 @@ class Backend:
         raise NotImplementedError
 
 
+def _codex_json_usage(transcript: str) -> dict | None:
+    """Return the last complete Codex JSONL usage event, if one exists.
+
+    The legacy human-readable ``tokens used`` footer is a total-token value.  It
+    must never be relabelled as completion tokens because doing so corrupts
+    throughput comparisons.  Recent Codex versions expose the required split in
+    a ``turn.completed`` JSON event when invoked with ``--json``.
+    """
+    found = None
+    for line in (transcript or "").splitlines():
+        if not line.lstrip().startswith("{"):
+            continue
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(event, dict):
+            continue
+        usage = event.get("usage") if event.get("type") == "turn.completed" else None
+        if not isinstance(usage, dict):
+            continue
+        required = {"input_tokens", "cached_input_tokens", "output_tokens"}
+        if not required.issubset(usage):
+            continue
+        if any(isinstance(usage[key], bool) or not isinstance(usage[key], int)
+               or usage[key] < 0 for key in required):
+            continue
+        reasoning = usage.get("reasoning_output_tokens")
+        if (reasoning is not None and (isinstance(reasoning, bool)
+                or not isinstance(reasoning, int) or reasoning < 0)):
+            continue
+        found = {key: usage[key] for key in sorted(required)}
+        if reasoning is not None:
+            found["reasoning_output_tokens"] = reasoning
+    return found
+
+
 class OpenAICompatBackend(Backend):
     """Call the OpenAI-compatible Chat Completions API using the stdlib."""
 
@@ -90,6 +127,10 @@ class OpenAICompatBackend(Backend):
             "wall": round(time.time() - started, 3),
             "prompt_tokens": usage.get("prompt_tokens"),
             "completion_tokens": usage.get("completion_tokens"),
+            "token_measurement": (
+                "completion" if isinstance(usage.get("completion_tokens"), int)
+                and not isinstance(usage.get("completion_tokens"), bool)
+                else "unavailable"),
             "finish_reason": choice.get("finish_reason"),
             "raw_usage": usage,
             "provider_diagnostics": diagnostics,
@@ -140,7 +181,7 @@ class CodexBackend(Backend):
         last = self.state_dir / f'last-{self.model["key"]}-{time.time_ns()}.txt'
         cmd = ["codex", "exec", "-m", self.model["model"], "-C", str(work),
                "-s", "read-only", "--skip-git-repo-check", "--ephemeral",
-               "-c", 'approval_policy="never"', "-o", str(last)]
+               "--json", "-c", 'approval_policy="never"', "-o", str(last)]
         effort = self.model.get("reasoning_effort")
         if effort:
             cmd += ["-c", f'model_reasoning_effort="{effort}"']
@@ -157,7 +198,9 @@ class CodexBackend(Backend):
             raise BackendError(f"codex timed out after {timeout}s") from exc
         transcript = (proc.stdout or "") + (proc.stderr or "")
         content = last.read_text(encoding="utf-8", errors="replace") if last.exists() else ""
-        tokens = re.findall(r"tokens used[:\s]*\n?\s*([\d,]+)", transcript, re.I)
+        usage = _codex_json_usage(transcript)
+        legacy_total = re.findall(
+            r"tokens used[:\s]*\n?\s*([\d,]+)", transcript, re.I)
         if proc.returncode != 0:
             raise BackendError(f"codex exited {proc.returncode}: {transcript[-500:]}")
         if not content.strip():
@@ -165,8 +208,16 @@ class CodexBackend(Backend):
         return {
             "content": content,
             "wall": round(time.time() - started, 3),
-            "prompt_tokens": None,
-            "completion_tokens": int(tokens[-1].replace(",", "")) if tokens else None,
+            "prompt_tokens": usage.get("input_tokens") if usage else None,
+            "completion_tokens": usage.get("output_tokens") if usage else None,
+            "cached_input_tokens": usage.get("cached_input_tokens") if usage else None,
+            "reasoning_output_tokens": (
+                usage.get("reasoning_output_tokens") if usage else None),
+            "total_tokens": (
+                usage["input_tokens"] + usage["output_tokens"] if usage else
+                int(legacy_total[-1].replace(",", "")) if legacy_total else None),
+            "token_measurement": "completion" if usage else "unavailable",
+            "raw_usage": usage or {},
             "finish_reason": "stop" if proc.returncode == 0 else f"exit-{proc.returncode}",
             "transcript": transcript,
         }

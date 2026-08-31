@@ -92,6 +92,12 @@ and does not modify the user's normal Codex configuration.
 This uses the existing Codex authentication. Model availability and usage charges are
 controlled by that provider, not by this repository.
 
+For Rounds 1–3 the harness invokes Codex with JSONL events and records
+`usage.output_tokens` as completion tokens. The older human-readable `tokens used`
+footer is a total-token count, so legacy Codex runs without structured usage keep
+public completion-token throughput empty rather than publishing a misleading rate.
+Latency and correctness from those runs remain usable.
+
 ## API keys
 
 `api_key_env` names an environment variable; it is not the key itself. Example:

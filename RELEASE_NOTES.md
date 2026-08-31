@@ -1,10 +1,21 @@
-# Release Notes — 2.24.0
+# Release Notes — 2.25.0
 
-This repository is ready to publish as `rannte85/llm-hardtest-report`. It contains no campaign
-outputs, credentials, local model files, personal filesystem paths, or generated
-Python caches.
+This repository is ready to publish as `rannte85/llm-hardtest-report`. It contains no raw
+campaign outputs, credentials, local model files, personal filesystem paths, or
+generated Python caches. The included Luna result is the allowlist-only public bundle,
+not its prompts, responses, transcripts, account details, or local run directory.
 
 The release validation covers:
+
+- one live signed-in Codex `gpt-5.6-luna` Round 1 control with 20/20 scored items,
+  146.389 seconds total item wall time, no incomplete items, and no infrastructure
+  errors, plus an included reusable one-round configuration;
+- structured Codex JSONL usage parsing that keeps input, cached-input, output,
+  reasoning-output, and total token meanings separate;
+- quarantine of legacy Codex total-token footers from public completion-token
+  throughput, while retaining their valid correctness and latency observations;
+- a validated sanitized Luna submission, regenerated community index, JSON/SQLite
+  parity, and explicit sparse-evidence readiness gaps without predictive authorization;
 
 - executable predictive-serving readiness audits over canonical JSON and verified
   SQLite, with identical privacy-preserving results;

@@ -1,0 +1,190 @@
+{
+    "benchmark": {
+        "packs": {
+            "1": "sha256:813ba579e28fea1c77650448dbe4254041841a1d89d4c4314dbc7d7155aa6634"
+        },
+        "rounds": [
+            1
+        ]
+    },
+    "bundle_id": "sha256:4f9b6d36da9c9e4fb35be84b092eb7d64d9ce1e8e7da9d3fef8c03cc3d061970",
+    "environment": {
+        "architecture": "arm64",
+        "os": "Darwin",
+        "python": "3.14"
+    },
+    "models": [
+        {
+            "parameters": {
+                "reasoning_effort": "medium"
+            },
+            "public_metadata": {},
+            "public_name": "gpt-5.6-luna",
+            "rounds": {
+                "1": {
+                    "attempts": 1,
+                    "incomplete": 0,
+                    "infrastructure_errors": 0,
+                    "items": [
+                        {
+                            "attempt": 1,
+                            "item": "q1",
+                            "status": "PASS",
+                            "tokens": null,
+                            "wall_seconds": 6.869
+                        },
+                        {
+                            "attempt": 1,
+                            "item": "q2",
+                            "status": "PASS",
+                            "tokens": null,
+                            "wall_seconds": 10.288
+                        },
+                        {
+                            "attempt": 1,
+                            "item": "q3",
+                            "status": "PASS",
+                            "tokens": null,
+                            "wall_seconds": 5.744
+                        },
+                        {
+                            "attempt": 1,
+                            "item": "q4",
+                            "status": "PASS",
+                            "tokens": null,
+                            "wall_seconds": 6.712
+                        },
+                        {
+                            "attempt": 1,
+                            "item": "q5",
+                            "status": "PASS",
+                            "tokens": null,
+                            "wall_seconds": 4.144
+                        },
+                        {
+                            "attempt": 1,
+                            "item": "q6",
+                            "status": "PASS",
+                            "tokens": null,
+                            "wall_seconds": 6.596
+                        },
+                        {
+                            "attempt": 1,
+                            "item": "q7",
+                            "status": "PASS",
+                            "tokens": null,
+                            "wall_seconds": 29.419
+                        },
+                        {
+                            "attempt": 1,
+                            "item": "q8",
+                            "status": "PASS",
+                            "tokens": null,
+                            "wall_seconds": 5.359
+                        },
+                        {
+                            "attempt": 1,
+                            "item": "q9",
+                            "status": "PASS",
+                            "tokens": null,
+                            "wall_seconds": 6.144
+                        },
+                        {
+                            "attempt": 1,
+                            "item": "q10",
+                            "status": "PASS",
+                            "tokens": null,
+                            "wall_seconds": 6.489
+                        },
+                        {
+                            "attempt": 1,
+                            "item": "q11",
+                            "status": "PASS",
+                            "tokens": null,
+                            "wall_seconds": 5.105
+                        },
+                        {
+                            "attempt": 1,
+                            "item": "q12",
+                            "status": "PASS",
+                            "tokens": null,
+                            "wall_seconds": 4.557
+                        },
+                        {
+                            "attempt": 1,
+                            "item": "q13",
+                            "status": "PASS",
+                            "tokens": null,
+                            "wall_seconds": 4.967
+                        },
+                        {
+                            "attempt": 1,
+                            "item": "q14",
+                            "status": "PASS",
+                            "tokens": null,
+                            "wall_seconds": 6.867
+                        },
+                        {
+                            "attempt": 1,
+                            "item": "q15",
+                            "status": "PASS",
+                            "tokens": null,
+                            "wall_seconds": 4.468
+                        },
+                        {
+                            "attempt": 1,
+                            "item": "q16",
+                            "status": "PASS",
+                            "tokens": null,
+                            "wall_seconds": 9.258
+                        },
+                        {
+                            "attempt": 1,
+                            "item": "q17",
+                            "status": "PASS",
+                            "tokens": null,
+                            "wall_seconds": 5.131
+                        },
+                        {
+                            "attempt": 1,
+                            "item": "q18",
+                            "status": "PASS",
+                            "tokens": null,
+                            "wall_seconds": 6.625
+                        },
+                        {
+                            "attempt": 1,
+                            "item": "q19",
+                            "status": "PASS",
+                            "tokens": null,
+                            "wall_seconds": 6.339
+                        },
+                        {
+                            "attempt": 1,
+                            "item": "q20",
+                            "status": "PASS",
+                            "tokens": null,
+                            "wall_seconds": 5.308
+                        }
+                    ],
+                    "manual_review": 0,
+                    "mean_wall_seconds": 146.39,
+                    "passed": 20,
+                    "total": 20
+                }
+            },
+            "transport": "codex_cli"
+        }
+    ],
+    "privacy": {
+        "credentials_included": false,
+        "local_paths_included": false,
+        "raw_artifacts_included": false,
+        "submission_mode": "explicit-opt-in"
+    },
+    "schema_version": 2,
+    "tool": {
+        "name": "llm-hardtest-report",
+        "version": "2.24.0"
+    }
+}

@@ -5,6 +5,22 @@ out separately from harness features.
 
 ## Unreleased
 
+## 2.25.0 — 2026-09-01
+
+- Added a reusable signed-in Codex `gpt-5.6-luna` configuration restricted to one
+  repetition of Round 1 and verified it against the live provider.
+- Recorded the first sanitized Luna community observation: 20/20 scored items,
+  146.389 seconds total item wall time, and zero incomplete or infrastructure-invalid
+  items on the published Round 1 pack.
+- Switched Codex text completions to JSONL usage events and now distinguish input,
+  cached-input, output, reasoning-output, and total token measurements.
+- Stopped treating the human-readable Codex `tokens used` total as completion tokens;
+  legacy totals are excluded from public throughput evidence with an explicit warning.
+- Added adversarial controls for structured Codex usage extraction, legacy fallback,
+  and public-export token quarantine while preserving correctness and latency evidence.
+- Kept canonical benchmark content, grading, public result schema v2, SQLite schema v2,
+  and all predictive-readiness safeguards unchanged.
+
 ## 2.24.0 — 2026-09-01
 
 - Added `results readiness` to audit the observable data-design gates required before

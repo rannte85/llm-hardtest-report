@@ -694,3 +694,33 @@ Acceptance checks:
   threshold boundary fail cleanly without output mutation.
 - Runtime fields exactly match the public schema, outputs contain no bundle/contributor
   identity, and source plus installed-package CI exercise an empty database audit.
+
+## Phase 25 — Codex control provenance and live Luna observation
+
+Goal: use a cloud control without allowing ambiguous provider counters to contaminate
+serving-throughput comparisons, and retain one sanitized real-model observation.
+
+Deliverables:
+
+1. Add a reusable signed-in Codex configuration restricted to one Round 1 repetition.
+2. Run and inspect the exact `gpt-5.6-luna` control, preserving raw evidence only in
+   the ignored local run directory.
+3. Parse Codex JSONL completion usage into separate input, cached-input, output,
+   reasoning-output, and total measurements.
+4. Exclude legacy Codex `tokens used` totals from completion-throughput evidence and
+   emit an explicit export warning instead of silently relabeling the value.
+5. Publish only the allowlist-sanitized Luna result and verify canonical JSON, SQLite,
+   catalog, index, and readiness behavior with missing throughput.
+
+Acceptance checks:
+
+- Live `doctor` resolves `gpt-5.6-luna`, and one Round 1 run completes 20/20 with no
+  incomplete or infrastructure-invalid items.
+- A mixed diagnostic/JSONL transcript recovers exact structured output tokens; an old
+  total-only transcript leaves completion tokens unavailable.
+- A legacy Codex run exports `tokens: null` for every item and reports the quarantine,
+  while an explicitly measured completion-token row remains publishable.
+- The Luna public bundle contains no raw output, transcript, credential, endpoint, or
+  local path, validates under schema v2, and produces equal JSON/SQLite catalog data.
+- Readiness counts one accuracy and latency bundle but zero throughput bundles and
+  remains `EVIDENCE_GAPS` with predictive authorization false.

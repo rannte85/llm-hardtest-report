@@ -249,3 +249,32 @@ Acceptance checks:
 - Equal cluster weighting can resist a bulk duplicate cluster that reverses the raw
   point estimate.
 - Existing runs and schema-v2 community submissions remain readable.
+
+## Phase 10 — Item dependency and diversity evidence
+
+Goal: detect when a benchmark appears broad only because several items reproduce the
+same empirical outcome pattern, without confusing correlation with proof of duplicate
+meaning.
+
+Deliverables:
+
+1. Evaluate every scored item pair with raw outcome agreement and binary phi
+   correlation.
+2. Give every local attempt or community bundle equal cluster weight and expose raw
+   values when repeated rows change the conclusion.
+3. Bootstrap whole independent clusters and require the complete 95% interval beyond
+   `±0.8` before emitting a robust redundancy or opposing-pattern candidate.
+4. Keep all pairs in machine-readable analysis while limiting Markdown to the first
+   20 ranked review candidates.
+5. Treat every dependency result as a content-review candidate rather than an
+   automatic pack mutation.
+
+Acceptance checks:
+
+- Known duplicate, opposing, and independent synthetic outcome patterns separate.
+- Repeated calculations are byte-for-byte deterministic.
+- One bundle with 100 duplicate rows remains one independent unit and cannot unlock a
+  robust relationship.
+- Equal bundle weighting can reverse a raw redundancy point estimate created by a
+  bulk duplicate contribution.
+- Existing local runs and schema-v2 community submissions remain readable.

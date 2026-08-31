@@ -4,12 +4,12 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-**Current release: 2.9.0** — adds independent-cluster confidence intervals for item
-difficulty and corrected discrimination. Point estimates remain visible, but pack
-decisions now receive separate `ROBUST_USEFUL`, `ROBUST_NEGATIVE`, `UNCERTAIN`,
-`UNSTABLE`, ceiling/floor, or insufficient-evidence signals. Community analysis treats
-each accepted bundle—not its repeated attempts—as one independent unit. Canonical
-Round 1–4 questions and grading contracts are unchanged.
+**Current release: 2.10.0** — adds cluster-aware item dependency diagnostics. The
+analysis now detects pairs whose empirical outcomes overlap strongly, distinguishes
+positive redundancy candidates from opposing patterns, and requires the entire 95%
+cluster-bootstrap interval beyond a high threshold before emitting a robust candidate.
+Community analysis counts each accepted bundle—not its repeated rows—as one independent
+unit. Canonical Round 1–4 questions and grading contracts are unchanged.
 
 LLM Hardtest Report is a local-first command-line benchmark for comparing language
 models as reasoners, coding workers, and safe handoff agents. Point it at one or more
@@ -145,6 +145,10 @@ when the Holm-adjusted exact sign test is below 0.05 and a hierarchical bootstra
 both respondents and items excludes zero. Item diagnostics independently report raw and
 cluster-weighted corrected discrimination, bounded pass-rate intervals, and a bootstrap
 interval that must remain above the useful threshold before an item is robustly useful.
+Pairwise dependency diagnostics expose items that repeatedly produce the same or
+opposite outcome pattern, with raw and independent-cluster-weighted phi correlations.
+These are content-review candidates, never automatic deletion decisions; the JSON
+artifact retains every pair while Markdown shows at most 20 ranked candidates.
 `INCOMPLETE`, `REVIEW`, and `INVALID` remain
 separate and never become wrong answers. The analysis copies no prompts, raw responses,
 model identifiers, local paths, or credentials.

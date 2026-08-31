@@ -20,6 +20,8 @@ MIN_PAIR_ITEMS = 2
 MIN_COMPARISON_ITEMS = 5
 MIN_CONFIGURATION_RESPONDENTS = 5
 BOOTSTRAP_SAMPLES = 2_000
+ITEM_RELATIONSHIP_THRESHOLD = 0.5
+ITEM_REDUNDANCY_THRESHOLD = 0.8
 
 
 class _HashSampler:
@@ -392,6 +394,109 @@ def _item_discrimination_interval(pair_clusters: list[list[tuple[float, float]]]
     }
 
 
+def _item_relationships(matrix: dict, clusters: dict | None = None) -> list[dict]:
+    """Measure empirical item overlap without treating repeated bundle rows as independent."""
+    item_ids = sorted({item for rows in matrix.values() for item in rows})
+    relationships = []
+    for left, right in combinations(item_ids, 2):
+        raw_pairs = []
+        pairs_by_cluster = defaultdict(list)
+        for respondent, rows in matrix.items():
+            if rows.get(left) not in SCORED or rows.get(right) not in SCORED:
+                continue
+            pair = (1.0 if rows[left] == "PASS" else 0.0,
+                    1.0 if rows[right] == "PASS" else 0.0)
+            raw_pairs.append(pair)
+            cluster = clusters.get(respondent, respondent) if clusters else respondent
+            pairs_by_cluster[cluster].append(pair)
+        raw_correlation = _correlation(
+            [pair[0] for pair in raw_pairs], [pair[1] for pair in raw_pairs])
+        cluster_rows = list(pairs_by_cluster.values())
+        clustered_correlation = _cluster_weighted_correlation(cluster_rows)
+        interval = (
+            _item_discrimination_interval(
+                cluster_rows, f"relationship:{left}:{right}")
+            if (len(cluster_rows) >= MIN_ITEM_INTERVAL_OBSERVATIONS
+                and clustered_correlation is not None
+                and abs(clustered_correlation) >= ITEM_REDUNDANCY_THRESHOLD)
+            else None)
+        raw_agreement = (statistics.mean(pair[0] == pair[1] for pair in raw_pairs)
+                         if raw_pairs else None)
+        cluster_agreement = (
+            statistics.mean(
+                statistics.mean(pair[0] == pair[1] for pair in cluster)
+                for cluster in cluster_rows)
+            if cluster_rows else None)
+
+        if len(raw_pairs) < MIN_ITEM_OBSERVATIONS:
+            classification = "INSUFFICIENT"
+        elif raw_correlation is None:
+            classification = "LOW_INFORMATION"
+        elif raw_correlation >= ITEM_REDUNDANCY_THRESHOLD:
+            classification = "REDUNDANCY_CANDIDATE"
+        elif raw_correlation <= -ITEM_REDUNDANCY_THRESHOLD:
+            classification = "OPPOSING_CANDIDATE"
+        elif abs(raw_correlation) >= ITEM_RELATIONSHIP_THRESHOLD:
+            classification = "RELATED"
+        else:
+            classification = "DISTINCT"
+
+        if len(cluster_rows) < MIN_ITEM_INTERVAL_OBSERVATIONS:
+            robust_classification = "INSUFFICIENT"
+        elif clustered_correlation is None:
+            robust_classification = "UNSTABLE"
+        elif abs(clustered_correlation) < ITEM_REDUNDANCY_THRESHOLD:
+            robust_classification = "UNCERTAIN"
+        elif interval is None:
+            robust_classification = "UNSTABLE"
+        elif (clustered_correlation is not None
+              and clustered_correlation >= ITEM_REDUNDANCY_THRESHOLD
+              and interval["low"] >= ITEM_REDUNDANCY_THRESHOLD):
+            robust_classification = "ROBUST_REDUNDANCY_CANDIDATE"
+        elif (clustered_correlation is not None
+              and clustered_correlation <= -ITEM_REDUNDANCY_THRESHOLD
+              and interval["high"] <= -ITEM_REDUNDANCY_THRESHOLD):
+            robust_classification = "ROBUST_OPPOSING_CANDIDATE"
+        else:
+            robust_classification = "UNCERTAIN"
+
+        relationships.append({
+            "left": left,
+            "right": right,
+            "common_scored": len(raw_pairs),
+            "independent_units": len(cluster_rows),
+            "outcome_agreement": (
+                round(raw_agreement, 6) if raw_agreement is not None else None),
+            "clustered_outcome_agreement": (
+                round(cluster_agreement, 6)
+                if cluster_agreement is not None else None),
+            "phi_correlation": (
+                round(raw_correlation, 6) if raw_correlation is not None else None),
+            "clustered_phi_correlation": (
+                round(clustered_correlation, 6)
+                if clustered_correlation is not None else None),
+            "correlation_interval95": interval,
+            "classification": classification,
+            "robust_classification": robust_classification,
+        })
+
+    robust_order = {
+        "ROBUST_REDUNDANCY_CANDIDATE": 0,
+        "ROBUST_OPPOSING_CANDIDATE": 1,
+        "UNCERTAIN": 2,
+        "UNSTABLE": 3,
+        "INSUFFICIENT": 4,
+    }
+
+    def ranking(row: dict) -> tuple:
+        correlation = row["clustered_phi_correlation"]
+        return (robust_order[row["robust_classification"]],
+                -abs(correlation) if correlation is not None else 0,
+                row["left"], row["right"])
+
+    return sorted(relationships, key=ranking)
+
+
 def _hierarchical_difference_interval(left_rows: list[dict], right_rows: list[dict],
                                       items: list[str], seed: str) -> dict | None:
     """Resample respondents and items so repeat instability enters the effect interval."""
@@ -575,8 +680,9 @@ def analyze_runs(run_dirs: list[Path]) -> dict:
             "configuration_comparisons": _configuration_comparisons(
                 matrix, group["models"], aliases),
             "items": _item_metrics(matrix),
+            "item_relationships": _item_relationships(matrix),
         })
-    return {"schema_version": 3, "source_runs": len(run_dirs), "groups": analyses}
+    return {"schema_version": 4, "source_runs": len(run_dirs), "groups": analyses}
 
 
 def _percent(value: float | None) -> str:
@@ -603,6 +709,7 @@ def render_analysis(analysis: dict) -> str:
     for group in analysis["groups"]:
         pairwise = group["pairwise"]
         comparisons = group["configuration_comparisons"]
+        relationships = group["item_relationships"]
         decisive = sum(row["classification"] in {"LEFT_HIGHER", "RIGHT_HIGHER"}
                        for row in comparisons)
         lines += [
@@ -671,6 +778,36 @@ def render_analysis(analysis: dict) -> str:
                 f"{item['classification']} | {item['robust_classification']} | "
                 f"{item['incomplete']} | {item['review']} | {item['invalid']} | "
                 f"{item['missing']} |")
+        candidates = [row for row in relationships
+                      if row["classification"] in {
+                          "REDUNDANCY_CANDIDATE", "OPPOSING_CANDIDATE", "RELATED"}
+                      or row["robust_classification"] in {
+                          "ROBUST_REDUNDANCY_CANDIDATE",
+                          "ROBUST_OPPOSING_CANDIDATE"}]
+        displayed = candidates[:20]
+        robust_redundant = sum(
+            row["robust_classification"] == "ROBUST_REDUNDANCY_CANDIDATE"
+            for row in relationships)
+        lines += [
+            "", "### Item dependency diagnostics", "",
+            f"Empirical relationship candidates: **{len(candidates)}/{len(relationships)}**; "
+            f"robust redundancy candidates: **{robust_redundant}**.", "",
+            "| Items | Common | Independent units | Agreement raw / clustered | Phi raw | Clustered phi [95%] | Observed | Robust |",
+            "|---|---:|---:|---:|---:|---:|---|---|",
+        ]
+        for row in displayed:
+            lines.append(
+                f"| {row['left']} ↔ {row['right']} | {row['common_scored']} | "
+                f"{row['independent_units']} | {_percent(row['outcome_agreement'])} / "
+                f"{_percent(row['clustered_outcome_agreement'])} | "
+                f"{row['phi_correlation'] if row['phi_correlation'] is not None else 'n/a'} | "
+                f"{_estimate_interval(row['clustered_phi_correlation'], row['correlation_interval95'])} | "
+                f"{row['classification']} | {row['robust_classification']} |")
+        if len(candidates) > len(displayed):
+            lines += ["", f"The table shows the first {len(displayed)} ranked candidates; "
+                      "the JSON artifact retains every item pair."]
+        if not displayed:
+            lines.append("| none | 0 | 0 | n/a | n/a | n/a | n/a | n/a |")
         lines += ["",]
     lines += [
         "## Interpretation", "",
@@ -685,6 +822,12 @@ def render_analysis(analysis: dict) -> str:
         "- `ROBUST_USEFUL` requires the discrimination interval to stay at or above 0.15;",
         "  `ROBUST_NEGATIVE` requires it to remain below zero. Other non-extreme items are",
         "  `UNCERTAIN` or `UNSTABLE`, so point estimates alone cannot drive pack changes.",
+        f"- Item dependency candidates use phi correlation. `{ITEM_REDUNDANCY_THRESHOLD}` is",
+        "  a deliberately high empirical-overlap threshold, not proof that two prompts test",
+        "  the same construct. Robust candidates require the entire cluster-bootstrap interval",
+        "  beyond that threshold and still require content review before removal.",
+        "- Opposing candidates may reveal complementary skills, ambiguity, or grader polarity.",
+        "  The Markdown table is capped at 20 candidates; JSON retains every pair.",
         f"- Pair comparisons require at least {MIN_PAIR_ITEMS} commonly scored items.",
         "- Between-configuration disagreement measures observed separation. Within-configuration",
         "  disagreement measures repeat instability. Net separation requires both.",

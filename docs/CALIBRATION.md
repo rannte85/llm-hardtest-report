@@ -65,6 +65,32 @@ both an extreme cluster-weighted pass rate and a cluster interval beyond the 80%
 Everything else remains `UNCERTAIN`, `UNSTABLE`, or `INSUFFICIENT`; point estimates
 alone should not cause a benchmark-pack change.
 
+## Item dependency and test diversity
+
+The analyzer also evaluates every scored item pair using the phi correlation of their
+binary outcomes. This answers a different question from corrected item-total
+discrimination: whether two items repeatedly contribute nearly the same empirical
+response pattern.
+
+- Raw phi and outcome agreement treat every respondent row equally.
+- Clustered phi and agreement give every local attempt or accepted community bundle
+  equal total weight.
+- `REDUNDANCY_CANDIDATE` and `OPPOSING_CANDIDATE` are observed point signals at
+  correlations of at least `0.8` or at most `-0.8`.
+- `ROBUST_REDUNDANCY_CANDIDATE` and `ROBUST_OPPOSING_CANDIDATE` require at least ten
+  independent clusters and the complete deterministic 95% bootstrap interval beyond
+  the same threshold.
+- Relationships with absolute correlation from `0.5` to `0.8` are shown as `RELATED`;
+  weaker observed relationships are retained as `DISTINCT` in JSON.
+
+The Markdown report shows at most 20 ranked candidates; the JSON artifact preserves
+every pair. A high empirical correlation is not proof of duplicate meaning. It may
+reflect a shared capability, prerequisite chain, contamination, grader coupling, or a
+narrow sample. Likewise, a strong negative relationship can reveal complementary
+skills rather than an error. Always inspect task content and grader behavior before
+changing a pack. The thresholds are deliberately conservative descriptive review
+gates and do not correct for every possible exploratory comparison.
+
 ## Configuration separation and repeat stability
 
 For every respondent pair sharing at least two scored items, the analyzer measures

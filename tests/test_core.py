@@ -37,7 +37,7 @@ from llm_hardtest.community_results import (
     render_index, render_pilot_index,
 )
 from llm_hardtest.calibration import (
-    _configuration_comparisons, _item_metrics,
+    _configuration_comparisons, _item_metrics, _item_relationships,
     analyze_runs, render_analysis, write_analysis,
 )
 from llm_hardtest.pilot_analysis import analyze_pilots, write_pilot_analysis
@@ -1367,6 +1367,79 @@ class CalibrationTests(unittest.TestCase):
         self.assertEqual(item["independent_units"], 10)
         self.assertEqual(item["robust_classification"], "ROBUST_USEFUL")
 
+    def test_item_relationships_separate_redundant_opposing_and_distinct_pairs(self):
+        matrix = {}
+        for respondent in range(30):
+            base = respondent >= 15
+            alternating = respondent % 2 == 0
+            matrix[(respondent,)] = {
+                "base": "PASS" if base else "FAIL",
+                "duplicate": "PASS" if base else "FAIL",
+                "opposite": "FAIL" if base else "PASS",
+                "distinct": "PASS" if alternating else "FAIL",
+            }
+        first = {(row["left"], row["right"]): row
+                 for row in _item_relationships(matrix)}
+        second = {(row["left"], row["right"]): row
+                  for row in _item_relationships(matrix)}
+
+        self.assertEqual(first, second)
+        duplicate = first[("base", "duplicate")]
+        self.assertEqual(duplicate["phi_correlation"], 1.0)
+        self.assertEqual(duplicate["robust_classification"],
+                         "ROBUST_REDUNDANCY_CANDIDATE")
+        self.assertGreaterEqual(duplicate["correlation_interval95"]["low"], 0.8)
+        opposite = first[("base", "opposite")]
+        self.assertEqual(opposite["phi_correlation"], -1.0)
+        self.assertEqual(opposite["robust_classification"],
+                         "ROBUST_OPPOSING_CANDIDATE")
+        self.assertLessEqual(opposite["correlation_interval95"]["high"], -0.8)
+        self.assertEqual(first[("base", "distinct")]["classification"], "DISTINCT")
+
+    def test_item_relationships_do_not_count_repeated_bundle_rows_as_independent(self):
+        matrix, clusters = {}, {}
+        for attempt in range(100):
+            respondent = ("one-bundle", attempt)
+            outcome = attempt % 2 == 0
+            matrix[respondent] = {
+                "left": "PASS" if outcome else "FAIL",
+                "right": "PASS" if outcome else "FAIL",
+            }
+            clusters[respondent] = "bundle-1"
+        relationship = _item_relationships(matrix, clusters)[0]
+
+        self.assertEqual(relationship["common_scored"], 100)
+        self.assertEqual(relationship["independent_units"], 1)
+        self.assertEqual(relationship["classification"], "REDUNDANCY_CANDIDATE")
+        self.assertEqual(relationship["robust_classification"], "INSUFFICIENT")
+        self.assertIsNone(relationship["correlation_interval95"])
+
+    def test_item_relationships_equal_cluster_weight_resists_bulk_duplicates(self):
+        matrix, clusters = {}, {}
+        for attempt in range(100):
+            respondent = ("bulk", attempt)
+            outcome = attempt % 2 == 0
+            matrix[respondent] = {
+                "left": "PASS" if outcome else "FAIL",
+                "right": "PASS" if outcome else "FAIL",
+            }
+            clusters[respondent] = "bundle-0"
+        for bundle in range(1, 10):
+            respondent = ("single", bundle)
+            outcome = bundle % 2 == 0
+            matrix[respondent] = {
+                "left": "PASS" if outcome else "FAIL",
+                "right": "FAIL" if outcome else "PASS",
+            }
+            clusters[respondent] = f"bundle-{bundle}"
+
+        relationship = _item_relationships(matrix, clusters)[0]
+        self.assertGreater(relationship["phi_correlation"], 0.5)
+        self.assertLess(relationship["clustered_phi_correlation"], -0.5)
+        self.assertEqual(relationship["independent_units"], 10)
+        self.assertEqual(relationship["classification"], "REDUNDANCY_CANDIDATE")
+        self.assertEqual(relationship["robust_classification"], "UNCERTAIN")
+
     def test_calibration_proves_directional_configuration_separation(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -1394,7 +1467,7 @@ class CalibrationTests(unittest.TestCase):
             analysis = analyze_runs(runs)
             rendered = render_analysis(analysis)
 
-        self.assertEqual(analysis["schema_version"], 3)
+        self.assertEqual(analysis["schema_version"], 4)
         group = analysis["groups"][0]
         self.assertEqual(
             [(row["configuration"], row["sources"], row["respondents"])
@@ -1953,8 +2026,14 @@ class PublicResultTests(unittest.TestCase):
         self.assertEqual(items["q4"]["independent_units"], 1)
         self.assertEqual(items["q4"]["robust_classification"], "INSUFFICIENT")
         self.assertIsNone(items["q4"]["discrimination_interval95"])
+        relationships = diagnostics[0]["item_relationships"]
+        self.assertEqual(len(relationships), 15)
+        self.assertEqual({row["independent_units"] for row in relationships}, {0, 1})
+        self.assertEqual({row["robust_classification"] for row in relationships},
+                         {"INSUFFICIENT"})
         document = render_index([payload])
         self.assertIn("Community Item Diagnostics", document)
+        self.assertIn("Community item dependency candidates", document)
         self.assertIn("Corrected discrimination", document)
         self.assertIn("Independent bundles", document)
         self.assertIn("Robust", document)

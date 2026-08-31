@@ -37,6 +37,9 @@ Statistical views must retain the bundle key as the uncertainty cluster. Item-le
 rows may be numerous, but one bundle contributes one total cluster weight to robust
 pass-rate and discrimination intervals. Raw observation-weighted estimates are kept
 for auditability and displayed separately when they disagree with bundle weighting.
+The same rule applies to item dependency diagnostics: repeated rows in one submission
+cannot manufacture a robust redundancy signal. Pairwise phi relationships are stored
+as review evidence, not as instructions to delete or merge benchmark items.
 
 ## What can be recommended
 

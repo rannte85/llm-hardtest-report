@@ -7,7 +7,9 @@ import statistics
 from collections import defaultdict
 from pathlib import Path
 
-from .calibration import _estimate_interval, _item_metrics, _pairwise_stability
+from .calibration import (
+    _estimate_interval, _item_metrics, _item_relationships, _pairwise_stability,
+)
 from .github_submit import submission_relative_path
 from .public_pilots import load_public_pilot_bundle
 from .public_results import load_public_bundle
@@ -192,6 +194,8 @@ def aggregate_item_diagnostics(submissions: list[dict]) -> list[dict]:
             "configurations": len(set(group["models"].values())),
             "pairwise": _pairwise_stability(group["matrix"], group["models"]),
             "items": _item_metrics(group["matrix"], group["clusters"]),
+            "item_relationships": _item_relationships(
+                group["matrix"], group["clusters"]),
         })
     return rows
 
@@ -288,6 +292,33 @@ def render_index(submissions: list[dict]) -> str:
                     f"{item['classification']} | {item['robust_classification']} | "
                     f"{item['incomplete']} | {item['review']} | "
                     f"{item['invalid']} | {item['missing']} |")
+            relationships = [
+                row for row in group["item_relationships"]
+                if row["classification"] in {
+                    "REDUNDANCY_CANDIDATE", "OPPOSING_CANDIDATE", "RELATED"}
+                or row["robust_classification"] in {
+                    "ROBUST_REDUNDANCY_CANDIDATE",
+                    "ROBUST_OPPOSING_CANDIDATE"}
+            ]
+            lines += [
+                "", "#### Community item dependency candidates", "",
+                "| Items | Common | Independent bundles | Agreement raw / bundle | Phi raw | Bundle phi [95%] | Observed | Robust |",
+                "|---|---:|---:|---:|---:|---:|---|---|",
+            ]
+            for row in relationships[:20]:
+                lines.append(
+                    f"| `{_cell(row['left'])}` ↔ `{_cell(row['right'])}` | "
+                    f"{row['common_scored']} | {row['independent_units']} | "
+                    f"{_percent(row['outcome_agreement'])} / "
+                    f"{_percent(row['clustered_outcome_agreement'])} | "
+                    f"{row['phi_correlation'] if row['phi_correlation'] is not None else 'n/a'} | "
+                    f"{_estimate_interval(row['clustered_phi_correlation'], row['correlation_interval95'])} | "
+                    f"{row['classification']} | {row['robust_classification']} |")
+            if not relationships:
+                lines.append("| none | 0 | 0 | n/a | n/a | n/a | n/a | n/a |")
+            if len(relationships) > 20:
+                lines += ["", "Only the first 20 ranked candidates are shown; validated "
+                          "machine-readable diagnostics retain every item pair."]
     lines += [
         "",
         f"Baselines appear only after at least {MIN_BASELINE_SUBMISSIONS} distinct accepted bundles",
@@ -296,7 +327,9 @@ def render_index(submissions: list[dict]) -> str:
         "raise the threshold. Brackets are Wilson-style 95% intervals across bundle rates,",
         "not item-level certainty. Item robust signals also use bundles as equal-weight",
         "clusters and require at least ten independent bundles; repeated attempts cannot",
-        "unlock them. Values are descriptive observations, not predictions",
+        "unlock them. Dependency diagnostics use the same bundle clustering and treat",
+        "high positive or negative phi relationships as content-review candidates, never",
+        "automatic deletion decisions. Values are descriptive observations, not predictions",
         "for an unseen model or a different runtime configuration.",
         "",
     ]

@@ -5,6 +5,21 @@ out separately from harness features.
 
 ## Unreleased
 
+## 2.10.0 — 2026-09-01
+
+- Added analysis-schema-v4 item dependency diagnostics with raw and independent-
+  cluster-weighted outcome agreement and phi correlation for every scored item pair.
+- Added deterministic cluster-bootstrap intervals and separate robust redundancy and
+  opposing-pattern review signals gated on ten independent units and a full interval
+  beyond `±0.8`.
+- Added dependency candidate tables to local calibration reports and community result
+  indexes, with all pairs retained in JSON and Markdown limited to 20 ranked rows.
+- Proved that repeated rows inside one public contribution cannot manufacture robust
+  dependency evidence and that bundle weighting can reverse a bulk-duplicate point
+  conclusion.
+- Kept dependency labels advisory: they never mutate a benchmark pack or claim that
+  correlated prompts measure the same latent construct.
+
 ## 2.9.0 — 2026-09-01
 
 - Added bounded independent-cluster pass-rate intervals and deterministic bootstrap

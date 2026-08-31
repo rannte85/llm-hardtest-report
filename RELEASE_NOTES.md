@@ -1,10 +1,23 @@
-# Release Notes — 2.9.0
+# Release Notes — 2.10.0
 
 This repository is ready to publish as `rannte85/llm-hardtest-report`. It contains no campaign
 outputs, credentials, local model files, personal filesystem paths, or generated
 Python caches.
 
 The release validation covers:
+
+- analysis schema v4 with pairwise item outcome agreement and phi correlation in both
+  raw observation-weighted and independent-cluster-weighted forms;
+- deterministic cluster-bootstrap intervals for empirical redundancy and opposing-
+  pattern candidates, with robust signals withheld below ten independent units;
+- a strict `±0.8` interval gate that prevents ordinary relatedness or a noisy point
+  estimate from becoming a pack-maintenance signal;
+- adversarial coverage proving that 100 repeated rows in one bundle cannot unlock a
+  robust relationship and that equal bundle weighting can reverse a bulk-duplicate
+  raw conclusion;
+- complete machine-readable pair retention with concise 20-row Markdown views and
+  explicit content-review requirements before any benchmark change;
+- unchanged public result schema v2 and canonical Round 1–4 grading contracts;
 
 - analysis schema v3 with raw and independent-cluster-weighted corrected item
   discrimination, bounded pass-rate intervals, and deterministic bootstrap intervals;

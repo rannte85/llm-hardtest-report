@@ -5,6 +5,22 @@ out separately from harness features.
 
 ## Unreleased
 
+## 2.12.0 — 2026-09-01
+
+- Added analysis-schema-v6 pair-specific item coverage for specialist tasks that
+  distinguish exact configuration pairs.
+- Added cluster-weighted item pass-rate effects with five-independent-unit gates on
+  both sides.
+- Added deterministic maximum-error bootstrap intervals simultaneous across every
+  eligible item in a configuration pair.
+- Added Bonferroni allocation across eligible configuration pairs and a practical
+  ten-percentage-point effect gate before directional labels.
+- Added item coverage summaries and concise decisive-split tables while retaining all
+  eligible pair/item results in JSON.
+- Preserved shared public-bundle dependence and prevented 100 repeated rows in one
+  bundle from unlocking a comparison.
+- Kept public schema v2 and canonical Round 1–4 content and grading unchanged.
+
 ## 2.11.0 — 2026-09-01
 
 - Added analysis-schema-v5 repeat-adjusted item separation, comparing equal-weight

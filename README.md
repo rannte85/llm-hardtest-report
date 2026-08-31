@@ -4,12 +4,12 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-**Current release: 2.11.0** — adds repeat-adjusted item separation. For every item, the
-analysis now compares outcome differences between exact model configurations with
-instability across repeats of those same configurations. Robust signals require at
-least five independent attempts or bundles for each of two configurations and a
-hierarchical 95% interval. Community analysis preserves shared bundle clustering.
-Canonical Round 1–4 questions and grading contracts are unchanged.
+**Current release: 2.12.0** — adds pair-specific item coverage. The analyzer can now
+find specialist items that reliably separate one exact configuration pair even when
+they do not align with a single overall ability axis. Maximum-error bootstrap intervals
+are simultaneous across every eligible item in a pair, and Bonferroni allocation across
+configuration pairs targets family-wise 95% coverage. Community draws preserve shared
+bundle dependence. Canonical Round 1–4 questions and grading contracts are unchanged.
 
 LLM Hardtest Report is a local-first command-line benchmark for comparing language
 models as reasoners, coding workers, and safe handoff agents. Point it at one or more
@@ -153,6 +153,11 @@ The report also identifies items whose between-configuration separation survives
 same-configuration repeat noise. It distinguishes stable separation, noise-dominated
 behavior, unanimous no-separation, uncertainty, and insufficient evidence instead of
 rewarding a large but irreproducible point difference.
+Pair-specific coverage then scans every configuration pair for specialist separating
+items. It reports a directional item only when at least five independent units exist
+per side, the family-wise simultaneous interval stays beyond zero, and the observed
+effect is at least ten percentage points. All eligible results remain in JSON while
+Markdown limits decisive details to 20 rows.
 `INCOMPLETE`, `REVIEW`, and `INVALID` remain
 separate and never become wrong answers. The analysis copies no prompts, raw responses,
 model identifiers, local paths, or credentials.

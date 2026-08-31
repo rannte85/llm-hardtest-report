@@ -8,7 +8,7 @@ from collections import defaultdict
 from pathlib import Path
 
 from .calibration import (
-    _estimate_interval, _item_metrics, _item_relationships,
+    _configuration_item_coverage, _estimate_interval, _item_metrics, _item_relationships,
     _item_repeat_separation, _pairwise_stability,
 )
 from .github_submit import submission_relative_path
@@ -199,6 +199,10 @@ def aggregate_item_diagnostics(submissions: list[dict]) -> list[dict]:
                 group["matrix"], group["clusters"]),
             "item_repeat_separation": _item_repeat_separation(
                 group["matrix"], group["models"], group["clusters"]),
+            "configuration_item_coverage": _configuration_item_coverage(
+                group["matrix"], group["models"],
+                {identity: identity for identity in set(group["models"].values())},
+                group["clusters"]),
         })
     return rows
 
@@ -337,6 +341,25 @@ def render_index(submissions: list[dict]) -> str:
                     f"{_percent(row['net_repeat_adjusted_separation'])} | "
                     f"{_estimate_interval(row['robust_net_repeat_adjusted_separation'], row['net_separation_interval95'], percent=True)} | "
                     f"{row['classification']} | {row['robust_classification']} |")
+            coverage = group["configuration_item_coverage"]
+            details = [(pair, item) for pair in coverage["comparisons"]
+                       for item in pair["items"]
+                       if item["classification"] in {"LEFT_HIGHER", "RIGHT_HIGHER"}]
+            lines += [
+                "", "#### Community pair-specific item coverage", "",
+                f"Eligible configuration pairs: **{coverage['eligible_configuration_pairs']}** · "
+                f"decisive item splits: **{len(details)}**", "",
+                "| Config pair | Item | Independent bundles | Pass-rate difference [simultaneous interval] | Result |",
+                "|---|---|---:|---:|---|",
+            ]
+            for pair, item in details[:20]:
+                lines.append(
+                    f"| `{pair['left']}` ↔ `{pair['right']}` | `{_cell(item['item'])}` | "
+                    f"{item['left_independent_units']}/{item['right_independent_units']} | "
+                    f"{_estimate_interval(item['pass_rate_difference'], item['simultaneous_interval'], percent=True)} | "
+                    f"{item['classification']} |")
+            if not details:
+                lines.append("| none | none | 0/0 | n/a | n/a |")
     lines += [
         "",
         f"Baselines appear only after at least {MIN_BASELINE_SUBMISSIONS} distinct accepted bundles",
@@ -350,7 +373,9 @@ def render_index(submissions: list[dict]) -> str:
         "automatic deletion decisions. Repeat-adjusted item diagnostics also require two",
         "configurations with repeated bundle evidence and subtract within-configuration",
         "instability from between-configuration separation. Values are descriptive",
-        "observations, not predictions",
+        "observations. Pair-specific coverage uses simultaneous maximum-error intervals",
+        "within each configuration pair and Bonferroni allocation across pairs; one bundle",
+        "is resampled once even if it contains both configurations. Values are not predictions",
         "for an unseen model or a different runtime configuration.",
         "",
     ]

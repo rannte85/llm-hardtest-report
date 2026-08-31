@@ -37,7 +37,8 @@ from llm_hardtest.community_results import (
     render_index, render_pilot_index,
 )
 from llm_hardtest.calibration import (
-    _configuration_comparisons, _item_metrics, _item_relationships,
+    _configuration_comparisons, _configuration_item_coverage,
+    _item_metrics, _item_relationships,
     _item_repeat_separation,
     analyze_runs, render_analysis, write_analysis,
 )
@@ -1524,6 +1525,93 @@ class CalibrationTests(unittest.TestCase):
         self.assertEqual(first[0]["net_separation_interval95"]["method"],
                          "shared_cluster_hierarchical_bootstrap_95")
 
+    def test_pair_specific_item_coverage_finds_stable_specialist_items(self):
+        matrix, models = {}, {}
+        for configuration in ("a", "b"):
+            for attempt in range(10):
+                respondent = (configuration, attempt)
+                models[respondent] = configuration
+                matrix[respondent] = {
+                    "specialist": "PASS" if configuration == "a" else "FAIL",
+                    "shared": "PASS" if attempt % 2 == 0 else "FAIL",
+                }
+        coverage = _configuration_item_coverage(
+            matrix, models, {"a": "C1", "b": "C2"})
+        pair = coverage["comparisons"][0]
+        items = {row["item"]: row for row in pair["items"]}
+
+        self.assertEqual(pair["classification"], "SEPARATING")
+        self.assertEqual(items["specialist"]["classification"], "LEFT_HIGHER")
+        self.assertGreaterEqual(
+            items["specialist"]["simultaneous_interval"]["low"], 0.1)
+        self.assertEqual(items["specialist"]["simultaneous_interval"]["high"], 1.0)
+        self.assertEqual(items["shared"]["classification"], "UNCERTAIN")
+        self.assertEqual(coverage["item_coverage"][0]["item"], "specialist")
+        self.assertEqual(coverage["item_coverage"][0]["decisive_configuration_pairs"], 1)
+
+    def test_pair_specific_item_coverage_controls_a_noisy_item_family(self):
+        matrix, models = {}, {}
+        for configuration in ("a", "b"):
+            for attempt in range(20):
+                respondent = (configuration, attempt)
+                models[respondent] = configuration
+                matrix[respondent] = {
+                    f"q{item}": "PASS" if (attempt + item) % 2 == 0 else "FAIL"
+                    for item in range(20)
+                }
+        pair = _configuration_item_coverage(
+            matrix, models, {"a": "C1", "b": "C2"})["comparisons"][0]
+        self.assertEqual(pair["eligible_items"], 20)
+        self.assertEqual(pair["decisive_items"], 0)
+        self.assertEqual(pair["classification"], "UNCERTAIN")
+        self.assertEqual({row["classification"] for row in pair["items"]},
+                         {"UNCERTAIN"})
+
+    def test_pair_specific_item_coverage_allocates_error_across_config_pairs(self):
+        matrix, models = {}, {}
+        for configuration in ("a", "b", "c"):
+            for attempt in range(5):
+                respondent = (configuration, attempt)
+                models[respondent] = configuration
+                matrix[respondent] = {
+                    "q": "FAIL" if configuration == "b" else "PASS"}
+        coverage = _configuration_item_coverage(
+            matrix, models, {"a": "C1", "b": "C2", "c": "C3"})
+        self.assertEqual(coverage["eligible_configuration_pairs"], 3)
+        self.assertEqual(coverage["bonferroni_familywise_alpha"], 0.01666667)
+        self.assertEqual({pair["familywise_alpha"]
+                          for pair in coverage["comparisons"]}, {0.01666667})
+
+    def test_pair_specific_item_coverage_uses_shared_bundle_clusters(self):
+        matrix, models, clusters = {}, {}, {}
+        for attempt in range(100):
+            for configuration, outcome in (("a", True), ("b", False)):
+                respondent = ("bulk", configuration, attempt)
+                matrix[respondent] = {"q": "PASS" if outcome else "FAIL"}
+                models[respondent] = configuration
+                clusters[respondent] = "bundle-0"
+        sparse = _configuration_item_coverage(
+            matrix, models, {"a": "a", "b": "b"}, clusters)
+        self.assertEqual(sparse["eligible_configuration_pairs"], 0)
+        self.assertEqual(sparse["comparisons"][0]["classification"], "INSUFFICIENT")
+
+        matrix, models, clusters = {}, {}, {}
+        for bundle in range(10):
+            for configuration, outcome in (("a", True), ("b", False)):
+                respondent = (bundle, configuration)
+                matrix[respondent] = {"q": "PASS" if outcome else "FAIL"}
+                models[respondent] = configuration
+                clusters[respondent] = f"bundle-{bundle}"
+        first = _configuration_item_coverage(
+            matrix, models, {"a": "a", "b": "b"}, clusters)
+        second = _configuration_item_coverage(
+            matrix, models, {"a": "a", "b": "b"}, clusters)
+        self.assertEqual(first, second)
+        pair = first["comparisons"][0]
+        self.assertEqual(pair["items"][0]["classification"], "LEFT_HIGHER")
+        self.assertEqual(pair["interval"]["method"],
+                         "shared_cluster_max_error_bootstrap")
+
     def test_calibration_proves_directional_configuration_separation(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -1551,7 +1639,7 @@ class CalibrationTests(unittest.TestCase):
             analysis = analyze_runs(runs)
             rendered = render_analysis(analysis)
 
-        self.assertEqual(analysis["schema_version"], 5)
+        self.assertEqual(analysis["schema_version"], 6)
         group = analysis["groups"][0]
         self.assertEqual(
             [(row["configuration"], row["sources"], row["respondents"])
@@ -2119,10 +2207,13 @@ class PublicResultTests(unittest.TestCase):
         self.assertEqual(len(repeat_separation), 6)
         self.assertEqual({row["robust_classification"]
                           for row in repeat_separation}, {"INSUFFICIENT"})
+        coverage = diagnostics[0]["configuration_item_coverage"]
+        self.assertEqual(coverage["eligible_configuration_pairs"], 0)
         document = render_index([payload])
         self.assertIn("Community Item Diagnostics", document)
         self.assertIn("Community item dependency candidates", document)
         self.assertIn("Community repeat-adjusted item separation", document)
+        self.assertIn("Community pair-specific item coverage", document)
         self.assertIn("Corrected discrimination", document)
         self.assertIn("Independent bundles", document)
         self.assertIn("Robust", document)

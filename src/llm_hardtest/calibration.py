@@ -23,6 +23,7 @@ BOOTSTRAP_SAMPLES = 2_000
 ITEM_RELATIONSHIP_THRESHOLD = 0.5
 ITEM_REDUNDANCY_THRESHOLD = 0.8
 ITEM_NET_SEPARATION_THRESHOLD = 0.1
+ITEM_PAIR_EFFECT_THRESHOLD = 0.1
 
 
 class _HashSampler:
@@ -655,6 +656,183 @@ def _item_repeat_separation(matrix: dict, models: dict,
     return sorted(diagnostics, key=ranking)
 
 
+def _cluster_item_rows(matrix: dict, models: dict,
+                       clusters: dict | None) -> dict:
+    grouped = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
+    for respondent, rows in matrix.items():
+        configuration = models[respondent]
+        cluster = clusters.get(respondent, respondent) if clusters else respondent
+        for item, status in rows.items():
+            if status in SCORED:
+                grouped[configuration][cluster][item].append(
+                    1.0 if status == "PASS" else 0.0)
+    return {
+        configuration: {
+            cluster: {item: statistics.mean(values)
+                      for item, values in items.items()}
+            for cluster, items in by_cluster.items()
+        }
+        for configuration, by_cluster in grouped.items()
+    }
+
+
+def _simultaneous_pair_interval(
+        left_rows: dict, right_rows: dict, effects: dict[str, float],
+        seed: str, alpha: float, *, shared_clusters: bool) -> dict | None:
+    generator = _HashSampler(seed)
+    maximum_errors = []
+    if shared_clusters:
+        population = sorted(set(left_rows) | set(right_rows), key=repr)
+    for _ in range(BOOTSTRAP_SAMPLES):
+        if shared_clusters:
+            selected = [generator.choice(population) for _ in population]
+            sampled_left = [left_rows[cluster] for cluster in selected
+                            if cluster in left_rows]
+            sampled_right = [right_rows[cluster] for cluster in selected
+                             if cluster in right_rows]
+        else:
+            left_population = list(left_rows.values())
+            right_population = list(right_rows.values())
+            sampled_left = [generator.choice(left_population)
+                            for _ in left_population]
+            sampled_right = [generator.choice(right_population)
+                             for _ in right_population]
+        errors = []
+        for item, observed in effects.items():
+            left = [row[item] for row in sampled_left if item in row]
+            right = [row[item] for row in sampled_right if item in row]
+            if not left or not right:
+                errors = []
+                break
+            bootstrapped = statistics.mean(left) - statistics.mean(right)
+            errors.append(abs(bootstrapped - observed))
+        if errors:
+            maximum_errors.append(max(errors))
+    if len(maximum_errors) < 0.8 * BOOTSTRAP_SAMPLES:
+        return None
+    critical = _percentile(maximum_errors, 1 - alpha)
+    return {
+        "critical_value": round(critical, 6),
+        "confidence": round(1 - alpha, 6),
+        "method": ("shared_cluster_max_error_bootstrap" if shared_clusters
+                   else "configuration_cluster_max_error_bootstrap"),
+        "samples": BOOTSTRAP_SAMPLES,
+        "valid_samples": len(maximum_errors),
+    }
+
+
+def _configuration_item_coverage(matrix: dict, models: dict, aliases: dict,
+                                 clusters: dict | None = None) -> dict:
+    """Find pair-specific separating items with family-wise simultaneous intervals."""
+    rows = _cluster_item_rows(matrix, models, clusters)
+    def alias_order(identity: str) -> tuple:
+        alias = aliases[identity]
+        match = re.fullmatch(r"C(\d+)", alias)
+        return (0, int(match.group(1))) if match else (1, alias)
+
+    configurations = sorted(rows, key=alias_order)
+    candidates = []
+    for left, right in combinations(configurations, 2):
+        left_items = defaultdict(list)
+        right_items = defaultdict(list)
+        for row in rows[left].values():
+            for item, value in row.items():
+                left_items[item].append(value)
+        for row in rows[right].values():
+            for item, value in row.items():
+                right_items[item].append(value)
+        common = sorted(
+            item for item in set(left_items) & set(right_items)
+            if (len(left_items[item]) >= MIN_CONFIGURATION_RESPONDENTS
+                and len(right_items[item]) >= MIN_CONFIGURATION_RESPONDENTS))
+        effects = {item: statistics.mean(left_items[item])
+                   - statistics.mean(right_items[item]) for item in common}
+        candidates.append((left, right, effects, left_items, right_items))
+
+    eligible_pairs = sum(bool(effects) for _, _, effects, _, _ in candidates)
+    alpha = 0.05 / eligible_pairs if eligible_pairs else None
+    comparisons = []
+    coverage = defaultdict(lambda: {
+        "eligible_configuration_pairs": 0,
+        "decisive_configuration_pairs": 0,
+        "maximum_absolute_effect": 0.0,
+    })
+    for left, right, effects, left_items, right_items in candidates:
+        if not effects:
+            comparisons.append({
+                "left": aliases[left], "right": aliases[right],
+                "eligible_items": 0, "decisive_items": 0,
+                "familywise_alpha": None, "interval": None,
+                "classification": "INSUFFICIENT", "items": [],
+            })
+            continue
+        interval = _simultaneous_pair_interval(
+            rows[left], rows[right], effects,
+            f"item-coverage:{left}:{right}", alpha,
+            shared_clusters=clusters is not None)
+        item_rows = []
+        for item, effect in effects.items():
+            coverage[item]["eligible_configuration_pairs"] += 1
+            coverage[item]["maximum_absolute_effect"] = max(
+                coverage[item]["maximum_absolute_effect"], abs(effect))
+            if interval is None:
+                low = high = None
+                classification = "UNSTABLE"
+            else:
+                critical = interval["critical_value"]
+                low = max(-1.0, effect - critical)
+                high = min(1.0, effect + critical)
+                if effect >= ITEM_PAIR_EFFECT_THRESHOLD and low >= ITEM_PAIR_EFFECT_THRESHOLD:
+                    classification = "LEFT_HIGHER"
+                elif (effect <= -ITEM_PAIR_EFFECT_THRESHOLD
+                      and high <= -ITEM_PAIR_EFFECT_THRESHOLD):
+                    classification = "RIGHT_HIGHER"
+                else:
+                    classification = "UNCERTAIN"
+            if classification in {"LEFT_HIGHER", "RIGHT_HIGHER"}:
+                coverage[item]["decisive_configuration_pairs"] += 1
+            item_rows.append({
+                "item": item,
+                "left_independent_units": len(left_items[item]),
+                "right_independent_units": len(right_items[item]),
+                "pass_rate_difference": round(effect, 6),
+                "simultaneous_interval": (
+                    {"low": round(low, 6), "high": round(high, 6)}
+                    if low is not None else None),
+                "classification": classification,
+            })
+        item_rows.sort(key=lambda row: (
+            row["classification"] not in {"LEFT_HIGHER", "RIGHT_HIGHER"},
+            -abs(row["pass_rate_difference"]), row["item"]))
+        decisive = sum(row["classification"] in {"LEFT_HIGHER", "RIGHT_HIGHER"}
+                       for row in item_rows)
+        comparisons.append({
+            "left": aliases[left], "right": aliases[right],
+            "eligible_items": len(item_rows), "decisive_items": decisive,
+            "familywise_alpha": round(alpha, 8), "interval": interval,
+            "classification": (
+                "UNSTABLE" if interval is None else
+                "SEPARATING" if decisive else "UNCERTAIN"),
+            "items": item_rows,
+        })
+
+    item_coverage = [{"item": item,
+                      **values,
+                      "maximum_absolute_effect": round(
+                          values["maximum_absolute_effect"], 6)}
+                     for item, values in coverage.items()]
+    item_coverage.sort(key=lambda row: (
+        -row["decisive_configuration_pairs"],
+        -row["maximum_absolute_effect"], row["item"]))
+    return {
+        "eligible_configuration_pairs": eligible_pairs,
+        "bonferroni_familywise_alpha": round(alpha, 8) if alpha else None,
+        "effect_threshold": ITEM_PAIR_EFFECT_THRESHOLD,
+        "comparisons": comparisons,
+        "item_coverage": item_coverage,
+    }
+
+
 def _hierarchical_difference_interval(left_rows: list[dict], right_rows: list[dict],
                                       items: list[str], seed: str) -> dict | None:
     """Resample respondents and items so repeat instability enters the effect interval."""
@@ -841,8 +1019,10 @@ def analyze_runs(run_dirs: list[Path]) -> dict:
             "item_relationships": _item_relationships(matrix),
             "item_repeat_separation": _item_repeat_separation(
                 matrix, group["models"]),
+            "configuration_item_coverage": _configuration_item_coverage(
+                matrix, group["models"], aliases),
         })
-    return {"schema_version": 5, "source_runs": len(run_dirs), "groups": analyses}
+    return {"schema_version": 6, "source_runs": len(run_dirs), "groups": analyses}
 
 
 def _percent(value: float | None) -> str:
@@ -871,6 +1051,7 @@ def render_analysis(analysis: dict) -> str:
         comparisons = group["configuration_comparisons"]
         relationships = group["item_relationships"]
         repeat_separation = group["item_repeat_separation"]
+        item_coverage = group["configuration_item_coverage"]
         decisive = sum(row["classification"] in {"LEFT_HIGHER", "RIGHT_HIGHER"}
                        for row in comparisons)
         lines += [
@@ -919,6 +1100,48 @@ def render_analysis(analysis: dict) -> str:
                 f"{_percent(row['mean_pass_rate_difference'])} | {interval_text} | "
                 f"{p_value if p_value is not None else 'n/a'} | "
                 f"{row['classification']} |")
+        coverage_comparisons = item_coverage["comparisons"]
+        decisive_details = [
+            (pair, item)
+            for pair in coverage_comparisons
+            for item in pair["items"]
+            if item["classification"] in {"LEFT_HIGHER", "RIGHT_HIGHER"}
+        ]
+        lines += [
+            "", "### Pair-specific item coverage", "",
+            f"Eligible configuration pairs: **{item_coverage['eligible_configuration_pairs']}**; "
+            f"decisive item splits: **{len(decisive_details)}**.", "",
+            "| Left | Right | Eligible items | Decisive items | Family alpha | Valid bootstrap | Result |",
+            "|---|---|---:|---:|---:|---:|---|",
+        ]
+        for pair in coverage_comparisons:
+            interval = pair["interval"]
+            lines.append(
+                f"| {pair['left']} | {pair['right']} | {pair['eligible_items']} | "
+                f"{pair['decisive_items']} | "
+                f"{pair['familywise_alpha'] if pair['familywise_alpha'] is not None else 'n/a'} | "
+                f"{interval['valid_samples'] if interval else 'n/a'} | "
+                f"{pair['classification']} |")
+        if not coverage_comparisons:
+            lines.append("| none | none | 0 | 0 | n/a | n/a | INSUFFICIENT |")
+        lines += [
+            "", "Decisive item details (first 20):", "",
+            "| Pair | Item | Independent units | Pass-rate difference [simultaneous interval] | Result |",
+            "|---|---|---:|---:|---|",
+        ]
+        for pair, item in decisive_details[:20]:
+            interval = item["simultaneous_interval"]
+            estimate = _estimate_interval(
+                item["pass_rate_difference"], interval, percent=True)
+            lines.append(
+                f"| {pair['left']} ↔ {pair['right']} | {item['item']} | "
+                f"{item['left_independent_units']}/{item['right_independent_units']} | "
+                f"{estimate} | {item['classification']} |")
+        if not decisive_details:
+            lines.append("| none | none | 0/0 | n/a | n/a |")
+        if len(decisive_details) > 20:
+            lines += ["", "Only the first 20 decisive splits are shown; JSON retains "
+                      "all eligible item/configuration-pair results."]
         lines += [
             "", "### Item diagnostics", "",
             "| Item | Scored | Independent units | Pass raw | Clustered pass [95%] | Balance raw / clustered | Corrected discrimination (raw) | Clustered corrected discrimination [95%] | "
@@ -1017,6 +1240,11 @@ def render_analysis(analysis: dict) -> str:
         f"  above {ITEM_NET_SEPARATION_THRESHOLD}. `ROBUST_NOISE_DOMINATED` requires the",
         "  interval below zero. `ROBUST_NO_SEPARATION` means every eligible repeat had",
         "  the same outcome across configurations. Other cases remain uncertain or insufficient.",
+        f"- Pair-specific item coverage requires {MIN_CONFIGURATION_RESPONDENTS} independent",
+        "  units per configuration and preserves all item outcomes within a resampled cluster.",
+        "  A maximum-error bootstrap makes intervals simultaneous across items in each pair;",
+        "  Bonferroni allocation across eligible configuration pairs targets family-wise 95%",
+        f"  coverage. Directional labels also require an absolute effect of {ITEM_PAIR_EFFECT_THRESHOLD}.",
         f"- Pair comparisons require at least {MIN_PAIR_ITEMS} commonly scored items.",
         "- Between-configuration disagreement measures observed separation. Within-configuration",
         "  disagreement measures repeat instability. Net separation requires both.",

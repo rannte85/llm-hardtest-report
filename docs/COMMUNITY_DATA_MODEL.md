@@ -44,6 +44,10 @@ Repeat-adjusted item analysis also retains the bundle key. When a bundle reports
 than one configuration, bootstrap draws resample that bundle once and preserve all of
 its configuration outcomes together. This prevents shared runtime or contributor
 effects from being treated as unrelated evidence.
+Pair-specific item coverage uses the same bundle records, computes configuration-pair
+pass-rate effects only after five observed bundles per side, and applies simultaneous
+item-family intervals plus a configuration-pair Bonferroni allocation. These rows are
+evidence about exact submitted configurations, not recommendations by themselves.
 
 ## What can be recommended
 

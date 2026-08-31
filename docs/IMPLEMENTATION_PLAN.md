@@ -305,3 +305,28 @@ Acceptance checks:
 - One bundle containing 100 repeated rows cannot satisfy the repeat or robust gates.
 - Shared-bundle bootstrap output is deterministic, and existing local/public evidence
   remains readable.
+
+## Phase 12 — Pair-specific item coverage
+
+Goal: retain specialist tasks that reliably distinguish a particular configuration
+pair even when they do not correlate with a single aggregate ability axis.
+
+Deliverables:
+
+1. Compute cluster-weighted item pass-rate effects for every exact configuration pair.
+2. Require at least five independent units on both sides of an item comparison.
+3. Resample complete cluster item records and use the maximum error across eligible
+   items to construct simultaneous within-pair intervals.
+4. Allocate the family error budget across configuration pairs with Bonferroni
+   correction and require a practical ten-point effect in addition to interval exclusion.
+5. Preserve shared public-bundle dependence, retain every eligible row in JSON, and
+   cap Markdown decisive details at 20 rows.
+
+Acceptance checks:
+
+- A stable specialist item separates strong and weak configurations while a shared
+  noisy item remains uncertain.
+- A 20-item null family emits no false directional split.
+- Three eligible configuration pairs receive one-third of the family error budget.
+- One bundle with 100 repeated rows remains insufficient.
+- Shared-bundle intervals are deterministic and preserve paired contributions.

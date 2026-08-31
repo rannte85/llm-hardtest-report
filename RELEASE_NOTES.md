@@ -1,10 +1,26 @@
-# Release Notes — 2.11.0
+# Release Notes — 2.12.0
 
 This repository is ready to publish as `rannte85/llm-hardtest-report`. It contains no campaign
 outputs, credentials, local model files, personal filesystem paths, or generated
 Python caches.
 
 The release validation covers:
+
+- analysis schema v6 with pair-specific item coverage for tasks that separate exact
+  configuration pairs outside a single aggregate ability axis;
+- cluster-weighted pass-rate effects gated on at least five independent attempts or
+  bundles per configuration and item;
+- deterministic maximum-error bootstrap intervals simultaneous over every eligible
+  item in a configuration pair;
+- Bonferroni allocation across eligible configuration pairs, targeting family-wise
+  95% coverage over the complete exploratory scan;
+- a ten-percentage-point practical effect gate in addition to simultaneous interval
+  exclusion before `LEFT_HIGHER` or `RIGHT_HIGHER` is emitted;
+- adversarial controls for a stable specialist item, a shared noisy item, a 20-item
+  null family, three-pair error allocation, one bundle with 100 repeated rows, and
+  deterministic shared-bundle resampling;
+- complete pair/item JSON retention with concise 20-row Markdown decisive details;
+- unchanged public result schema v2 and canonical Round 1–4 grading contracts;
 
 - analysis schema v5 with per-item between-configuration separation,
   same-configuration repeat instability, and their repeat-adjusted difference;

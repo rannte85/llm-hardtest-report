@@ -126,6 +126,35 @@ not prove a universal item ordering, replace content review, or predict an unsee
 model. It is especially useful for retaining specialist items that distinguish a
 configuration pair even when they do not align with one overall ability axis.
 
+## Pair-specific item coverage
+
+The pair-specific coverage section directly searches for those specialist items. For
+each exact configuration pair and item with at least five independent scored units on
+both sides, it computes the cluster-weighted pass-rate difference. It then resamples
+whole respondent records rather than independent item cells, preserving correlations
+among outcomes from the same attempt or public bundle.
+
+Each bootstrap draw records the largest absolute estimation error across every eligible
+item in that configuration pair. The resulting maximum-error critical value produces
+simultaneous intervals for the entire item family, rather than a separate uncorrected
+95% interval for every row. The overall `0.05` error budget is divided by the number of
+eligible configuration pairs with a Bonferroni allocation. Thus the procedure targets
+family-wise 95% coverage across both the item scan and configuration-pair scan.
+
+`LEFT_HIGHER` or `RIGHT_HIGHER` requires the simultaneous interval to remain at least
+`0.1` away from zero in the observed direction. A pair is `SEPARATING` when at least one
+item passes that gate, `UNCERTAIN` when none does, `UNSTABLE` when fewer than 80% of the
+2,000 deterministic draws retain every eligible item, and `INSUFFICIENT` when no item
+has five units per side. Markdown shows at most 20 decisive splits; JSON retains every
+eligible item result and an item-level count of how many configuration pairs it covers.
+
+For community evidence, bundle IDs are sampled once per draw. If one contribution
+contains both compared configurations, their outcomes move together. This is an
+observed-pack diagnostic, not proof of a general model capability or a prediction for
+an untested configuration. Bonferroni plus maximum-error resampling is deliberately
+conservative because false specialist discoveries are more damaging than withholding
+a plausible but uncertain item.
+
 ## Configuration separation and repeat stability
 
 For every respondent pair sharing at least two scored items, the analyzer measures

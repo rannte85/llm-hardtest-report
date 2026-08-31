@@ -42,6 +42,11 @@ rounds all use the **LLM Hardtest** name.
 | 3 | Structured diagnosis and multi-turn engineering | Deterministic checks for Q21–Q24; Q25 is queued for review | OpenAI-compatible chat or Codex CLI |
 | 4 | Six repository-based coding-agent tasks | Public/held-back tests, integrity gates, handoff and release signals | Codex CLI and a `/responses`-capable provider |
 
+An executable Round 5 research pilot is also included for evolving incident evidence,
+retry idempotency, late compatibility constraints, and public-green partial fixes. It
+is deliberately not selectable in a scored campaign until multi-model stability and
+grader-ambiguity reviews are complete. See [Round 5 Pilot](docs/ROUND5_PILOT.md).
+
 Q30v1 is intentionally excluded because its original grading contract conflicted
 with visible repository authority. Q30v2 accepts either a safe blocked handoff or a
 fully reconciled implementation. Q31 tests follow-through after explicit approval.

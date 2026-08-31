@@ -15,6 +15,8 @@ out separately from harness features.
   failed, incomplete, or infrastructure-invalid question and task IDs.
 - Added versioned benchmark-pack manifests, safe asset validation, content
   fingerprints in reports, and `pack validate` for external authoring workflows.
+- Added an executable Round 5 research pilot with evolving requirements and a stable
+  control matrix that separates a correct fix from four public-green failure modes.
 
 ## 2.0.0 — 2026-08-31
 

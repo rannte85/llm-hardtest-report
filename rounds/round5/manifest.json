@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "id": "round5-pilot",
+  "title": "Evolving incident and compatibility pilot",
+  "runner_kind": "coding_agent",
+  "capabilities": ["responses", "filesystem", "multi_turn"],
+  "unit_count": 1,
+  "time_limit_seconds": 3600,
+  "result_schema": "llm-hardtest.round5-pilot.v1",
+  "assets": [
+    "task.json",
+    "repo/**/*",
+    "hidden/**/*",
+    "verify_pilot.py"
+  ],
+  "controls": [
+    {
+      "id": "pilot-control-matrix",
+      "kind": "positive",
+      "command": ["python3", "verify_pilot.py"]
+    }
+  ]
+}

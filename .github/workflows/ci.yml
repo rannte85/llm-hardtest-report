@@ -44,3 +44,5 @@ jobs:
         run: PYTHONDONTWRITEBYTECODE=1 python rounds/round4/q30v2_policy_conflict/verify_trap.py
       - name: Q31 trap proof
         run: PYTHONDONTWRITEBYTECODE=1 python rounds/round4/q31_approval_followup/verify_trap.py
+      - name: Round 5 pilot control matrix
+        run: PYTHONDONTWRITEBYTECODE=1 python rounds/round5/verify_pilot.py

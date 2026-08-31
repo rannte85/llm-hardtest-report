@@ -185,7 +185,7 @@ def selftest() -> int:
             load_json(root / rel)
         except Exception as exc:
             failures.append(f"{rel}: {exc}")
-    for number in (1, 2, 3, 4):
+    for number in (1, 2, 3, 4, 5):
         try:
             validate_pack(root / "rounds" / f"round{number}")
         except Exception as exc:
@@ -195,6 +195,12 @@ def selftest() -> int:
                           capture_output=True, timeout=300)
     if proc.returncode:
         failures.append("round-4 selftest failed:\n" + proc.stdout[-1000:] + proc.stderr[-1000:])
+    pilot = subprocess.run(
+        [sys.executable, str(root / "rounds/round5/verify_pilot.py")],
+        cwd=root / "rounds/round5", text=True, capture_output=True, timeout=60)
+    if pilot.returncode:
+        failures.append(
+            "round-5 pilot controls failed:\n" + pilot.stdout[-1000:] + pilot.stderr[-1000:])
     korean_hits = []
     for path in root.rglob("*"):
         if not path.is_file() or path.suffix == ".zip" or ".git" in path.parts:
@@ -211,14 +217,14 @@ def selftest() -> int:
         print("SELFTEST FAILED")
         print("\n\n".join(failures))
         return 1
-    print("SELFTEST PASSED: datasets parse, English-only check passed, round-4 harness is healthy")
+    print("SELFTEST PASSED: datasets parse, packs and controls validate, harness is healthy")
     return 0
 
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(
         prog=Path(sys.argv[0]).name,
-        description="Run LLM Hardtest rounds 1–4 and generate a report",
+        description="Run LLM Hardtest and validate its reusable benchmark packs",
     )
     sub = parser.add_subparsers(dest="command", required=True)
     p_init = sub.add_parser("init", help="interactively create a campaign config")

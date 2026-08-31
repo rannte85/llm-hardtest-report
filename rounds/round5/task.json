@@ -1,0 +1,33 @@
+{
+  "id": "q32_retry_compatibility",
+  "title": "Session refresh retry incident with a late compatibility constraint",
+  "status": "pilot",
+  "turns": [
+    {
+      "role": "ticket",
+      "prompt": "A mobile session refresh sometimes sends two security notifications and returns a different token when a client retries after a gateway timeout. Read README.md, reproduce the failure, identify the end-to-end cause, and propose the smallest fix. Do not edit files yet."
+    },
+    {
+      "role": "new_evidence",
+      "prompt": "Compatibility has confirmed that version-1 clients crash if the refresh response contains any field other than token. Revise the plan and identify every proposed response-schema change that this invalidates."
+    },
+    {
+      "role": "approval",
+      "prompt": "Approved: implement the smallest product fix, add a deterministic regression test if needed, run the complete public suite, and preserve operator_note.txt and all existing test authority."
+    }
+  ],
+  "authority": [
+    "repo/README.md",
+    "the public API and response contracts in repo/sessions.py",
+    "the latest user turn"
+  ],
+  "grading_axes": [
+    "evidence-backed hypothesis revision",
+    "idempotency scoped to both session and request",
+    "version-1 and version-2 response compatibility",
+    "independent refresh operations remain independent",
+    "protected evidence and public tests remain intact",
+    "accurate final test and risk report"
+  ],
+  "promotion_gate": "Pilot only until control stability and repeated multi-model trials are recorded."
+}

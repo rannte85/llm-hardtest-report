@@ -671,8 +671,8 @@ class PackTests(unittest.TestCase):
     def test_all_bundled_packs_validate(self):
         root = Path(__file__).resolve().parents[1]
         metadata = [validate_pack(root / "rounds" / f"round{number}")
-                    for number in (1, 2, 3, 4)]
-        self.assertEqual([item["unit_count"] for item in metadata], [20, 20, 5, 6])
+                    for number in (1, 2, 3, 4, 5)]
+        self.assertEqual([item["unit_count"] for item in metadata], [20, 20, 5, 6, 1])
 
 
 class ReportTests(unittest.TestCase):

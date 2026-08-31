@@ -100,6 +100,23 @@ weightings disagree.
 See [Community Data Model](COMMUNITY_DATA_MODEL.md) for the normalization and staged
 path from descriptive observations to an environment-aware serving recommendation.
 
+## Descriptive serving-candidate query
+
+`results recommend` is read-only: it validates accepted JSON and writes nothing unless
+an explicit `--output` path is supplied. It never contacts submitters or a model server.
+
+```bash
+llm-hardtest results recommend results/submissions \
+  --round 1 --pack sha256:<full-pack-fingerprint> \
+  --objective accuracy --objective throughput --json
+```
+
+The query requires five independent bundles for every selected evidence axis, applies
+an optional accuracy floor to the 95% lower bound, and returns the non-dominated set.
+Repeated attempts or duplicate model rows inside one bundle cannot unlock a candidate.
+Constraints with missing metadata do not match. Results remain descriptive for the
+exact pack and public configuration; they are not predictions for untested hardware.
+
 ## Round 5 public pilot summaries
 
 Round 5 submissions use `results/pilot-schema-v1.json`, live under `results/pilots/`,

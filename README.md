@@ -4,12 +4,12 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-**Current release: 2.12.0** — adds pair-specific item coverage. The analyzer can now
-find specialist items that reliably separate one exact configuration pair even when
-they do not align with a single overall ability axis. Maximum-error bootstrap intervals
-are simultaneous across every eligible item in a pair, and Bonferroni allocation across
-configuration pairs targets family-wise 95% coverage. Community draws preserve shared
-bundle dependence. Canonical Round 1–4 questions and grading contracts are unchanged.
+**Current release: 2.13.0** — adds a constraint-aware, evidence-gated serving-candidate
+query. Validated community observations can now be filtered by exact pack, environment,
+runtime, quantization, and declared capacity, then compared on conservative accuracy,
+completion, latency, and throughput axes. The command returns a Pareto set or explicitly
+withholds a result; it never predicts an untested configuration. Canonical Round 1–4
+questions, grading contracts, and public submission schema are unchanged.
 
 LLM Hardtest Report is a local-first command-line benchmark for comparing language
 models as reasoners, coding workers, and safe handoff agents. Point it at one or more
@@ -212,6 +212,34 @@ disagreement instead of relying only on aggregate scores. Starting in 2.9, commu
 item intervals and robust signals cluster by accepted bundle, so repeated attempts or
 duplicate model rows in one contribution cannot manufacture item certainty. See the
 [community data model](docs/COMMUNITY_DATA_MODEL.md).
+
+## Query observed serving candidates
+
+After validated submissions have accumulated, query only configurations observed on
+one exact benchmark pack. Repeat `--objective` to request a multi-axis Pareto set:
+
+```bash
+llm-hardtest results recommend results/submissions \
+  --round 1 \
+  --pack sha256:<full-pack-fingerprint> \
+  --accelerator "Example GPU" \
+  --max-memory-gb 24 \
+  --accuracy-floor 0.60 \
+  --objective accuracy \
+  --objective latency
+```
+
+Use `--json` for a stable machine-readable result suitable for a future database or
+service. At least five independent bundles are required for accuracy and completion;
+latency and throughput also require five bundles containing those measurements. The
+accuracy floor is applied to the bundle-cluster 95% lower bound, not the point estimate.
+Missing metadata fails a requested constraint, multiple pack versions require an
+explicit `--pack`, and one bundle with repeated rows still counts once.
+
+This command produces descriptive candidates, not hardware-fit or out-of-sample
+predictions. A reported memory value describes the tested environment; it does not
+prove the model needs that amount or will run on a different device. See the
+[community data model](docs/COMMUNITY_DATA_MODEL.md) for promotion gates.
 
 ## Live terminal dashboard
 

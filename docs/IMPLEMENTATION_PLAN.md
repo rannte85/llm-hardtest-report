@@ -330,3 +330,33 @@ Acceptance checks:
 - Three eligible configuration pairs receive one-third of the family error budget.
 - One bundle with 100 repeated rows remains insufficient.
 - Shared-bundle intervals are deterministic and preserve paired contributions.
+
+## Phase 13 — Constraint-aware serving candidates
+
+Goal: turn validated community observations into a reusable, read-only shortlist for
+an exact user constraint set without presenting sparse or cross-pack evidence as a
+prediction.
+
+Deliverables:
+
+1. Retain public environment, transport, generation, and serving coordinates beside
+   every exact configuration aggregate.
+2. Filter exact pack observations by declared environment and capacity constraints;
+   missing metadata must not be inferred as a match.
+3. Require five independent bundles for accuracy, completion, latency, and throughput
+   whenever the corresponding axis is selected.
+4. Apply accuracy floors to the bundle-cluster interval lower bound and return a
+   multi-objective Pareto set rather than a universal weighted winner.
+5. Emit deterministic Markdown and JSON with explicit insufficient, pack-required,
+   no-match, single-candidate, and descriptive-candidate states.
+
+Acceptance checks:
+
+- Accuracy-only evidence selects the stronger conservative lower bound, while an
+  accuracy/latency tradeoff retains both non-dominated controls.
+- Four performance-bearing bundles cannot unlock latency or throughput selection even
+  when five bundles contain correctness evidence.
+- One bundle with 100 duplicate model rows remains insufficient.
+- Multiple pack fingerprints require an exact pack selection.
+- Missing hardware metadata fails a hardware constraint and query output copies no
+  bundle IDs or contributor/tool-version history.

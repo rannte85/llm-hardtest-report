@@ -5,6 +5,23 @@ out separately from harness features.
 
 ## Unreleased
 
+## 2.13.0 — 2026-09-01
+
+- Added `results recommend`, a read-only exact-pack query over validated public
+  observations with Markdown and JSON output.
+- Added environment, runtime, quantization, model-format, and declared-capacity
+  filters that reject missing metadata instead of guessing compatibility.
+- Added conservative accuracy and completion objectives based on bundle-cluster 95%
+  lower bounds, plus latency and throughput objectives gated on five measured bundles.
+- Added multi-objective Pareto selection, an optional conservative accuracy floor,
+  and explicit pack-required, no-match, insufficient, single-eligible, and descriptive
+  candidate states.
+- Prevented repeated model rows in one bundle from unlocking candidate evidence and
+  kept bundle IDs and contributor/tool-version history out of query results.
+- Added recommendation JSON schema v1 and adversarial controls for cross-pack mixing,
+  sparse performance, missing metadata, bulk duplicates, and speed/accuracy tradeoffs.
+- Kept public result schema v2 and canonical Round 1–4 content and grading unchanged.
+
 ## 2.12.0 — 2026-09-01
 
 - Added analysis-schema-v6 pair-specific item coverage for specialist tasks that

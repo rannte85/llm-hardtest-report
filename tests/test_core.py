@@ -34,7 +34,7 @@ from llm_hardtest.github_submit import (
 from llm_hardtest.community_results import (
     aggregate_item_diagnostics, aggregate_pilot_submissions, aggregate_submissions, build_index,
     build_pilot_index, load_pilot_submission_directory, load_submission_directory,
-    render_index, render_pilot_index,
+    recommend_configurations, render_index, render_pilot_index, render_recommendation,
 )
 from llm_hardtest.calibration import (
     _configuration_comparisons, _configuration_item_coverage,
@@ -1839,6 +1839,45 @@ class PublicResultTests(unittest.TestCase):
         })
         generate(root)
 
+    def _recommendation_submissions(self, count=5):
+        with tempfile.TemporaryDirectory() as tmp:
+            run = Path(tmp) / "run"
+            self._run(run)
+            original, _ = build_public_result(run)
+        from llm_hardtest.public_results import _bundle_id
+        models = []
+        for name, passed, wall, memory in (
+                ("org/fast", 8, 1.0, 8), ("org/accurate", 9, 4.0, 24)):
+            model = json.loads(json.dumps(original["models"][0]))
+            model["public_name"] = name
+            model["public_metadata"] = {
+                "accelerator": "Example GPU", "memory_gb": memory,
+                "server": "Example Server", "quantization": "Q4_K_M",
+            }
+            items = [
+                {"item": f"q{item}", "attempt": 1,
+                 "status": "PASS" if item <= passed else "FAIL",
+                 "wall_seconds": wall, "tokens": 20}
+                for item in range(1, 11)
+            ]
+            result = model["rounds"]["1"]
+            result.update({"passed": passed, "total": 10, "incomplete": 0,
+                           "manual_review": 0, "infrastructure_errors": 0,
+                           "items": items})
+            models.append(model)
+        submissions = []
+        for index in range(count):
+            payload = json.loads(json.dumps(original))
+            payload["benchmark"] = {
+                "rounds": [1], "packs": {"1": "sha256:" + "a" * 64}}
+            payload["models"] = json.loads(json.dumps(models))
+            payload["tool"]["version"] = f"recommendation-control-{index}"
+            body = {key: value for key, value in payload.items() if key != "bundle_id"}
+            payload["bundle_id"] = _bundle_id(body)
+            validate_public_result(payload)
+            submissions.append(payload)
+        return submissions
+
     def test_public_export_is_allowlist_only_and_deterministic(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "run"
@@ -2139,6 +2178,132 @@ class PublicResultTests(unittest.TestCase):
         self.assertIn("5/5", document)
         self.assertIn("100.0% observed", document)
         self.assertIn("[56.6–100.0%], n=5 bundles", document)
+
+    def test_recommendation_uses_conservative_pareto_objectives(self):
+        submissions = self._recommendation_submissions()
+        accuracy = recommend_configurations(
+            submissions, round_number=1, objectives=["accuracy"])
+        tradeoff = recommend_configurations(
+            submissions, round_number=1, objectives=["accuracy", "latency"])
+        self.assertEqual(accuracy["status"], "DESCRIPTIVE_CANDIDATES")
+        self.assertEqual([row["model"] for row in accuracy["candidates"]],
+                         ["org/accurate"])
+        self.assertEqual(accuracy["excluded"]["dominated"], 1)
+        self.assertEqual({row["model"] for row in tradeoff["candidates"]},
+                         {"org/accurate", "org/fast"})
+        self.assertTrue(all(row["independent_bundles"] == 5
+                            for row in tradeoff["candidates"]))
+        self.assertIn("not a prediction", tradeoff["reason"])
+
+    def test_recommendation_constraints_do_not_infer_missing_metadata(self):
+        submissions = self._recommendation_submissions()
+        result = recommend_configurations(
+            submissions, round_number=1,
+            constraints={"accelerator": "example gpu", "max_memory_gb": 16},
+            objectives=["accuracy", "latency"])
+        self.assertEqual(result["status"], "SINGLE_ELIGIBLE_CONFIGURATION")
+        self.assertEqual(result["candidates"][0]["model"], "org/fast")
+        missing = json.loads(json.dumps(submissions))
+        from llm_hardtest.public_results import _bundle_id
+        for payload in missing:
+            for model in payload["models"]:
+                model["public_metadata"].pop("accelerator")
+            body = {key: value for key, value in payload.items() if key != "bundle_id"}
+            payload["bundle_id"] = _bundle_id(body)
+            validate_public_result(payload)
+        withheld = recommend_configurations(
+            missing, round_number=1, constraints={"accelerator": "Example GPU"})
+        self.assertEqual(withheld["status"], "NO_MATCH")
+        self.assertEqual(withheld["excluded"]["constraints"], 2)
+
+    def test_recommendation_requires_independent_bundles_and_exact_pack(self):
+        sparse = self._recommendation_submissions(1)
+        sparse[0]["models"] = sparse[0]["models"] * 100
+        from llm_hardtest.public_results import _bundle_id
+        body = {key: value for key, value in sparse[0].items() if key != "bundle_id"}
+        sparse[0]["bundle_id"] = _bundle_id(body)
+        validate_public_result(sparse[0])
+        result = recommend_configurations(sparse, round_number=1)
+        self.assertEqual(result["status"], "INSUFFICIENT_EVIDENCE")
+        self.assertEqual(result["eligible_configurations"], 0)
+        self.assertEqual(result["excluded"]["insufficient_bundles"], 2)
+
+        mixed = self._recommendation_submissions()
+        for index, payload in enumerate(mixed):
+            if index % 2:
+                payload["benchmark"]["packs"]["1"] = "sha256:" + "b" * 64
+                body = {key: value for key, value in payload.items()
+                        if key != "bundle_id"}
+                payload["bundle_id"] = _bundle_id(body)
+                validate_public_result(payload)
+        ambiguous = recommend_configurations(mixed, round_number=1)
+        self.assertEqual(ambiguous["status"], "PACK_REQUIRED")
+        self.assertEqual(len(ambiguous["available_packs"]), 2)
+
+    def test_recommendation_floor_rendering_and_privacy(self):
+        result = recommend_configurations(
+            self._recommendation_submissions(), round_number=1,
+            objectives=["accuracy", "throughput"], accuracy_floor=0.4)
+        document = render_recommendation(result)
+        self.assertIn("Descriptive Serving Candidates", document)
+        self.assertIn("Accuracy lower / observed", document)
+        self.assertIn("server=Example Server", document)
+        self.assertIn("memory GB=24", document)
+        self.assertIn("(n=5)", document)
+        self.assertIn("hardware capacity is an observation filter", document)
+        serialized = json.dumps(result)
+        self.assertNotIn("bundle_id", serialized)
+        self.assertNotIn("recommendation-control", serialized)
+
+    def test_recommendation_performance_objectives_require_five_bundles(self):
+        submissions = self._recommendation_submissions()
+        from llm_hardtest.public_results import _bundle_id
+        for model in submissions[-1]["models"]:
+            for item in model["rounds"]["1"]["items"]:
+                item["wall_seconds"] = None
+                item["tokens"] = None
+        body = {key: value for key, value in submissions[-1].items()
+                if key != "bundle_id"}
+        submissions[-1]["bundle_id"] = _bundle_id(body)
+        validate_public_result(submissions[-1])
+        result = recommend_configurations(
+            submissions, round_number=1, objectives=["latency", "throughput"])
+        self.assertEqual(result["status"], "INSUFFICIENT_EVIDENCE")
+        self.assertEqual(result["excluded"]["missing_objective"], 2)
+        self.assertFalse(result["candidates"])
+
+    def test_recommendation_rejects_ambiguous_query_contracts(self):
+        submissions = self._recommendation_submissions()
+        with self.assertRaisesRegex(ValueError, "exact sha256"):
+            recommend_configurations(submissions, round_number=1, pack="latest")
+        with self.assertRaisesRegex(ValueError, "must be a list"):
+            recommend_configurations(
+                submissions, round_number=1, objectives="accuracy")
+        with self.assertRaisesRegex(ValueError, "safe text"):
+            recommend_configurations(
+                submissions, round_number=1, constraints={"server": "\n"})
+        with self.assertRaisesRegex(ValueError, "between 0 and 1"):
+            recommend_configurations(
+                submissions, round_number=1, accuracy_floor=1.01)
+
+    def test_results_recommend_cli_emits_json_without_writes(self):
+        submissions = self._recommendation_submissions()
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp) / "submissions"
+            directory.mkdir()
+            for payload in submissions:
+                digest = payload["bundle_id"].removeprefix("sha256:")
+                (directory / f"{digest}.json").write_text(
+                    submission_document(payload), encoding="utf-8")
+            stdout = io.StringIO()
+            with patch("sys.stdout", stdout):
+                exit_code = main(["results", "recommend", str(directory),
+                                  "--round", "1", "--objective", "accuracy",
+                                  "--json"])
+        self.assertEqual(exit_code, 0)
+        result = json.loads(stdout.getvalue())
+        self.assertEqual(result["status"], "DESCRIPTIVE_CANDIDATES")
+        self.assertEqual(result["candidates"][0]["model"], "org/accurate")
 
     def test_unobserved_bundles_do_not_unlock_a_baseline(self):
         with tempfile.TemporaryDirectory() as tmp:

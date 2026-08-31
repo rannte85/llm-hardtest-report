@@ -68,10 +68,35 @@ floor", or "most stable configuration for this task mix". Every recommendation m
 show the exact population filter, pack version, sample size, interval, and missing
 metadata.
 
+Version 2.13 provides the first read-only form of this interface:
+
+```bash
+llm-hardtest results recommend results/submissions \
+  --round 1 \
+  --pack sha256:<full-pack-fingerprint> \
+  --max-memory-gb 24 \
+  --accuracy-floor 0.60 \
+  --objective accuracy --objective latency
+```
+
+The query validates every repository bundle, filters exact public configuration
+records, requires at least five independent bundles for each selected metric, and
+returns only non-dominated configurations. Accuracy and completion use their
+bundle-cluster interval lower bounds. Latency is the p90 across bundle-level mean item
+latencies; throughput is the p50 across bundle-level mean item token rates. Sparse
+performance observations are not promoted merely because accuracy has enough data.
+
+The machine-readable result follows `results/recommendation-schema-v1.json`. It omits
+bundle IDs and contributor history, retains only public configuration coordinates,
+and has explicit `PACK_REQUIRED`, `NO_MATCH`, `INSUFFICIENT_EVIDENCE`,
+`SINGLE_ELIGIBLE_CONFIGURATION`, and `DESCRIPTIVE_CANDIDATES` states. A declared
+memory ceiling is only an observational filter over tested environments. It is not a
+model memory requirement or evidence of portability to another accelerator.
+
 ## Promotion gates
 
-The current repository stops at descriptive observations. A predictive service must
-not launch until it has, per target population:
+The current repository stops at descriptive candidate queries. A predictive service
+must not launch until it has, per target population:
 
 1. enough independent bundles and materially different configurations;
 2. cluster-aware uncertainty and held-out temporal validation;

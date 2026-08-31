@@ -1,10 +1,28 @@
-# Release Notes — 2.12.0
+# Release Notes — 2.13.0
 
 This repository is ready to publish as `rannte85/llm-hardtest-report`. It contains no campaign
 outputs, credentials, local model files, personal filesystem paths, or generated
 Python caches.
 
 The release validation covers:
+
+- a read-only `results recommend` command that queries only validated repository
+  observations from one exact benchmark pack;
+- exact public environment, transport, runtime, quantization, model-format, and
+  declared-capacity filters, with missing metadata rejected instead of inferred;
+- conservative accuracy and completion objectives based on bundle-cluster interval
+  lower bounds and a conservative optional accuracy floor;
+- latency and throughput objectives withheld until five independent bundles contain
+  the corresponding measurements;
+- multi-objective Pareto candidates instead of an opaque universal score, with
+  explicit pack-required, no-match, insufficient-evidence, single-eligible, and
+  descriptive-candidate states;
+- deterministic Markdown and recommendation-schema-v1 JSON that omit bundle IDs and
+  contributor/tool-version history;
+- adversarial controls for a speed/accuracy tradeoff, sparse performance evidence,
+  cross-pack ambiguity, missing hardware metadata, and 100 duplicate model rows in
+  one bundle;
+- unchanged public result schema v2 and canonical Round 1–4 grading contracts;
 
 - analysis schema v6 with pair-specific item coverage for tasks that separate exact
   configuration pairs outside a single aggregate ability axis;

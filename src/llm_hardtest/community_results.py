@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import re
 import statistics
 from collections import defaultdict
 from pathlib import Path
@@ -17,6 +18,14 @@ from .public_results import load_public_bundle
 
 
 MIN_BASELINE_SUBMISSIONS = 5
+RECOMMENDATION_SCHEMA_VERSION = 1
+RECOMMENDATION_OBJECTIVES = {"accuracy", "completion", "latency", "throughput"}
+RECOMMENDATION_CONSTRAINTS = {
+    "os", "architecture", "transport", "accelerator", "server", "quantization",
+    "model_format", "max_memory_gb", "max_system_memory_gb",
+    "max_parameter_count_b",
+}
+PACK_FINGERPRINT = re.compile(r"^sha256:[0-9a-f]{64}$")
 
 
 def _cluster_interval(rates: list[float]) -> dict | None:
@@ -92,6 +101,7 @@ def aggregate_submissions(submissions: list[dict]) -> list[dict]:
         "submissions": 0, "runs": 0, "passed": 0, "total": 0, "incomplete": 0,
         "manual_review": 0, "infrastructure_errors": 0,
     })
+    configurations = {}
     for payload in submissions:
         bundle_groups = defaultdict(lambda: {
             "runs": 0, "passed": 0, "total": 0, "incomplete": 0,
@@ -100,6 +110,16 @@ def aggregate_submissions(submissions: list[dict]) -> list[dict]:
         })
         for model in payload["models"]:
             configuration = _configuration_id(payload, model)
+            identity = {
+                "environment": payload["environment"],
+                "model": model["public_name"],
+                "transport": model["transport"],
+                "parameters": model["parameters"],
+                "public_metadata": model["public_metadata"],
+            }
+            previous_identity = configurations.setdefault(configuration, identity)
+            if previous_identity != identity:
+                raise ValueError("public configuration ID collision")
             for round_number, metrics in model["rounds"].items():
                 pack = payload["benchmark"]["packs"][round_number]
                 key = (int(round_number), pack, model["public_name"], configuration)
@@ -131,6 +151,11 @@ def aggregate_submissions(submissions: list[dict]) -> list[dict]:
             if local["total"] > 0:
                 group.setdefault("_bundle_pass_rates", []).append(
                     local["passed"] / local["total"])
+            attempted = (local["total"] + local["incomplete"]
+                         + local["manual_review"] + local["infrastructure_errors"])
+            if attempted > 0:
+                group.setdefault("_bundle_completion_rates", []).append(
+                    local["total"] / attempted)
             if local["_item_walls"]:
                 group.setdefault("_bundle_mean_walls", []).append(
                     statistics.mean(local["_item_walls"]))
@@ -146,17 +171,308 @@ def aggregate_submissions(submissions: list[dict]) -> list[dict]:
             "pack": pack,
             "model": model_name,
             "configuration": configuration,
+            **configurations[configuration],
             **{key: value for key, value in totals.items() if not key.startswith("_")},
             "observed_submissions": len(rates),
             "bundle_pass_rate_interval95": _cluster_interval(rates),
+            "bundle_completion_rate_interval95": _cluster_interval(
+                totals.get("_bundle_completion_rates", [])),
             "bundle_item_wall_p50_seconds": _percentile(
                 totals.get("_bundle_mean_walls", []), 0.5),
             "bundle_item_wall_p90_seconds": _percentile(
                 totals.get("_bundle_mean_walls", []), 0.9),
+            "bundle_item_wall_observed_submissions": len(
+                totals.get("_bundle_mean_walls", [])),
             "bundle_tokens_per_second_p50": _percentile(
                 totals.get("_bundle_mean_token_rates", []), 0.5),
+            "bundle_token_rate_observed_submissions": len(
+                totals.get("_bundle_mean_token_rates", [])),
         })
     return rows
+
+
+def _constraint_value(row: dict, key: str):
+    if key in {"os", "architecture"}:
+        return row["environment"].get(key)
+    if key == "transport":
+        return row.get("transport")
+    metadata_key = key.removeprefix("max_")
+    return row["public_metadata"].get(metadata_key)
+
+
+def _matches_constraints(row: dict, constraints: dict) -> bool:
+    for key, expected in constraints.items():
+        actual = _constraint_value(row, key)
+        if actual is None:
+            return False
+        if key.startswith("max_"):
+            if (isinstance(actual, bool) or not isinstance(actual, (int, float))
+                    or actual > expected):
+                return False
+        elif isinstance(expected, str):
+            if not isinstance(actual, str) or actual.casefold() != expected.casefold():
+                return False
+        elif actual != expected:
+            return False
+    return True
+
+
+def _candidate_metrics(row: dict) -> dict:
+    accuracy = row["bundle_pass_rate_interval95"]
+    completion = row["bundle_completion_rate_interval95"]
+    latency_bundles = row["bundle_item_wall_observed_submissions"]
+    throughput_bundles = row["bundle_token_rate_observed_submissions"]
+    return {
+        "accuracy_lower95": accuracy["low"] if accuracy else None,
+        "accuracy_observed": accuracy["estimate"] if accuracy else None,
+        "completion_lower95": completion["low"] if completion else None,
+        "completion_observed": completion["estimate"] if completion else None,
+        "bundle_mean_item_latency_p90_seconds": (
+            row["bundle_item_wall_p90_seconds"]
+            if latency_bundles >= MIN_BASELINE_SUBMISSIONS else None),
+        "latency_observed_bundles": latency_bundles,
+        "bundle_mean_completion_tokens_per_second_p50": (
+            row["bundle_tokens_per_second_p50"]
+            if throughput_bundles >= MIN_BASELINE_SUBMISSIONS else None),
+        "throughput_observed_bundles": throughput_bundles,
+    }
+
+
+def _objective_value(candidate: dict, objective: str) -> float | None:
+    field = {
+        "accuracy": "accuracy_lower95",
+        "completion": "completion_lower95",
+        "latency": "bundle_mean_item_latency_p90_seconds",
+        "throughput": "bundle_mean_completion_tokens_per_second_p50",
+    }[objective]
+    value = candidate["metrics"][field]
+    return None if value is None else float(value)
+
+
+def _dominates(left: dict, right: dict, objectives: list[str]) -> bool:
+    comparisons = []
+    for objective in objectives:
+        left_value = _objective_value(left, objective)
+        right_value = _objective_value(right, objective)
+        if left_value is None or right_value is None:
+            return False
+        if objective == "latency":
+            comparisons.append((left_value <= right_value, left_value < right_value))
+        else:
+            comparisons.append((left_value >= right_value, left_value > right_value))
+    return all(no_worse for no_worse, _ in comparisons) and any(
+        better for _, better in comparisons)
+
+
+def recommend_configurations(submissions: list[dict], *, round_number: int,
+                             pack: str | None = None,
+                             constraints: dict | None = None,
+                             objectives: list[str] | None = None,
+                             accuracy_floor: float | None = None) -> dict:
+    """Return a gated Pareto shortlist from validated, exact-pack observations."""
+    if isinstance(round_number, bool) or round_number not in {1, 2, 3, 4}:
+        raise ValueError("recommendation round must be one of 1, 2, 3, or 4")
+    if constraints is not None and not isinstance(constraints, dict):
+        raise ValueError("recommendation constraints must be an object")
+    constraints = dict(constraints or {})
+    unknown_constraints = set(constraints) - RECOMMENDATION_CONSTRAINTS
+    if unknown_constraints:
+        raise ValueError(
+            "unknown recommendation constraint(s): "
+            + ", ".join(sorted(unknown_constraints)))
+    for key in ("max_memory_gb", "max_system_memory_gb", "max_parameter_count_b"):
+        value = constraints.get(key)
+        if value is not None and (isinstance(value, bool)
+                                  or not isinstance(value, (int, float))
+                                  or not math.isfinite(value) or value <= 0):
+            raise ValueError(f"recommendation constraint {key} must be positive")
+    for key in set(constraints) - {
+            "max_memory_gb", "max_system_memory_gb", "max_parameter_count_b"}:
+        value = constraints[key]
+        if (not isinstance(value, str) or not value.strip() or len(value) > 160
+                or any(ord(char) < 32 for char in value)):
+            raise ValueError(f"recommendation constraint {key} must be safe text")
+    if isinstance(objectives, str):
+        raise ValueError("recommendation objectives must be a list")
+    objectives = list(objectives or ["accuracy"])
+    if (not objectives or len(objectives) != len(set(objectives))
+            or set(objectives) - RECOMMENDATION_OBJECTIVES):
+        raise ValueError("recommendation objectives must be unique values from: "
+                         + ", ".join(sorted(RECOMMENDATION_OBJECTIVES)))
+    if (accuracy_floor is not None
+            and (isinstance(accuracy_floor, bool)
+                 or not isinstance(accuracy_floor, (int, float))
+                 or not math.isfinite(accuracy_floor)
+                 or not 0 <= accuracy_floor <= 1)):
+        raise ValueError("accuracy floor must be between 0 and 1")
+    if pack is not None and (
+            not isinstance(pack, str) or PACK_FINGERPRINT.fullmatch(pack) is None):
+        raise ValueError("recommendation pack must be an exact sha256 fingerprint")
+
+    rows = [row for row in aggregate_submissions(submissions)
+            if row["round"] == round_number]
+    available_packs = sorted({row["pack"] for row in rows})
+    if pack is None:
+        selected_pack = available_packs[0] if len(available_packs) == 1 else None
+    else:
+        selected_pack = pack
+    result = {
+        "schema_version": RECOMMENDATION_SCHEMA_VERSION,
+        "kind": "descriptive_serving_candidates",
+        "round": round_number,
+        "pack": selected_pack,
+        "available_packs": available_packs,
+        "constraints": constraints,
+        "objectives": objectives,
+        "accuracy_floor": accuracy_floor,
+        "minimum_independent_bundles": MIN_BASELINE_SUBMISSIONS,
+        "status": "INSUFFICIENT_EVIDENCE",
+        "reason": "no observations match the requested round and pack",
+        "matched_configurations": 0,
+        "eligible_configurations": 0,
+        "candidates": [],
+        "excluded": {"constraints": 0, "insufficient_bundles": 0,
+                     "missing_objective": 0, "accuracy_floor": 0,
+                     "dominated": 0},
+    }
+    if pack is None and len(available_packs) > 1:
+        result["status"] = "PACK_REQUIRED"
+        result["reason"] = "multiple pack fingerprints exist; select one exact pack"
+        return result
+    if selected_pack is None or selected_pack not in available_packs:
+        return result
+    rows = [row for row in rows if row["pack"] == selected_pack]
+    matched = []
+    for row in rows:
+        if not _matches_constraints(row, constraints):
+            result["excluded"]["constraints"] += 1
+            continue
+        matched.append(row)
+    result["matched_configurations"] = len(matched)
+    eligible = []
+    for row in matched:
+        if row["bundle_pass_rate_interval95"] is None:
+            result["excluded"]["insufficient_bundles"] += 1
+            continue
+        candidate = {
+            "configuration": row["configuration"],
+            "model": row["model"],
+            "environment": row["environment"],
+            "transport": row["transport"],
+            "parameters": row["parameters"],
+            "public_metadata": row["public_metadata"],
+            "independent_bundles": row["observed_submissions"],
+            "metrics": _candidate_metrics(row),
+        }
+        if any(_objective_value(candidate, objective) is None
+               for objective in objectives):
+            result["excluded"]["missing_objective"] += 1
+            continue
+        if (accuracy_floor is not None
+                and candidate["metrics"]["accuracy_lower95"] < accuracy_floor):
+            result["excluded"]["accuracy_floor"] += 1
+            continue
+        eligible.append(candidate)
+    result["eligible_configurations"] = len(eligible)
+    candidates = []
+    for candidate in eligible:
+        if any(_dominates(other, candidate, objectives)
+               for other in eligible if other is not candidate):
+            result["excluded"]["dominated"] += 1
+        else:
+            candidates.append(candidate)
+    result["candidates"] = sorted(
+        candidates, key=lambda row: (row["model"].casefold(), row["configuration"]))
+    if not matched:
+        result["status"] = "NO_MATCH"
+        result["reason"] = "no exact public configuration matches every constraint"
+    elif not eligible:
+        result["reason"] = (
+            "matching configurations do not meet the independent-bundle, objective, "
+            "and conservative accuracy gates")
+    elif len(eligible) == 1:
+        result["status"] = "SINGLE_ELIGIBLE_CONFIGURATION"
+        result["reason"] = "one eligible observed configuration exists; no comparison is possible"
+    else:
+        result["status"] = "DESCRIPTIVE_CANDIDATES"
+        result["reason"] = (
+            "non-dominated observed configurations; this is not a prediction for "
+            "untested hardware or settings")
+    return result
+
+
+def _configuration_summary(candidate: dict) -> str:
+    environment = candidate["environment"]
+    metadata = candidate["public_metadata"]
+    parameters = candidate["parameters"]
+    parts = [f"{environment['os']}/{environment['architecture']}",
+             candidate["transport"]]
+    for key, label in (
+            ("server", "server"), ("server_version", "server version"),
+            ("quantization", "quant"), ("accelerator", "accelerator"),
+            ("accelerator_count", "accelerators"), ("memory_gb", "memory GB"),
+            ("system_memory_gb", "system GB")):
+        if key in metadata:
+            parts.append(f"{label}={metadata[key]}")
+    for key, label in (("reasoning_effort", "reasoning"),
+                       ("context_window", "context"),
+                       ("max_tokens", "max tokens"),
+                       ("temperature", "temperature")):
+        if key in parameters:
+            parts.append(f"{label}={parameters[key]}")
+    return "; ".join(parts)
+
+
+def render_recommendation(result: dict) -> str:
+    """Render a deterministic, caveated serving-candidate report."""
+    lines = [
+        "# Descriptive Serving Candidates", "",
+        f"Status: **{result['status']}**", "", result["reason"], "",
+        f"Round: **{result['round']}** · pack: "
+        + (f"`{result['pack']}`" if result["pack"] else "not selected"),
+        "",
+        "Objectives: " + ", ".join(result["objectives"]),
+        "",
+        f"Matched configurations: **{result['matched_configurations']}** · "
+        f"eligible: **{result['eligible_configurations']}** · "
+        f"Pareto candidates: **{len(result['candidates'])}**", "",
+    ]
+    if result["constraints"]:
+        lines += ["Constraints: `" + json.dumps(
+            result["constraints"], sort_keys=True, ensure_ascii=False) + "`", ""]
+    if result["candidates"]:
+        lines += [
+            "| Model | Config | Observed setup | Bundles | Accuracy lower / observed | Completion lower / observed | Bundle-mean item latency p90 | Bundle-mean completion tok/s p50 |",
+            "|---|---|---|---:|---:|---:|---:|---:|",
+        ]
+        for row in result["candidates"]:
+            metrics = row["metrics"]
+            lines.append(
+                f"| {_cell(row['model'])} | `{row['configuration']}` | "
+                f"{_cell(_configuration_summary(row))} | "
+                f"{row['independent_bundles']} | "
+                f"{_percent(metrics['accuracy_lower95'])} / "
+                f"{_percent(metrics['accuracy_observed'])} | "
+                f"{_percent(metrics['completion_lower95'])} / "
+                f"{_percent(metrics['completion_observed'])} | "
+                f"{metrics['bundle_mean_item_latency_p90_seconds'] if metrics['bundle_mean_item_latency_p90_seconds'] is not None else 'n/a'} "
+                f"(n={metrics['latency_observed_bundles']}) | "
+                f"{metrics['bundle_mean_completion_tokens_per_second_p50'] if metrics['bundle_mean_completion_tokens_per_second_p50'] is not None else 'n/a'} "
+                f"(n={metrics['throughput_observed_bundles']}) |")
+    lines += [
+        "", "## Interpretation", "",
+        "Candidates are filtered from validated voluntary submissions for one exact pack.",
+        "Accuracy and completion objectives use conservative bundle-cluster interval",
+        "lower bounds. Latency and throughput require five observed bundles and summarize",
+        "the distribution of each bundle's mean item measurement. A declared",
+        "hardware capacity is an observation filter, not proof that the model requires or",
+        "will fit that capacity. Missing metadata never satisfies a requested constraint.",
+        "No candidate is a prediction for an untested model, runtime, or environment.", "",
+    ]
+    if result["status"] == "PACK_REQUIRED":
+        lines += ["Available packs:", ""] + [
+            f"- `{pack}`" for pack in result["available_packs"]] + [""]
+    return "\n".join(lines)
 
 
 def aggregate_item_diagnostics(submissions: list[dict]) -> list[dict]:

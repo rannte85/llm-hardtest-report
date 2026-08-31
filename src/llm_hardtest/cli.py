@@ -24,7 +24,7 @@ from .github_submit import (
 )
 from .community_results import (
     build_index, build_pilot_index, load_pilot_submission_directory,
-    load_submission_directory,
+    load_submission_directory, recommend_configurations, render_recommendation,
 )
 from .calibration import write_analysis
 from .round5 import run_pilot
@@ -316,6 +316,33 @@ def main(argv=None) -> int:
     p_results_build.add_argument("directory", nargs="?", default="results/submissions")
     p_results_build.add_argument("--output", default="results/INDEX.md")
     p_results_build.add_argument("--check", action="store_true")
+    p_results_recommend = results_commands.add_parser(
+        "recommend", help="query gated Pareto candidates from public observations")
+    p_results_recommend.add_argument(
+        "directory", nargs="?", default="results/submissions")
+    p_results_recommend.add_argument("--round", type=int, required=True)
+    p_results_recommend.add_argument(
+        "--pack", help="exact sha256 pack fingerprint; required when multiple exist")
+    p_results_recommend.add_argument(
+        "--objective", action="append",
+        choices=("accuracy", "completion", "latency", "throughput"),
+        help="Pareto objective; repeat for multiple axes (default: accuracy)")
+    p_results_recommend.add_argument("--accuracy-floor", type=float)
+    p_results_recommend.add_argument("--os")
+    p_results_recommend.add_argument("--architecture")
+    p_results_recommend.add_argument(
+        "--transport", choices=("openai_compat", "codex_cli"))
+    p_results_recommend.add_argument("--accelerator")
+    p_results_recommend.add_argument("--server")
+    p_results_recommend.add_argument("--quantization")
+    p_results_recommend.add_argument("--model-format")
+    p_results_recommend.add_argument("--max-memory-gb", type=float)
+    p_results_recommend.add_argument("--max-system-memory-gb", type=float)
+    p_results_recommend.add_argument("--max-parameter-count-b", type=float)
+    p_results_recommend.add_argument(
+        "--json", action="store_true", help="emit machine-readable JSON")
+    p_results_recommend.add_argument(
+        "--output", help="write the report to this path instead of stdout")
     p_results_pilots = results_commands.add_parser(
         "pilots", help="validate or aggregate voluntary Round 5 pilot summaries")
     pilot_result_commands = p_results_pilots.add_subparsers(
@@ -455,6 +482,40 @@ def main(argv=None) -> int:
             if args.results_command == "validate":
                 submissions = load_submission_directory(directory)
                 print(f"VALID: {len(submissions)} public result bundle(s)")
+                return 0
+            if args.results_command == "recommend":
+                submissions = load_submission_directory(directory)
+                constraints = {
+                    key: value for key, value in {
+                        "os": args.os,
+                        "architecture": args.architecture,
+                        "transport": args.transport,
+                        "accelerator": args.accelerator,
+                        "server": args.server,
+                        "quantization": args.quantization,
+                        "model_format": args.model_format,
+                        "max_memory_gb": args.max_memory_gb,
+                        "max_system_memory_gb": args.max_system_memory_gb,
+                        "max_parameter_count_b": args.max_parameter_count_b,
+                    }.items() if value is not None
+                }
+                result = recommend_configurations(
+                    submissions, round_number=args.round, pack=args.pack,
+                    constraints=constraints, objectives=args.objective,
+                    accuracy_floor=args.accuracy_floor)
+                document = (json.dumps(result, indent=2, sort_keys=True,
+                                       ensure_ascii=False) + "\n"
+                            if args.json else render_recommendation(result))
+                if args.output:
+                    output = Path(args.output)
+                    if output.exists() or output.is_symlink():
+                        raise ValueError(
+                            f"refusing to overwrite existing recommendation: {output}")
+                    output.parent.mkdir(parents=True, exist_ok=True)
+                    output.write_text(document, encoding="utf-8")
+                    print(f"Recommendation: {output}")
+                else:
+                    print(document, end="")
                 return 0
             bundles, groups = build_index(
                 directory, Path(args.output), check=args.check)

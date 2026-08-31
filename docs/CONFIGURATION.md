@@ -18,7 +18,7 @@ Top-level fields:
 - `models`: one or more model configurations.
 - `panel_focus`: optional generated provenance for a `focus` campaign. It contains
   selected item IDs and pack fingerprints, not source paths or source run names.
-  Schema v2 also records out-of-fold validation summaries.
+  Schema v3 also records multiplicity-controlled out-of-fold validation summaries.
 
 Model fields:
 
@@ -55,6 +55,8 @@ The optional `--require-holdout-stable` gate additionally requires two-fold dire
 replication, which normally needs at least ten independent units per configuration.
 Without the gate, the generated `panel_focus.groups` still records holdout status,
 confirmation rate, evaluated folds, and reversals.
+The summary also identifies the Holm multiplicity method and family-wise alpha used by
+the analysis.
 
 `validate` is deliberately offline. Use `doctor` before a campaign to authenticate to
 `/v1/models`, verify the exact model ID, and probe Chat Completions or Responses as

@@ -715,19 +715,20 @@ def render_index(submissions: list[dict]) -> str:
                 f"selection Jaccard: "
                 f"**{holdout['selection_jaccard'] if holdout['selection_jaccard'] is not None else 'n/a'}**",
                 "",
-                "| Fold | Item | Direction | Independent bundles | Holdout difference | Result |",
-                "|---:|---|---|---:|---:|---|",
+                "| Fold | Item | Direction | Independent bundles | Holdout difference | Holm p | Result |",
+                "|---:|---|---|---:|---:|---:|---|",
             ]
             for fold in holdout["folds"]:
                 if not fold["holdout_evaluations"]:
                     lines.append(
-                        f"| {fold['fold']} | none | none | 0/0 | n/a | INSUFFICIENT |")
+                        f"| {fold['fold']} | none | none | 0/0 | n/a | n/a | INSUFFICIENT |")
                 for row in fold["holdout_evaluations"]:
                     lines.append(
                         f"| {fold['fold']} | `{_cell(row['item'])}` | "
                         f"`{_cell(row['directional_target'])}` | "
                         f"{row['higher_holdout_units']}/{row['lower_holdout_units']} | "
                         f"{_percent(row['holdout_pass_rate_difference'])} | "
+                        f"{row['permutation_p_holm'] if row['permutation_p_holm'] is not None else 'n/a'} | "
                         f"{row['classification']} |")
     lines += [
         "",
@@ -750,7 +751,8 @@ def render_index(submissions: list[dict]) -> str:
         "robust empirical dependencies but is not a globally minimal set or an automatic pack",
         "change. Community out-of-fold validation keeps every shared contribution in one",
         "fold and requires five independent bundles per configuration on both training and",
-        "holdout sides. `INSUFFICIENT` never means that a panel replicated.",
+        "holdout sides. Held-out directions also require a Holm-adjusted two-sided",
+        "permutation p-value below 0.05. `INSUFFICIENT` never means that a panel replicated.",
         "",
     ]
     return "\n".join(lines)

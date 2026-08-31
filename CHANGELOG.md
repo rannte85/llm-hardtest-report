@@ -5,6 +5,21 @@ out separately from harness features.
 
 ## Unreleased
 
+## 2.17.0 — 2026-09-01
+
+- Added analysis-schema-v10 two-sided label-permutation tests for every evaluable
+  held-out panel direction.
+- Added exact enumeration through 100,000 assignments and deterministic 20,000-draw
+  Monte Carlo tests with finite-sample correction for larger and fractional-rate data.
+- Added Holm family-wise correction across all tested directions from both folds.
+- Required both a ten-percentage-point effect and adjusted p < 0.05 for confirmed or
+  reversed replication; nominal effects remain `WEAK_GENERALIZATION`.
+- Added raw/adjusted p-values, permutation audit metadata, Markdown columns, and panel-
+  focus schema v3 multiplicity provenance.
+- Added adversarial controls proving two nominal p=0.047619 replications become
+  p=0.095238, while perfect confirmation and reversal survive correction.
+- Kept public result schema v2 and canonical Round 1–4 content and grading unchanged.
+
 ## 2.16.0 — 2026-09-01
 
 - Added analysis-schema-v9 deterministic two-fold validation that selects panels on

@@ -161,7 +161,7 @@ a plausible but uncertain item.
 ## Discriminative item panel
 
 Pair-specific evidence may leave many items that reproduce the same confirmed model
-direction. Analysis schema v9 includes a compact review panel over those results:
+direction. Analysis schema v10 includes a compact review panel over those results:
 
 ```bash
 llm-hardtest analyze runs/campaign-a runs/campaign-b \
@@ -196,7 +196,7 @@ campaign, but canonical reports should continue to identify that focused selecti
 ## Out-of-fold panel validation
 
 Selecting and assessing a panel on the same observations can reward sample-specific
-noise. Analysis schema v9 therefore performs deterministic stratified two-fold
+noise. Analysis schema v10 therefore performs deterministic stratified two-fold
 validation. For each fold it:
 
 1. assigns every independent local attempt to exactly one fold while balancing each
@@ -206,10 +206,17 @@ validation. For each fold it:
    using only the training fold; and
 4. measures each newly covered direction on the untouched holdout fold.
 
-Every selected direction is `CONFIRMED` when its holdout pass-rate difference remains
-at least `0.1` in the selected direction, `REVERSED` when it reaches `0.1` in the
-opposite direction, `WEAK` when it falls between those thresholds, and `INSUFFICIENT`
-when either configuration has fewer than five scored holdout units. The group is
+Every evaluable direction receives a two-sided label-permutation test of its held-out
+mean-rate difference. At no more than 100,000 assignments the p-value is exact; larger
+spaces use 20,000 SHA-256-seeded Monte Carlo permutations with a finite-sample
+correction. Holm correction then controls family-wise error across every direction
+tested in both folds.
+
+A selected direction is `CONFIRMED` only when its holdout pass-rate difference remains
+at least `0.1` in the selected direction and the Holm-adjusted p-value is below `0.05`.
+`REVERSED` requires the same significance and magnitude in the opposite direction;
+`WEAK` includes small or non-significant effects, and `INSUFFICIENT` means either
+configuration has fewer than five scored holdout units. The group is
 `STABLE` only when both folds contain evaluable directions and every one is confirmed.
 Any reversal yields `REVERSED_SIGNAL`; non-reversed shrinkage yields
 `WEAK_GENERALIZATION`. Fewer than two evaluable folds remains `INSUFFICIENT`.
@@ -243,7 +250,8 @@ colliding filesystem keys receive deterministic numeric suffixes. The generated
 `panel_focus` metadata records the analysis schema, selection method, source-run count,
 pack fingerprints, selected items, and uncovered targets without source paths or run
 names. It also records the holdout status, direction confirmation rate, fold count, and
-reversal count. `--require-holdout-stable` refuses `WEAK_GENERALIZATION`,
+reversal count, family-wise alpha, and multiplicity method.
+`--require-holdout-stable` refuses `WEAK_GENERALIZATION`,
 `REVERSED_SIGNAL`, and `INSUFFICIENT` panels. The rest of the file intentionally preserves the local model configurations
 needed to run it, including endpoint URLs and environment-variable names. Treat it as
 private configuration, validate and probe it before execution, and use `export --public`

@@ -41,7 +41,7 @@ from llm_hardtest.calibration import (
     _discriminative_item_panel,
     _item_metrics, _item_relationships,
     _item_repeat_separation,
-    _model_identity, _panel_holdout_validation,
+    _model_identity, _panel_holdout_validation, _permutation_difference_test,
     analyze_runs, render_analysis, write_analysis,
 )
 from llm_hardtest.panel_config import build_panel_config, write_panel_config
@@ -1746,6 +1746,12 @@ class CalibrationTests(unittest.TestCase):
         self.assertEqual(first["confirmed_direction_evaluations"], 2)
         self.assertEqual(first["direction_confirmation_rate"], 1.0)
         self.assertEqual(first["selection_jaccard"], 1.0)
+        self.assertEqual({row["permutation_p_raw"]
+                          for fold in first["folds"]
+                          for row in fold["holdout_evaluations"]}, {0.00793651})
+        self.assertEqual({row["permutation_p_holm"]
+                          for fold in first["folds"]
+                          for row in fold["holdout_evaluations"]}, {0.01587302})
         self.assertNotIn("private-a", json.dumps(first))
 
     def test_panel_holdout_validation_detects_selection_reversal(self):
@@ -1765,6 +1771,39 @@ class CalibrationTests(unittest.TestCase):
         self.assertEqual({row["classification"]
                           for fold in result["folds"]
                           for row in fold["holdout_evaluations"]}, {"REVERSED"})
+
+    def test_panel_holdout_holm_blocks_two_nominal_replications(self):
+        matrix, models = {}, {}
+        for configuration in ("a", "b"):
+            for unit in range(10):
+                respondent = (configuration, unit)
+                outcome = configuration == "a" and unit not in {0, 1}
+                matrix[respondent] = {"q1": "PASS" if outcome else "FAIL"}
+                models[respondent] = configuration
+        result = _panel_holdout_validation(
+            matrix, models, {"a": "C1", "b": "C2"})
+        evaluations = [row for fold in result["folds"]
+                       for row in fold["holdout_evaluations"]]
+        self.assertEqual(result["status"], "WEAK_GENERALIZATION")
+        self.assertEqual({row["holdout_pass_rate_difference"]
+                          for row in evaluations}, {0.8})
+        self.assertEqual({row["permutation_p_raw"] for row in evaluations},
+                         {0.04761905})
+        self.assertEqual({row["permutation_p_holm"] for row in evaluations},
+                         {0.0952381})
+        self.assertEqual({row["classification"] for row in evaluations}, {"WEAK"})
+
+    def test_holdout_permutation_monte_carlo_is_deterministic_for_fractional_units(self):
+        higher = [index / 10 for index in range(11)]
+        lower = [index / 20 for index in range(11)]
+        first = _permutation_difference_test(higher, lower, "fractional-control")
+        second = _permutation_difference_test(higher, lower, "fractional-control")
+        self.assertEqual(first, second)
+        self.assertEqual(
+            first["method"],
+            "deterministic_monte_carlo_label_permutation_two_sided")
+        self.assertEqual(first["evaluated_permutations"], 20_000)
+        self.assertGreater(first["p_value"], 0)
 
     def test_panel_holdout_validation_preserves_shared_clusters_and_sparse_gate(self):
         matrix, models, clusters = {}, {}, {}
@@ -1819,7 +1858,7 @@ class CalibrationTests(unittest.TestCase):
             analysis = analyze_runs(runs)
             rendered = render_analysis(analysis)
 
-        self.assertEqual(analysis["schema_version"], 9)
+        self.assertEqual(analysis["schema_version"], 10)
         group = analysis["groups"][0]
         self.assertEqual(
             [(row["configuration"], row["sources"], row["respondents"])
@@ -2078,7 +2117,7 @@ class PanelConfigTests(unittest.TestCase):
             root = Path(tmp)
             runs = self._separating_runs(root)
             config, analysis = build_panel_config(runs, max_items=1, repetitions=5)
-        self.assertEqual(analysis["schema_version"], 9)
+        self.assertEqual(analysis["schema_version"], 10)
         self.assertEqual(config["rounds"], [1])
         self.assertEqual(config["repetitions"], 5)
         self.assertEqual(config["timeout_seconds"], 34)
@@ -2089,11 +2128,15 @@ class PanelConfigTests(unittest.TestCase):
         self.assertEqual({tuple(model["item_filters"]["1"])
                           for model in config["models"]}, {(1,)})
         focus = config["panel_focus"]
-        self.assertEqual(focus["schema_version"], 2)
+        self.assertEqual(focus["schema_version"], 3)
         self.assertEqual(focus["source_run_count"], 10)
         self.assertEqual(focus["groups"][0]["status"], "COMPLETE")
         self.assertEqual(focus["groups"][0]["selected_items"], ["q1"])
         self.assertEqual(focus["groups"][0]["holdout_status"], "INSUFFICIENT")
+        self.assertEqual(focus["groups"][0]["holdout_familywise_alpha"], 0.05)
+        self.assertEqual(
+            focus["groups"][0]["holdout_multiplicity_method"],
+            "holm_across_all_out_of_fold_direction_tests")
         self.assertFalse(focus["holdout_stability_required"])
         self.assertNotIn(str(root), json.dumps(focus))
         self.assertNotIn("private-source", json.dumps(focus))
@@ -2116,7 +2159,7 @@ class PanelConfigTests(unittest.TestCase):
             "uncovered_directional_targets": [],
         }
         analysis = {
-            "schema_version": 9,
+            "schema_version": 10,
             "groups": [
                 {"round": 1, "pack": "sha256:" + digit * 64,
                  "discriminative_item_panel": panel,
@@ -2173,7 +2216,7 @@ class PanelConfigTests(unittest.TestCase):
         returned = (Path("focused.json"),
                     {"models": [{}, {}], "rounds": [1], "panel_focus": {
                         "groups": [{"holdout_status": "STABLE"}]}},
-                    {"schema_version": 9})
+                    {"schema_version": 10})
         stdout = io.StringIO()
         with patch("llm_hardtest.cli.write_panel_config", return_value=returned) as write, \
                 patch("sys.stdout", stdout):

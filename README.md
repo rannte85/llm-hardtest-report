@@ -4,11 +4,12 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-**Current release: 2.16.0** — adds out-of-fold validation for discriminative panels.
-Each deterministic fold selects items from one half of the independent evidence and
-checks their model-direction effects only on the held-out half. Stable, weak, reversed,
-and insufficient results remain distinct; shared public bundles never cross folds.
-Focused configs can require replicated evidence with `--require-holdout-stable`.
+**Current release: 2.17.0** — adds multiplicity-controlled holdout replication. Every
+held-out panel direction now needs both a practical effect and a two-sided label-
+permutation p-value below 0.05 after Holm correction across all tested directions.
+Small exact tests and larger deterministic Monte Carlo tests support local attempts and
+fractional public-bundle rates without splitting shared bundles. Focused configs can
+require this stricter evidence with `--require-holdout-stable`.
 Canonical Round 1–4 questions, grading contracts, and public submission schema are
 unchanged.
 
@@ -190,7 +191,9 @@ Out-of-fold validation requires at least five independent training units and fiv
 independent holdout units for every compared configuration, normally ten or more per
 configuration. `INSUFFICIENT` is never treated as successful replication. Without
 `--require-holdout-stable`, `focus` still records the validation status in
-`panel_focus`; the strict flag refuses anything other than `STABLE`.
+`panel_focus`; the strict flag refuses anything other than `STABLE`. `STABLE` requires
+both the 10-percentage-point effect gate and a Holm-adjusted permutation p-value below
+0.05 for every evaluated direction.
 `INCOMPLETE`, `REVIEW`, and `INVALID` remain
 separate and never become wrong answers. The analysis copies no prompts, raw responses,
 model identifiers, local paths, or credentials.

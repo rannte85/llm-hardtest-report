@@ -121,6 +121,8 @@ def build_panel_config(run_dirs: list[Path], *, max_items: int | None = None,
                 "direction_confirmation_rate"],
             "holdout_reversed_direction_evaluations": holdout[
                 "reversed_direction_evaluations"],
+            "holdout_familywise_alpha": holdout["familywise_alpha"],
+            "holdout_multiplicity_method": holdout["multiplicity_method"],
         })
 
     models = []
@@ -150,7 +152,7 @@ def build_panel_config(run_dirs: list[Path], *, max_items: int | None = None,
         "timeout_seconds": max(timeout_values, default=3600),
         "models": models,
         "panel_focus": {
-            "schema_version": 2,
+            "schema_version": 3,
             "analysis_schema_version": analysis["schema_version"],
             "selection_method": "deterministic_greedy_directional_set_cover",
             "source_run_count": len(run_dirs),

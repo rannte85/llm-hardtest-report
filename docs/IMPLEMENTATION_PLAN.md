@@ -443,3 +443,29 @@ Acceptance checks:
   each side when ten bundles exist.
 - Repeated calls are byte-for-byte deterministic and emitted metadata uses only public
   configuration aliases.
+
+## Phase 17 — Multiplicity-controlled holdout replication
+
+Goal: prevent nominally positive held-out effects from becoming stable panel claims
+when several selected directions are tested simultaneously.
+
+Deliverables:
+
+1. Test every evaluable held-out mean-rate difference with a two-sided exchangeable-
+   label permutation test that supports fractional cluster rates.
+2. Enumerate small assignment spaces exactly and use a fixed, SHA-256-seeded 20,000-
+   draw Monte Carlo procedure with finite-sample correction for larger spaces.
+3. Apply Holm family-wise correction once across every tested direction from both folds.
+4. Require practical magnitude and adjusted p < 0.05 for confirmed or reversed labels;
+   retain non-significant effects as weak rather than silently accepting them.
+5. Expose raw and adjusted p-values, method, assignment counts, and concise provenance
+   in local reports, community indexes, and focused configs.
+
+Acceptance checks:
+
+- Two perfect 5-vs-5 held-out splits remain confirmed after Holm correction.
+- Two nominal p=0.047619 effects become p=0.095238 and `WEAK_GENERALIZATION`.
+- Perfect opposite directions remain `REVERSED_SIGNAL` after correction.
+- Fractional 11-vs-11 cluster rates trigger deterministic Monte Carlo and reproduce
+  byte-for-byte across calls.
+- Sparse rows remain insufficient and never enter the multiplicity family.

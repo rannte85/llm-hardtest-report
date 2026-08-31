@@ -107,7 +107,9 @@ Community out-of-fold validation keeps every row from one contribution in a sing
 fold, recomputes panel selection on training bundles, and checks selected directions on
 the untouched half. The index reports confirmation rate and selected-item Jaccard as
 separate diagnostics. This reduces selection bias for observed configurations but does
-not predict an unseen model, server, or hardware environment.
+not predict an unseen model, server, or hardware environment. Exact or deterministic
+Monte Carlo label permutations support fractional bundle-level rates, and Holm
+correction covers every tested held-out direction.
 
 See [Community Data Model](COMMUNITY_DATA_MODEL.md) for the normalization and staged
 path from descriptive observations to an environment-aware serving recommendation.

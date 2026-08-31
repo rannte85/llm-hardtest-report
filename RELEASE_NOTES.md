@@ -1,10 +1,22 @@
-# Release Notes — 2.16.0
+# Release Notes — 2.17.0
 
 This repository is ready to publish as `rannte85/llm-hardtest-report`. It contains no campaign
 outputs, credentials, local model files, personal filesystem paths, or generated
 Python caches.
 
 The release validation covers:
+
+- analysis schema v10 with two-sided held-out label-permutation tests and Holm
+  family-wise correction across both validation folds;
+- exact enumeration for small assignment spaces and deterministic 20,000-draw Monte
+  Carlo inference for larger spaces and fractional public-bundle rates;
+- dual practical-effect and adjusted-significance gates for confirmed and reversed
+  direction labels;
+- raw and adjusted p-values plus complete permutation audit metadata in JSON and
+  concise Markdown reports;
+- panel-focus schema v3 family-wise alpha and multiplicity provenance;
+- adversarial nominal-effect, perfect-replication, reversed, sparse, fractional-rate,
+  and deterministic controls with unchanged public schema and canonical grading;
 
 - analysis schema v9 with deterministic two-fold panel selection and untouched-fold
   directional evaluation;

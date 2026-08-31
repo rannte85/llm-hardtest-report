@@ -24,6 +24,8 @@ ITEM_RELATIONSHIP_THRESHOLD = 0.5
 ITEM_REDUNDANCY_THRESHOLD = 0.8
 ITEM_NET_SEPARATION_THRESHOLD = 0.1
 ITEM_PAIR_EFFECT_THRESHOLD = 0.1
+HOLDOUT_EXACT_PERMUTATION_LIMIT = 100_000
+HOLDOUT_MONTE_CARLO_SAMPLES = 20_000
 
 
 class _HashSampler:
@@ -933,6 +935,57 @@ def _discriminative_item_panel(coverage: dict, relationships: list[dict],
     }
 
 
+def _permutation_difference_test(higher_values: list[float],
+                                 lower_values: list[float], seed: str) -> dict:
+    """Two-sided label permutation test for a held-out mean difference."""
+    pooled = list(higher_values) + list(lower_values)
+    higher_count = len(higher_values)
+    if not higher_count or not lower_values:
+        raise ValueError("permutation test requires two non-empty groups")
+    observed = abs(statistics.mean(higher_values) - statistics.mean(lower_values))
+    total_sum = sum(pooled)
+    assignments = math.comb(len(pooled), higher_count)
+    tolerance = 1e-12
+    extreme = 0
+    if assignments <= HOLDOUT_EXACT_PERMUTATION_LIMIT:
+        evaluated = assignments
+        for selected in combinations(range(len(pooled)), higher_count):
+            selected_sum = sum(pooled[index] for index in selected)
+            difference = abs(
+                selected_sum / higher_count
+                - (total_sum - selected_sum) / len(lower_values))
+            extreme += difference + tolerance >= observed
+        p_value = extreme / evaluated
+        method = "exact_label_permutation_two_sided"
+    else:
+        evaluated = HOLDOUT_MONTE_CARLO_SAMPLES
+        generator = _HashSampler(seed)
+        population = list(range(len(pooled)))
+        for _ in range(evaluated):
+            shuffled = population.copy()
+            for position in range(higher_count):
+                selected_position = position + generator.choice(
+                    range(len(shuffled) - position))
+                shuffled[position], shuffled[selected_position] = (
+                    shuffled[selected_position], shuffled[position])
+            selected_sum = sum(pooled[index]
+                               for index in shuffled[:higher_count])
+            difference = abs(
+                selected_sum / higher_count
+                - (total_sum - selected_sum) / len(lower_values))
+            extreme += difference + tolerance >= observed
+        p_value = (extreme + 1) / (evaluated + 1)
+        method = "deterministic_monte_carlo_label_permutation_two_sided"
+    conservative_p = min(1.0, math.ceil(p_value * 100_000_000) / 100_000_000)
+    return {
+        "p_value": conservative_p,
+        "method": method,
+        "assignments": assignments,
+        "evaluated_permutations": evaluated,
+        "extreme_permutations": extreme,
+    }
+
+
 def _panel_holdout_validation(matrix: dict, models: dict, aliases: dict,
                               max_items: int | None = None,
                               clusters: dict | None = None) -> dict:
@@ -995,15 +1048,12 @@ def _panel_holdout_validation(matrix: dict, models: dict, aliases: dict,
                         or len(higher_values) < MIN_CONFIGURATION_RESPONDENTS
                         or len(lower_values) < MIN_CONFIGURATION_RESPONDENTS):
                     effect = None
-                    classification = "INSUFFICIENT"
+                    permutation = None
                 else:
                     effect = statistics.mean(higher_values) - statistics.mean(lower_values)
-                    if effect >= ITEM_PAIR_EFFECT_THRESHOLD:
-                        classification = "CONFIRMED"
-                    elif effect <= -ITEM_PAIR_EFFECT_THRESHOLD:
-                        classification = "REVERSED"
-                    else:
-                        classification = "WEAK"
+                    permutation = _permutation_difference_test(
+                        higher_values, lower_values,
+                        f"panel-holdout:{holdout_fold}:{item}:{target}")
                 evaluations.append({
                     "item": item,
                     "directional_target": target,
@@ -1011,7 +1061,12 @@ def _panel_holdout_validation(matrix: dict, models: dict, aliases: dict,
                     "lower_holdout_units": len(lower_values),
                     "holdout_pass_rate_difference": (
                         round(effect, 6) if effect is not None else None),
-                    "classification": classification,
+                    "permutation_p_raw": (
+                        permutation["p_value"] if permutation else None),
+                    "permutation_p_holm": None,
+                    "permutation": permutation,
+                    "classification": (
+                        "PENDING" if permutation else "INSUFFICIENT"),
                 })
         all_evaluations.extend(evaluations)
         training_units = {
@@ -1033,6 +1088,25 @@ def _panel_holdout_validation(matrix: dict, models: dict, aliases: dict,
                 for row in panel["selected_items"]),
             "holdout_evaluations": evaluations,
         })
+
+    tested = [row for row in all_evaluations
+              if row["permutation_p_raw"] is not None]
+    previous = 0.0
+    for rank, row in enumerate(
+            sorted(tested, key=lambda value: (
+                value["permutation_p_raw"], value["directional_target"],
+                value["item"])), 1):
+        adjusted = min(1.0, max(
+            previous, row["permutation_p_raw"] * (len(tested) - rank + 1)))
+        previous = adjusted
+        row["permutation_p_holm"] = round(adjusted, 8)
+        effect = row["holdout_pass_rate_difference"]
+        if adjusted >= 0.05 or abs(effect) < ITEM_PAIR_EFFECT_THRESHOLD:
+            row["classification"] = "WEAK"
+        elif effect > 0:
+            row["classification"] = "CONFIRMED"
+        else:
+            row["classification"] = "REVERSED"
 
     counts = {
         classification.lower(): sum(
@@ -1061,6 +1135,8 @@ def _panel_holdout_validation(matrix: dict, models: dict, aliases: dict,
         "method": "deterministic_stratified_two_fold_cross_validation",
         "minimum_units_per_configuration_per_side": MIN_CONFIGURATION_RESPONDENTS,
         "effect_threshold": ITEM_PAIR_EFFECT_THRESHOLD,
+        "familywise_alpha": 0.05,
+        "multiplicity_method": "holm_across_all_out_of_fold_direction_tests",
         "folds_evaluated": folds_evaluated,
         "eligible_direction_evaluations": eligible,
         "confirmed_direction_evaluations": counts["confirmed"],
@@ -1278,7 +1354,7 @@ def analyze_runs(run_dirs: list[Path], panel_max_items: int | None = None) -> di
             "panel_holdout_validation": _panel_holdout_validation(
                 matrix, group["models"], aliases, panel_max_items),
         })
-    return {"schema_version": 9, "source_runs": len(run_dirs), "groups": analyses}
+    return {"schema_version": 10, "source_runs": len(run_dirs), "groups": analyses}
 
 
 def _percent(value: float | None) -> str:
@@ -1433,20 +1509,21 @@ def render_analysis(analysis: dict) -> str:
             f"**{_percent(holdout['direction_confirmation_rate'])}** · selection Jaccard: "
             f"**{holdout['selection_jaccard'] if holdout['selection_jaccard'] is not None else 'n/a'}**.",
             "",
-            "| Fold | Training panel | Selected items | Direction | Holdout units | Holdout difference | Result |",
-            "|---:|---|---|---|---:|---:|---|",
+            "| Fold | Training panel | Selected items | Direction | Holdout units | Holdout difference | Holm p | Result |",
+            "|---:|---|---|---|---:|---:|---:|---|",
         ]
         for fold in holdout["folds"]:
             if not fold["holdout_evaluations"]:
                 lines.append(
                     f"| {fold['fold']} | {fold['training_panel_status']} | "
-                    f"{', '.join(fold['selected_items']) or 'none'} | none | 0/0 | n/a | INSUFFICIENT |")
+                    f"{', '.join(fold['selected_items']) or 'none'} | none | 0/0 | n/a | n/a | INSUFFICIENT |")
             for row in fold["holdout_evaluations"]:
                 lines.append(
                     f"| {fold['fold']} | {fold['training_panel_status']} | "
                     f"{row['item']} | {row['directional_target']} | "
                     f"{row['higher_holdout_units']}/{row['lower_holdout_units']} | "
                     f"{_percent(row['holdout_pass_rate_difference'])} | "
+                    f"{row['permutation_p_holm'] if row['permutation_p_holm'] is not None else 'n/a'} | "
                     f"{row['classification']} |")
         lines += [
             "", "### Item diagnostics", "",
@@ -1561,6 +1638,8 @@ def render_analysis(analysis: dict) -> str:
         f"  Each side needs {MIN_CONFIGURATION_RESPONDENTS} units per configuration; shared",
         "  public bundles remain in one fold. `REVERSED_SIGNAL` is direct evidence that a",
         "  selected direction did not replicate, while `INSUFFICIENT` is not a pass.",
+        "  Confirmation additionally requires a two-sided label-permutation p-value below",
+        "  0.05 after Holm correction across every tested held-out direction.",
         f"- Pair comparisons require at least {MIN_PAIR_ITEMS} commonly scored items.",
         "- Between-configuration disagreement measures observed separation. Within-configuration",
         "  disagreement measures repeat instability. Net separation requires both.",

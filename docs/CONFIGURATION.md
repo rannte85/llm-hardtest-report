@@ -16,6 +16,8 @@ Top-level fields:
 - `timeout_seconds`: timeout for one model call or agent attempt; default 3600.
 - `round4_tasks`: optional Round 4 task subset.
 - `models`: one or more model configurations.
+- `panel_focus`: optional generated provenance for a `focus` campaign. It contains
+  selected item IDs and pack fingerprints, not source paths or source run names.
 
 Model fields:
 
@@ -32,10 +34,22 @@ Model fields:
 - `max_tokens`: direct API maximum output for Rounds 1–3.
 - `temperature`, `top_p`, `top_k`, `min_p`: optional direct API sampling fields.
 - `item_filters`: optional advanced mapping from round numbers to question IDs or
-  Round 4 task IDs. The `replay` command creates this field automatically.
+  Round 4 task IDs. The `replay` and `focus` commands create this field automatically.
 
 Model configurations count independently. The same model identifier at two reasoning
 efforts should use two different keys.
+
+Build a focused config from statistically confirmed discriminative panels:
+
+```bash
+llm-hardtest focus runs/campaign-a runs/campaign-b \
+  --repetitions 5 --output panel-benchmark.json
+```
+
+`focus` merges only exact inference configurations, validates selected evidence against
+the installed pack, and refuses incomplete directional coverage unless
+`--allow-partial` is explicit. Its output is local configuration rather than a public
+export and may contain endpoint URLs and `api_key_env` names copied from source runs.
 
 `validate` is deliberately offline. Use `doctor` before a campaign to authenticate to
 `/v1/models`, verify the exact model ID, and probe Chat Completions or Responses as

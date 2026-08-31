@@ -15,7 +15,7 @@ from pathlib import Path
 
 from llm_hardtest.backends import Backend, BackendError, CodexBackend, OpenAICompatBackend
 from llm_hardtest.cli import _selftest_source_paths, discover_models, doctor_config, main
-from llm_hardtest.common import answer_matches, answer_text, load_json, save_json
+from llm_hardtest.common import answer_matches, answer_text, load_json, repo_root, save_json
 from llm_hardtest.orchestrator import _campaign_units, run as run_campaign, validate_config
 from llm_hardtest.progress import TerminalDashboard, _duration
 from llm_hardtest.report import collect, generate, render
@@ -41,8 +41,9 @@ from llm_hardtest.calibration import (
     _discriminative_item_panel,
     _item_metrics, _item_relationships,
     _item_repeat_separation,
-    analyze_runs, render_analysis, write_analysis,
+    _model_identity, analyze_runs, render_analysis, write_analysis,
 )
+from llm_hardtest.panel_config import build_panel_config, write_panel_config
 from llm_hardtest.pilot_analysis import analyze_pilots, write_pilot_analysis
 from llm_hardtest.public_pilots import (
     build_public_pilot_result, export_public_pilot_bundle,
@@ -1753,7 +1754,7 @@ class CalibrationTests(unittest.TestCase):
             analysis = analyze_runs(runs)
             rendered = render_analysis(analysis)
 
-        self.assertEqual(analysis["schema_version"], 7)
+        self.assertEqual(analysis["schema_version"], 8)
         group = analysis["groups"][0]
         self.assertEqual(
             [(row["configuration"], row["sources"], row["respondents"])
@@ -1933,6 +1934,175 @@ class CalibrationTests(unittest.TestCase):
                 write_analysis([run], Path(tmp) / "analysis.json")
             with self.assertRaisesRegex(ValueError, "panel max items"):
                 analyze_runs([run], panel_max_items=0)
+
+
+class PanelConfigTests(unittest.TestCase):
+    def _separating_runs(self, root: Path) -> list[Path]:
+        pack = validate_pack(repo_root() / "rounds/round1")["fingerprint"]
+        runs = []
+        for model_name, outcome in (("strong", True), ("weak", False)):
+            for attempt in range(5):
+                run = root / f"private-{model_name}-{attempt}"
+                model = {
+                    "key": "shared", "label": f"Private {model_name}",
+                    "model": f"org/{model_name}", "transport": "openai_compat",
+                    "base_url": f"http://127.0.0.1:{8000 + (model_name == 'weak')}/v1",
+                    "rounds": [1],
+                }
+                save_json(run / "config.json", {
+                    "name": f"private-source-{attempt}", "repetitions": 1,
+                    "rounds": [1], "timeout_seconds": 30 + attempt,
+                    "models": [model],
+                })
+                save_json(run / "summary.json", {"packs": {"1": pack}})
+                save_json(run / "shared/round1/attempt-1/result.json", {
+                    "attempt": 1,
+                    "results": [{"id": item, "correct": outcome}
+                                for item in range(1, 11)],
+                })
+                runs.append(run)
+        return runs
+
+    def _opposite_specialty_runs(self, root: Path) -> list[Path]:
+        pack = validate_pack(repo_root() / "rounds/round1")["fingerprint"]
+        runs = []
+        for attempt in range(5):
+            run = root / f"opposite-{attempt}"
+            models = [
+                {"key": "a", "label": "Private A", "model": "org/a",
+                 "transport": "openai_compat", "base_url": "http://127.0.0.1:8000/v1"},
+                {"key": "b", "label": "Private B", "model": "org/b",
+                 "transport": "openai_compat", "base_url": "http://127.0.0.1:8001/v1"},
+            ]
+            save_json(run / "config.json", {
+                "name": "private-opposite", "repetitions": 1, "rounds": [1],
+                "models": models,
+            })
+            save_json(run / "summary.json", {"packs": {"1": pack}})
+            for model in models:
+                is_a = model["key"] == "a"
+                save_json(run / model["key"] / "round1/attempt-1/result.json", {
+                    "attempt": 1,
+                    "results": [
+                        {"id": 1, "correct": is_a},
+                        {"id": 2, "correct": not is_a},
+                    ],
+                })
+            runs.append(run)
+        return runs
+
+    def test_model_identity_ignores_routing_but_not_inference_settings(self):
+        first = {
+            "key": "one", "label": "One", "public_name": "public-one",
+            "model": "org/model", "transport": "openai_compat", "rounds": [1],
+            "item_filters": {"1": [1]}, "temperature": 0,
+        }
+        second = {
+            **first, "key": "two", "label": "Two", "public_name": "public-two",
+            "rounds": [1, 2], "item_filters": {"2": [21]},
+        }
+        changed = {**second, "temperature": 0.5}
+        self.assertEqual(_model_identity(first), _model_identity(second))
+        self.assertNotEqual(_model_identity(first), _model_identity(changed))
+
+    def test_panel_config_merges_models_and_resolves_key_collisions(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runs = self._separating_runs(root)
+            config, analysis = build_panel_config(runs, max_items=1, repetitions=5)
+        self.assertEqual(analysis["schema_version"], 8)
+        self.assertEqual(config["rounds"], [1])
+        self.assertEqual(config["repetitions"], 5)
+        self.assertEqual(config["timeout_seconds"], 34)
+        self.assertEqual([model["key"] for model in config["models"]],
+                         ["shared", "shared-2"])
+        self.assertEqual({model["model"] for model in config["models"]},
+                         {"org/strong", "org/weak"})
+        self.assertEqual({tuple(model["item_filters"]["1"])
+                          for model in config["models"]}, {(1,)})
+        focus = config["panel_focus"]
+        self.assertEqual(focus["source_run_count"], 10)
+        self.assertEqual(focus["groups"][0]["status"], "COMPLETE")
+        self.assertEqual(focus["groups"][0]["selected_items"], ["q1"])
+        self.assertNotIn(str(root), json.dumps(focus))
+        self.assertNotIn("private-source", json.dumps(focus))
+        validate_config(config, check_runtime=False)
+        self.assertEqual(_campaign_units(config), 10)
+
+    def test_panel_config_rejects_pack_drift(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = self._separating_runs(Path(tmp))
+            for run in runs:
+                save_json(run / "summary.json", {
+                    "packs": {"1": "sha256:" + "a" * 64}})
+            with self.assertRaisesRegex(ValueError, "does not match the installed pack"):
+                build_panel_config(runs)
+
+    def test_panel_config_rejects_multiple_packs_for_one_round(self):
+        panel = {
+            "status": "COMPLETE",
+            "selected_items": [{"item": "q1"}],
+            "uncovered_directional_targets": [],
+        }
+        analysis = {
+            "schema_version": 8,
+            "groups": [
+                {"round": 1, "pack": "sha256:" + digit * 64,
+                 "discriminative_item_panel": panel}
+                for digit in ("a", "b")
+            ],
+        }
+        with patch("llm_hardtest.panel_config.analyze_runs", return_value=analysis), \
+                patch("llm_hardtest.panel_config.collect_observations",
+                      return_value={}):
+            with self.assertRaisesRegex(ValueError, "multiple pack fingerprints"):
+                build_panel_config([])
+
+    def test_panel_config_requires_explicit_partial_authority(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = self._opposite_specialty_runs(Path(tmp))
+            with self.assertRaisesRegex(ValueError, "--allow-partial"):
+                build_panel_config(runs, max_items=1)
+            config, analysis = build_panel_config(
+                runs, max_items=1, allow_partial=True)
+        panel = analysis["groups"][0]["discriminative_item_panel"]
+        self.assertEqual(panel["status"], "PARTIAL")
+        self.assertEqual(len(panel["uncovered_directional_targets"]), 1)
+        self.assertTrue(config["panel_focus"]["partial_allowed"])
+        self.assertEqual(config["panel_focus"]["groups"][0]["status"], "PARTIAL")
+        self.assertEqual(len(config["models"]), 2)
+        self.assertEqual({len(model["item_filters"]["1"])
+                          for model in config["models"]}, {1})
+
+    def test_panel_config_output_refuses_overwrite_and_wrong_extension(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runs = self._separating_runs(root)
+            with self.assertRaisesRegex(ValueError, r"\.json"):
+                write_panel_config(runs, root / "focused.md")
+            output = root / "focused.json"
+            path, config, _ = write_panel_config(runs, output, max_items=1)
+            self.assertEqual(path, output)
+            self.assertEqual(load_json(output), config)
+            with self.assertRaisesRegex(ValueError, "overwrite"):
+                write_panel_config(runs, output, max_items=1)
+
+    def test_focus_cli_forwards_budget_repetitions_and_partial_authority(self):
+        returned = (Path("focused.json"),
+                    {"models": [{}, {}], "rounds": [1]},
+                    {"schema_version": 8})
+        stdout = io.StringIO()
+        with patch("llm_hardtest.cli.write_panel_config", return_value=returned) as write, \
+                patch("sys.stdout", stdout):
+            exit_code = main([
+                "focus", "run-a", "run-b", "--output", "focused.json",
+                "--panel-max-items", "3", "--repetitions", "7", "--allow-partial",
+            ])
+        self.assertEqual(exit_code, 0)
+        write.assert_called_once_with(
+            [Path("run-a"), Path("run-b")], Path("focused.json"),
+            max_items=3, repetitions=7, allow_partial=True)
+        self.assertIn("LOCAL CONFIG", stdout.getvalue())
 
 
 class PublicResultTests(unittest.TestCase):

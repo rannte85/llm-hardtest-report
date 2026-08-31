@@ -62,7 +62,8 @@ def _bounded_rate_interval(values: list[float], minimum: int, method: str) -> di
 
 def _model_identity(model: dict) -> str:
     public = {key: value for key, value in model.items()
-              if key not in {"key", "label", "public_name", "item_filters"}}
+              if key not in {
+                  "key", "label", "public_name", "item_filters", "rounds"}}
     encoded = json.dumps(public, sort_keys=True, separators=(",", ":"),
                          ensure_ascii=False).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
@@ -1129,7 +1130,7 @@ def analyze_runs(run_dirs: list[Path], panel_max_items: int | None = None) -> di
             "discriminative_item_panel": _discriminative_item_panel(
                 coverage, relationships, panel_max_items),
         })
-    return {"schema_version": 7, "source_runs": len(run_dirs), "groups": analyses}
+    return {"schema_version": 8, "source_runs": len(run_dirs), "groups": analyses}
 
 
 def _percent(value: float | None) -> str:

@@ -1,10 +1,24 @@
-# Release Notes — 2.14.0
+# Release Notes — 2.15.0
 
 This repository is ready to publish as `rannte85/llm-hardtest-report`. It contains no campaign
 outputs, credentials, local model files, personal filesystem paths, or generated
 Python caches.
 
 The release validation covers:
+
+- a new `focus` command that converts confirmed discriminative panels into runnable
+  campaign configs with model-level round and item filters;
+- exact installed-pack matching and mixed-fingerprint rejection before configuration
+  output is written;
+- inference identity that ignores prior routing-only rounds and filters but preserves
+  model, endpoint, transport, sampling, and other settings;
+- explicit `--allow-partial` authority with uncovered directional targets retained;
+- deterministic duplicate-key suffixes, overwrite protection, offline validation, and
+  privacy-safe panel provenance without source paths or source campaign names;
+- adversarial controls plus an E4B one-run control that correctly refuses to invent a
+  confirmed panel from insufficient evidence;
+- local analysis schema v8 with unchanged public result schema v2 and canonical Round
+  1–4 grading contracts;
 
 - analysis schema v7 with a discriminative item panel built only from already-confirmed
   pair-specific configuration directions;

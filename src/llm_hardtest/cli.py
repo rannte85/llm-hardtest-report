@@ -29,6 +29,7 @@ from .community_results import (
 from .calibration import write_analysis
 from .round5 import run_pilot
 from .pilot_analysis import write_pilot_analysis
+from .panel_config import write_panel_config
 from .public_pilots import export_public_pilot_bundle
 
 
@@ -273,6 +274,15 @@ def main(argv=None) -> int:
     p_analyze.add_argument(
         "--panel-max-items", type=int,
         help="cap the discriminative panel and report any uncovered directions")
+    p_focus = sub.add_parser(
+        "focus", help="build a runnable focused config from discriminative panels")
+    p_focus.add_argument("run_dirs", nargs="+")
+    p_focus.add_argument("--output", default="panel-benchmark.json")
+    p_focus.add_argument("--panel-max-items", type=int)
+    p_focus.add_argument("--repetitions", type=int, default=5)
+    p_focus.add_argument(
+        "--allow-partial", action="store_true",
+        help="allow a budget-limited panel with uncovered configuration directions")
     p_inspect = sub.add_parser("inspect", help="show unresolved campaign items")
     p_inspect.add_argument("run_dir")
     p_inspect.add_argument("--json", action="store_true", help="emit machine-readable JSON")
@@ -415,6 +425,16 @@ def main(argv=None) -> int:
             print(f"Analysis: {md}")
             print(f"Machine-readable analysis: {js}")
             print(f"Comparable pack groups: {len(analysis['groups'])}")
+            return 0
+        if args.command == "focus":
+            output, config, analysis = write_panel_config(
+                [Path(value) for value in args.run_dirs], Path(args.output),
+                max_items=args.panel_max_items, repetitions=args.repetitions,
+                allow_partial=args.allow_partial)
+            print(f"Focused config: {output}")
+            print(f"Models: {len(config['models'])}; rounds: {config['rounds']}")
+            print(f"Analysis schema: {analysis['schema_version']}")
+            print("LOCAL CONFIG: review endpoint and environment-variable fields before sharing")
             return 0
         if args.command == "inspect":
             summary = inspect_run(Path(args.run_dir))

@@ -4,12 +4,12 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-**Current release: 2.14.0** — adds discriminative item panels. After pair-specific
-simultaneous inference finds reliable specialist items, the analyzer now selects a
-compact set that covers every confirmed configuration direction while penalizing
-robustly redundant or opposing outcome patterns. A per-pack item budget exposes every
-uncovered direction instead of claiming complete coverage. Canonical Round 1–4
-questions, grading contracts, and public submission schema are unchanged.
+**Current release: 2.15.0** — turns confirmed discriminative item panels into runnable
+focused campaign configs. `focus` revalidates the supplied raw evidence, requires the
+currently installed benchmark-pack fingerprint, merges identical inference settings,
+and generates per-model round and item filters. Budget-limited partial panels require
+explicit authorization. Canonical Round 1–4 questions, grading contracts, and public
+submission schema are unchanged.
 
 LLM Hardtest Report is a local-first command-line benchmark for comparing language
 models as reasoners, coding workers, and safe handoff agents. Point it at one or more
@@ -166,6 +166,24 @@ fewer robust dependency signals, and have stronger simultaneous margins. Opposit
 specialties for the same configuration pair remain separate targets. The JSON retains
 the complete selection trace; a bounded panel is marked `PARTIAL` and lists every
 uncovered direction.
+
+Turn a complete selected panel into a new focused campaign without copying item IDs by
+hand:
+
+```bash
+llm-hardtest focus runs/campaign-a runs/campaign-b \
+  --panel-max-items 8 --repetitions 5 --output panel-benchmark.json
+llm-hardtest validate --config panel-benchmark.json
+llm-hardtest doctor --config panel-benchmark.json
+llm-hardtest run --config panel-benchmark.json
+```
+
+The command refuses stale or mixed pack fingerprints and refuses a partial panel unless
+`--allow-partial` is supplied. It can merge the same inference configuration observed
+under different prior round selections, but keeps temperature, model, endpoint,
+transport, and other inference differences separate. The generated file is a **local
+config**: it can contain endpoint URLs and environment-variable names copied from the
+source runs. Review it before sharing; it is not a sanitized public result bundle.
 `INCOMPLETE`, `REVIEW`, and `INVALID` remain
 separate and never become wrong answers. The analysis copies no prompts, raw responses,
 model identifiers, local paths, or credentials.

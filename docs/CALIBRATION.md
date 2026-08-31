@@ -21,7 +21,10 @@ tasks. Only `PASS` and `FAIL` enter correctness and correlation calculations.
 `INCOMPLETE`, `REVIEW`, `INVALID`, and missing observations retain separate counts.
 
 A configuration identity is a one-way hash of the saved model configuration after
-removing display labels, filesystem keys, public aliases, and focused item filters.
+removing display labels, filesystem keys, public aliases, and routing-only `rounds` and
+focused item filters. Round selection changes what is scheduled, not how a shared item
+is inferred; model, endpoint, transport, sampling, and other inference settings remain
+part of the identity.
 The hash is used only for equality tests and is not emitted in the analysis.
 
 For local analysis, each independently started attempt is an uncertainty cluster. In
@@ -158,7 +161,7 @@ a plausible but uncertain item.
 ## Discriminative item panel
 
 Pair-specific evidence may leave many items that reproduce the same confirmed model
-direction. Analysis schema v7 adds a compact review panel over those results:
+direction. Analysis schema v8 includes a compact review panel over those results:
 
 ```bash
 llm-hardtest analyze runs/campaign-a runs/campaign-b \
@@ -189,6 +192,32 @@ This is a transparent heuristic, not proof of a globally minimum test, a replace
 for task-content review, or authorization to mutate a benchmark pack automatically.
 Its selected item IDs can be copied into advanced `item_filters` for a focused follow-up
 campaign, but canonical reports should continue to identify that focused selection.
+
+## Focused follow-up configuration
+
+`focus` performs that conversion automatically from the same locally revalidated raw
+evidence:
+
+```bash
+llm-hardtest focus runs/campaign-a runs/campaign-b \
+  --panel-max-items 8 --repetitions 5 --output panel-benchmark.json
+```
+
+Only round/pack groups with selected panel items enter the generated campaign. The
+command requires one observed fingerprint per selected round and an exact match with
+the currently installed bundled pack. It refuses a budget-limited `PARTIAL` panel by
+default; `--allow-partial` is an explicit decision to run despite named uncovered
+configuration directions.
+
+Exact inference configurations are merged even if their source campaigns scheduled
+different rounds or item filters. Distinct inference settings remain distinct, and
+colliding filesystem keys receive deterministic numeric suffixes. The generated
+`panel_focus` metadata records the analysis schema, selection method, source-run count,
+pack fingerprints, selected items, and uncovered targets without source paths or run
+names. The rest of the file intentionally preserves the local model configurations
+needed to run it, including endpoint URLs and environment-variable names. Treat it as
+private configuration, validate and probe it before execution, and use `export --public`
+only on completed runs when preparing a sanitized contribution.
 
 ## Configuration separation and repeat stability
 

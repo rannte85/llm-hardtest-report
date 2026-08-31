@@ -388,3 +388,30 @@ Acceptance checks:
 - A one-item budget over two unique targets is `PARTIAL` and names the missing target.
 - Ten identical directional items collapse to one while their robust dependencies
   remain counted, and insufficient community bundles cannot create a panel.
+
+## Phase 15 — Runnable focused campaigns
+
+Goal: convert confirmed panel selections into a validated, reproducible follow-up
+campaign without manual item copying or accidental mixing of incompatible evidence.
+
+Deliverables:
+
+1. Add `focus` to reanalyze raw local runs and emit model-level round and item filters
+   only for selected panel groups.
+2. Treat prior round and item routing as scheduling metadata, while retaining model,
+   endpoint, transport, sampling, and all other inference settings in configuration
+   identity.
+3. Require one exact current bundled-pack fingerprint per selected round and refuse
+   mixed or stale pack evidence.
+4. Refuse a partial directional panel unless the operator explicitly supplies
+   `--allow-partial`, preserving every uncovered target in provenance.
+5. Validate generated configs offline, refuse overwrite, resolve duplicate model keys,
+   and exclude source paths and source run names from `panel_focus` metadata.
+
+Acceptance checks:
+
+- Routing-only `rounds` differences merge, while a temperature difference does not.
+- Duplicate preferred model keys receive stable numeric suffixes.
+- Pack drift is rejected before a config is written.
+- A bounded partial panel requires explicit authority and retains its uncovered target.
+- Generated provenance contains no source path or source campaign name.

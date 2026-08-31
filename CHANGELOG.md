@@ -5,6 +5,23 @@ out separately from harness features.
 
 ## Unreleased
 
+## 2.15.0 — 2026-09-01
+
+- Added `focus`, which converts locally revalidated discriminative panels into runnable
+  campaign JSON with per-model round and item filters.
+- Required selected evidence to use one fingerprint per round and exactly match the
+  currently installed benchmark pack before a config can be written.
+- Made routing-only `rounds` and `item_filters` irrelevant to inference-configuration
+  identity while preserving model, endpoint, transport, sampling, and other settings.
+- Added explicit `--allow-partial` authority for budget-limited panels with uncovered
+  directions; complete panels remain the safe default.
+- Added deterministic duplicate-key resolution, overwrite protection, offline config
+  validation, and privacy-safe panel provenance without source paths or run names.
+- Added adversarial controls for routing merges, inference-setting separation, key
+  collisions, pack drift, partial panels, output safety, and CLI argument forwarding.
+- Bumped local analysis to schema v8; public result schema v2 and canonical Round 1–4
+  content and grading remain unchanged.
+
 ## 2.14.0 — 2026-09-01
 
 - Added analysis-schema-v7 discriminative item panels over confirmed pair-specific

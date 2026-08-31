@@ -24,6 +24,22 @@ from .calibration import write_analysis
 from .round5 import run_pilot
 
 
+SELFTEST_EXCLUDED_ROOTS = {
+    ".git", ".venv", "build", "dist", "runs", "__pycache__",
+}
+
+
+def _selftest_source_paths(root: Path):
+    """Yield repository source files, excluding local/generated evidence trees."""
+    for path in root.rglob("*"):
+        relative = path.relative_to(root)
+        if (not path.is_file() or path.suffix == ".zip"
+                or any(part in SELFTEST_EXCLUDED_ROOTS for part in relative.parts)
+                or any(part.endswith(".egg-info") for part in relative.parts)):
+            continue
+        yield path
+
+
 def _ask(prompt: str, default: str | None = None) -> str:
     suffix = f" [{default}]" if default is not None else ""
     value = input(prompt + suffix + ": ").strip()
@@ -205,9 +221,7 @@ def selftest() -> int:
         failures.append(
             "round-5 pilot controls failed:\n" + pilot.stdout[-1000:] + pilot.stderr[-1000:])
     korean_hits = []
-    for path in root.rglob("*"):
-        if not path.is_file() or path.suffix == ".zip" or ".git" in path.parts:
-            continue
+    for path in _selftest_source_paths(root):
         try:
             text = path.read_text(encoding="utf-8")
         except (UnicodeDecodeError, OSError):

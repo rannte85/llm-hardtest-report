@@ -14,7 +14,7 @@ from unittest.mock import patch
 from pathlib import Path
 
 from llm_hardtest.backends import Backend, BackendError, CodexBackend, OpenAICompatBackend
-from llm_hardtest.cli import discover_models, doctor_config, main
+from llm_hardtest.cli import _selftest_source_paths, discover_models, doctor_config, main
 from llm_hardtest.common import answer_matches, answer_text, load_json, save_json
 from llm_hardtest.orchestrator import _campaign_units, run as run_campaign, validate_config
 from llm_hardtest.progress import TerminalDashboard, _duration
@@ -537,6 +537,20 @@ class RoundOneTwoTests(unittest.TestCase):
 
 
 class ConfigurationTests(unittest.TestCase):
+    def test_selftest_source_scan_excludes_generated_evidence(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "src").mkdir()
+            (root / "runs/local/_state").mkdir(parents=True)
+            (root / "dist").mkdir()
+            source = root / "src/kept.py"
+            source.write_text("source", encoding="utf-8")
+            (root / "runs/local/_state/generated.js").write_text(
+                "generated", encoding="utf-8")
+            (root / "dist/archive.txt").write_text("built", encoding="utf-8")
+            paths = list(_selftest_source_paths(root))
+        self.assertEqual(paths, [source])
+
     def test_minimal_config(self):
         validate_config({
             "repetitions": 1,

@@ -57,8 +57,10 @@ def _public_text(value: object, *, maximum: int = 160) -> str | None:
     if not isinstance(value, str):
         return None
     text = value.strip()
+    path_parts = text.replace("\\", "/").split("/")
     if (not text or len(text) > maximum or PRIVATE_STRING.search(text)
-            or SECRET_STRING.search(text) or text in {".", ".."}):
+            or SECRET_STRING.search(text)
+            or any(part in {".", ".."} for part in path_parts)):
         return None
     return text
 

@@ -129,6 +129,8 @@ See [Voluntary Public Results](docs/PUBLIC_RESULTS.md) for the consent and priva
 ```bash
 llm-hardtest export runs/my-run --public --output result-bundle.zip
 llm-hardtest submit result-bundle.zip --preview
+# Only after reviewing every displayed field:
+llm-hardtest submit result-bundle.zip --open-pr --yes
 ```
 
 ## Live terminal dashboard

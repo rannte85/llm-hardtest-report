@@ -18,6 +18,7 @@ from .inspection import inspect_run, render_inspection
 from .replay import make_replay_config
 from .packs import validate_pack
 from .public_results import export_public_bundle
+from .github_submit import DEFAULT_REPOSITORY, open_submission_pr, preview_submission
 
 
 def _ask(prompt: str, default: str | None = None) -> str:
@@ -269,6 +270,14 @@ def main(argv=None) -> int:
     p_export.add_argument("--public", action="store_true",
                           help="confirm that the sanitized bundle is intended for review")
     p_export.add_argument("--output", default="llm-hardtest-public-result.zip")
+    p_submit = sub.add_parser("submit", help="preview or voluntarily submit a public bundle")
+    p_submit.add_argument("bundle")
+    submit_mode = p_submit.add_mutually_exclusive_group(required=True)
+    submit_mode.add_argument("--preview", action="store_true")
+    submit_mode.add_argument("--open-pr", action="store_true")
+    p_submit.add_argument("--yes", action="store_true",
+                          help="confirm the external GitHub branch, file, and PR writes")
+    p_submit.add_argument("--repo", default=DEFAULT_REPOSITORY)
     sub.add_parser("selftest", help="validate datasets and graders without calling a model")
     args = parser.parse_args(argv)
     try:
@@ -325,6 +334,18 @@ def main(argv=None) -> int:
             for warning in warnings:
                 print("WARNING: " + warning)
             print(f"Preview before submission: llm-hardtest submit {path} --preview")
+            return 0
+        if args.command == "submit":
+            payload, relative, document = preview_submission(Path(args.bundle))
+            print(document, end="")
+            print(f"Proposed repository path: {relative}")
+            if args.preview:
+                print("PREVIEW ONLY: no network request or GitHub write was made")
+                return 0
+            if not args.yes:
+                raise ValueError("opening a GitHub pull request requires --open-pr --yes")
+            url = open_submission_pr(payload, args.repo)
+            print(f"Pull request: {url}")
             return 0
         return selftest()
     except (ValueError, RuntimeError, OSError, json.JSONDecodeError,

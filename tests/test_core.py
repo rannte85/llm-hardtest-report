@@ -13,7 +13,7 @@ from unittest.mock import patch
 from pathlib import Path
 
 from llm_hardtest.backends import Backend, BackendError, CodexBackend, OpenAICompatBackend
-from llm_hardtest.cli import discover_models, doctor_config
+from llm_hardtest.cli import discover_models, doctor_config, main
 from llm_hardtest.common import answer_matches, answer_text, save_json
 from llm_hardtest.orchestrator import _campaign_units, run as run_campaign, validate_config
 from llm_hardtest.progress import TerminalDashboard, _duration
@@ -25,6 +25,9 @@ from llm_hardtest.packs import validate_pack
 from llm_hardtest.public_results import (
     build_public_result, export_public_bundle, load_public_bundle,
     validate_public_result,
+)
+from llm_hardtest.github_submit import (
+    open_submission_pr, preview_submission, submission_relative_path,
 )
 from llm_hardtest.round12 import run as run_round12
 from llm_hardtest.round3 import _fields, _grade
@@ -735,6 +738,14 @@ class PublicResultTests(unittest.TestCase):
         self.assertTrue(warnings)
         self.assertNotIn("alice", json.dumps(payload))
 
+    def test_relative_path_traversal_model_name_is_replaced(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "run"
+            self._run(root, "../private/model.gguf")
+            payload, warnings = build_public_result(root)
+        self.assertEqual(payload["models"][0]["public_name"], "model-1")
+        self.assertTrue(warnings)
+
     def test_public_result_rejects_content_tampering(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "run"
@@ -772,6 +783,127 @@ class PublicResultTests(unittest.TestCase):
         payload["bundle_id"] = _bundle_id(body)
         with self.assertRaisesRegex(ValueError, "extra fields"):
             validate_public_result(payload)
+
+    def test_submission_preview_and_explicit_consent_guard(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "run"
+            self._run(root)
+            bundle = Path(tmp) / "result.zip"
+            _, payload, _ = export_public_bundle(root, bundle)
+            previewed, relative, document = preview_submission(bundle)
+            self.assertEqual(previewed, payload)
+            self.assertEqual(relative, submission_relative_path(payload))
+            self.assertEqual(json.loads(document), payload)
+            with patch("llm_hardtest.cli.open_submission_pr") as opened:
+                self.assertEqual(main(["submit", str(bundle), "--open-pr"]), 2)
+                opened.assert_not_called()
+
+    def test_submit_cli_only_writes_after_yes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "run"
+            self._run(root)
+            bundle = Path(tmp) / "result.zip"
+            export_public_bundle(root, bundle)
+            with patch("llm_hardtest.cli.open_submission_pr",
+                       return_value="https://github.com/o/r/pull/1") as opened:
+                self.assertEqual(
+                    main(["submit", str(bundle), "--open-pr", "--yes"]), 0)
+                opened.assert_called_once()
+
+    def test_github_submit_rejects_malicious_repository_and_duplicate(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "run"
+            self._run(root)
+            payload, _ = build_public_result(root)
+        for repository in ("owner/..", "../repo", "owner/repo/extra", "owner/-repo"):
+            with self.subTest(repository=repository):
+                with self.assertRaisesRegex(ValueError, "OWNER/NAME"):
+                    open_submission_pr(payload, repository, client=object())
+
+        class DuplicateClient:
+            def request(self, method, endpoint, fields=None, allow_missing=False):
+                if endpoint == "user":
+                    return {"login": "owner"}
+                if endpoint == "repos/owner/repo":
+                    return {"default_branch": "main"}
+                return {"already": "present"}
+
+        with self.assertRaisesRegex(ValueError, "already published"):
+            open_submission_pr(payload, "owner/repo", DuplicateClient())
+
+    def test_github_submit_creates_owner_branch_file_and_pull_request(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "run"
+            self._run(root)
+            payload, _ = build_public_result(root)
+
+        class RecordingClient:
+            def __init__(self):
+                self.calls = []
+
+            def request(self, method, endpoint, fields=None, allow_missing=False):
+                self.calls.append((method, endpoint, fields, allow_missing))
+                if endpoint == "user":
+                    return {"login": "owner"}
+                if endpoint == "repos/owner/repo":
+                    return {"default_branch": "main"}
+                if "/contents/results/submissions/" in endpoint and method == "GET":
+                    return None
+                if endpoint.endswith("/git/ref/heads/main"):
+                    return {"object": {"sha": "abc123"}}
+                if endpoint == "repos/owner/repo/pulls":
+                    return {"html_url": "https://github.com/owner/repo/pull/7"}
+                return {}
+
+        client = RecordingClient()
+        url = open_submission_pr(payload, "owner/repo", client)
+        self.assertEqual(url, "https://github.com/owner/repo/pull/7")
+        calls = {(method, endpoint): fields for method, endpoint, fields, _ in client.calls}
+        digest = payload["bundle_id"].removeprefix("sha256:")
+        branch = f"llm-hardtest-result/{digest[:12]}"
+        self.assertEqual(calls[("POST", "repos/owner/repo/git/refs")], {
+            "ref": f"refs/heads/{branch}", "sha": "abc123",
+        })
+        content_call = next(fields for method, endpoint, fields, _ in client.calls
+                            if method == "PUT" and "/contents/" in endpoint)
+        self.assertEqual(json.loads(__import__("base64").b64decode(
+            content_call["content"])), payload)
+        self.assertEqual(calls[("POST", "repos/owner/repo/pulls")]["head"], branch)
+
+    def test_github_submit_uses_a_contributor_fork(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "run"
+            self._run(root)
+            payload, _ = build_public_result(root)
+
+        class ForkClient:
+            def __init__(self):
+                self.calls = []
+
+            def request(self, method, endpoint, fields=None, allow_missing=False):
+                self.calls.append((method, endpoint, fields, allow_missing))
+                if endpoint == "user":
+                    return {"login": "contributor"}
+                if endpoint == "repos/owner/repo":
+                    return {"default_branch": "main"}
+                if endpoint.startswith("repos/owner/repo/contents/"):
+                    return None
+                if endpoint == "repos/contributor/repo":
+                    return {"full_name": "contributor/repo"}
+                if endpoint.endswith("/git/ref/heads/main"):
+                    return {"object": {"sha": "forksha"}}
+                if endpoint == "repos/owner/repo/pulls":
+                    return {"html_url": "https://github.com/owner/repo/pull/8"}
+                return {}
+
+        client = ForkClient()
+        self.assertEqual(open_submission_pr(payload, "owner/repo", client),
+                         "https://github.com/owner/repo/pull/8")
+        self.assertIn(("POST", "repos/contributor/repo/merge-upstream",
+                       {"branch": "main"}, False), client.calls)
+        pull = next(fields for method, endpoint, fields, _ in client.calls
+                    if method == "POST" and endpoint == "repos/owner/repo/pulls")
+        self.assertTrue(pull["head"].startswith("contributor:llm-hardtest-result/"))
 
 
 class ReportTests(unittest.TestCase):

@@ -4,12 +4,13 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-**Current release: 2.15.0** — turns confirmed discriminative item panels into runnable
-focused campaign configs. `focus` revalidates the supplied raw evidence, requires the
-currently installed benchmark-pack fingerprint, merges identical inference settings,
-and generates per-model round and item filters. Budget-limited partial panels require
-explicit authorization. Canonical Round 1–4 questions, grading contracts, and public
-submission schema are unchanged.
+**Current release: 2.16.0** — adds out-of-fold validation for discriminative panels.
+Each deterministic fold selects items from one half of the independent evidence and
+checks their model-direction effects only on the held-out half. Stable, weak, reversed,
+and insufficient results remain distinct; shared public bundles never cross folds.
+Focused configs can require replicated evidence with `--require-holdout-stable`.
+Canonical Round 1–4 questions, grading contracts, and public submission schema are
+unchanged.
 
 LLM Hardtest Report is a local-first command-line benchmark for comparing language
 models as reasoners, coding workers, and safe handoff agents. Point it at one or more
@@ -172,7 +173,8 @@ hand:
 
 ```bash
 llm-hardtest focus runs/campaign-a runs/campaign-b \
-  --panel-max-items 8 --repetitions 5 --output panel-benchmark.json
+  --panel-max-items 8 --repetitions 5 --require-holdout-stable \
+  --output panel-benchmark.json
 llm-hardtest validate --config panel-benchmark.json
 llm-hardtest doctor --config panel-benchmark.json
 llm-hardtest run --config panel-benchmark.json
@@ -184,6 +186,11 @@ under different prior round selections, but keeps temperature, model, endpoint,
 transport, and other inference differences separate. The generated file is a **local
 config**: it can contain endpoint URLs and environment-variable names copied from the
 source runs. Review it before sharing; it is not a sanitized public result bundle.
+Out-of-fold validation requires at least five independent training units and five
+independent holdout units for every compared configuration, normally ten or more per
+configuration. `INSUFFICIENT` is never treated as successful replication. Without
+`--require-holdout-stable`, `focus` still records the validation status in
+`panel_focus`; the strict flag refuses anything other than `STABLE`.
 `INCOMPLETE`, `REVIEW`, and `INVALID` remain
 separate and never become wrong answers. The analysis copies no prompts, raw responses,
 model identifiers, local paths, or credentials.

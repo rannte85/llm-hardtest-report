@@ -38,7 +38,8 @@ def _unique_key(preferred: object, used: set[str]) -> str:
 
 def build_panel_config(run_dirs: list[Path], *, max_items: int | None = None,
                        repetitions: int = 5,
-                       allow_partial: bool = False) -> tuple[dict, dict]:
+                       allow_partial: bool = False,
+                       require_holdout_stable: bool = False) -> tuple[dict, dict]:
     """Build a fresh focused config from locally revalidated panel evidence."""
     if (isinstance(repetitions, bool) or not isinstance(repetitions, int)
             or repetitions < 1):
@@ -48,6 +49,7 @@ def build_panel_config(run_dirs: list[Path], *, max_items: int | None = None,
     selected_groups = []
     for group in analysis["groups"]:
         panel = group["discriminative_item_panel"]
+        holdout = group["panel_holdout_validation"]
         selected = [row["item"] for row in panel["selected_items"]]
         if not selected:
             continue
@@ -55,12 +57,17 @@ def build_panel_config(run_dirs: list[Path], *, max_items: int | None = None,
             raise ValueError(
                 "panel budget leaves uncovered directions; rerun without a limit or "
                 "pass --allow-partial")
-        selected_groups.append((group, panel, selected))
+        if require_holdout_stable and holdout["status"] != "STABLE":
+            raise ValueError(
+                "panel did not pass out-of-fold validation; collect at least ten "
+                "independent units per configuration, investigate weak or reversed "
+                "evidence, or omit --require-holdout-stable")
+        selected_groups.append((group, panel, holdout, selected))
     if not selected_groups:
         raise ValueError("no confirmed discriminative panel items are available")
 
     packs_by_round = defaultdict(set)
-    for group, _, _ in selected_groups:
+    for group, _, _, _ in selected_groups:
         packs_by_round[group["round"]].add(group["pack"])
     ambiguous = sorted(round_number for round_number, packs in packs_by_round.items()
                        if len(packs) != 1)
@@ -96,7 +103,7 @@ def build_panel_config(run_dirs: list[Path], *, max_items: int | None = None,
 
     filters = defaultdict(lambda: defaultdict(set))
     panels = []
-    for group, panel, selected in selected_groups:
+    for group, panel, holdout, selected in selected_groups:
         round_number, pack = group["round"], group["pack"]
         active_identities = set(evidence[(round_number, pack)]["models"].values())
         runtime_items = {_runtime_item(round_number, item) for item in selected}
@@ -108,6 +115,12 @@ def build_panel_config(run_dirs: list[Path], *, max_items: int | None = None,
             "status": panel["status"],
             "selected_items": selected,
             "uncovered_directional_targets": panel["uncovered_directional_targets"],
+            "holdout_status": holdout["status"],
+            "holdout_folds_evaluated": holdout["folds_evaluated"],
+            "holdout_direction_confirmation_rate": holdout[
+                "direction_confirmation_rate"],
+            "holdout_reversed_direction_evaluations": holdout[
+                "reversed_direction_evaluations"],
         })
 
     models = []
@@ -137,12 +150,13 @@ def build_panel_config(run_dirs: list[Path], *, max_items: int | None = None,
         "timeout_seconds": max(timeout_values, default=3600),
         "models": models,
         "panel_focus": {
-            "schema_version": 1,
+            "schema_version": 2,
             "analysis_schema_version": analysis["schema_version"],
             "selection_method": "deterministic_greedy_directional_set_cover",
             "source_run_count": len(run_dirs),
             "max_items_per_group": max_items,
             "partial_allowed": allow_partial,
+            "holdout_stability_required": require_holdout_stable,
             "groups": sorted(panels, key=lambda row: (row["round"], row["pack"])),
         },
     }
@@ -156,13 +170,15 @@ def build_panel_config(run_dirs: list[Path], *, max_items: int | None = None,
 
 def write_panel_config(run_dirs: list[Path], output: Path, *,
                        max_items: int | None = None, repetitions: int = 5,
-                       allow_partial: bool = False) -> tuple[Path, dict, dict]:
+                       allow_partial: bool = False,
+                       require_holdout_stable: bool = False) -> tuple[Path, dict, dict]:
     if output.suffix.lower() != ".json":
         raise ValueError("panel config output must use a .json extension")
     if output.exists() or output.is_symlink():
         raise ValueError(f"refusing to overwrite existing panel config: {output}")
     config, analysis = build_panel_config(
         run_dirs, max_items=max_items, repetitions=repetitions,
-        allow_partial=allow_partial)
+        allow_partial=allow_partial,
+        require_holdout_stable=require_holdout_stable)
     save_json(output, config)
     return output, config, analysis

@@ -53,6 +53,11 @@ covers each observed configuration direction with a compact item set and uses ro
 bundle-clustered dependency signals as tie-breaking penalties. Repeated rows in one
 bundle therefore cannot create either a directional target or a dependency shortcut.
 The panel is a review aid, not an automatic benchmark rewrite.
+The index additionally assigns each complete contribution bundle to one deterministic
+cross-validation fold. It selects a panel from the other fold and checks the selected
+directions only on the held-out bundles. Ten bundles are normally required to leave
+five independent bundles per configuration on both sides. `REVERSED_SIGNAL` exposes a
+direction that fails to replicate; `INSUFFICIENT` is not evidence of stability.
 
 ## What can be recommended
 

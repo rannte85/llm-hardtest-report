@@ -1,10 +1,22 @@
-# Release Notes — 2.15.0
+# Release Notes — 2.16.0
 
 This repository is ready to publish as `rannte85/llm-hardtest-report`. It contains no campaign
 outputs, credentials, local model files, personal filesystem paths, or generated
 Python caches.
 
 The release validation covers:
+
+- analysis schema v9 with deterministic two-fold panel selection and untouched-fold
+  directional evaluation;
+- stable, weak-generalization, reversed-signal, and insufficient states that never
+  present sparse or contradictory holdout evidence as successful replication;
+- shared public-bundle fold assignment that preserves contribution-level dependence;
+- direction confirmation rates, item-selection Jaccard overlap, and complete fold
+  traces in machine-readable and Markdown outputs;
+- `focus --require-holdout-stable` plus panel-focus schema v2 privacy-safe validation
+  provenance in generated local configs;
+- adversarial stable, reversal, sparse, shared-cluster, deterministic, and privacy
+  controls with unchanged canonical questions, grading, and public schema;
 
 - a new `focus` command that converts confirmed discriminative panels into runnable
   campaign configs with model-level round and item filters;

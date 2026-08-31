@@ -415,3 +415,31 @@ Acceptance checks:
 - Pack drift is rejected before a config is written.
 - A bounded partial panel requires explicit authority and retains its uncovered target.
 - Generated provenance contains no source path or source campaign name.
+
+## Phase 16 — Out-of-fold panel validation
+
+Goal: distinguish genuinely reusable discriminative panels from selections that only
+look strong because they were chosen and evaluated on the same observations.
+
+Deliverables:
+
+1. Deterministically stratify independent units into two balanced folds and rerun the
+   complete coverage, dependency, and panel-selection pipeline on training data only.
+2. Evaluate selected directional effects exclusively on the opposite holdout fold with
+   explicit confirmed, weak, reversed, and insufficient outcomes.
+3. Keep all rows from one public contribution bundle in one fold so shared submissions
+   never masquerade as independent training and test evidence.
+4. Report fold details, direction confirmation rate, item-selection Jaccard, and a
+   conservative group status in local analysis and community indexes.
+5. Add `focus --require-holdout-stable` and preserve concise validation provenance in
+   generated configs without copying source paths or private identities.
+
+Acceptance checks:
+
+- A ten-unit stable strong/weak control confirms both held-out directions.
+- Alternating fold-specific winners produce `REVERSED_SIGNAL`, not a stable panel.
+- Five shared bundles remain insufficient after splitting instead of passing the gate.
+- Shared multi-configuration bundle rows always move together and retain five units on
+  each side when ten bundles exist.
+- Repeated calls are byte-for-byte deterministic and emitted metadata uses only public
+  configuration aliases.

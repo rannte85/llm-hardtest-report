@@ -41,7 +41,8 @@ from llm_hardtest.calibration import (
     _discriminative_item_panel,
     _item_metrics, _item_relationships,
     _item_repeat_separation,
-    _model_identity, analyze_runs, render_analysis, write_analysis,
+    _model_identity, _panel_holdout_validation,
+    analyze_runs, render_analysis, write_analysis,
 )
 from llm_hardtest.panel_config import build_panel_config, write_panel_config
 from llm_hardtest.pilot_analysis import analyze_pilots, write_pilot_analysis
@@ -1727,6 +1728,70 @@ class CalibrationTests(unittest.TestCase):
             "eligible_configuration_pairs": 0, "comparisons": []}, [])
         self.assertEqual(insufficient["status"], "INSUFFICIENT")
 
+    def test_panel_holdout_validation_confirms_stable_direction(self):
+        matrix, models = {}, {}
+        for configuration, outcome in (("private-a", "PASS"),
+                                       ("private-b", "FAIL")):
+            for unit in range(10):
+                respondent = (configuration, unit)
+                matrix[respondent] = {"q1": outcome}
+                models[respondent] = configuration
+        first = _panel_holdout_validation(
+            matrix, models, {"private-a": "C1", "private-b": "C2"})
+        second = _panel_holdout_validation(
+            matrix, models, {"private-a": "C1", "private-b": "C2"})
+        self.assertEqual(first, second)
+        self.assertEqual(first["status"], "STABLE")
+        self.assertEqual(first["folds_evaluated"], 2)
+        self.assertEqual(first["confirmed_direction_evaluations"], 2)
+        self.assertEqual(first["direction_confirmation_rate"], 1.0)
+        self.assertEqual(first["selection_jaccard"], 1.0)
+        self.assertNotIn("private-a", json.dumps(first))
+
+    def test_panel_holdout_validation_detects_selection_reversal(self):
+        matrix, models = {}, {}
+        for configuration in ("a", "b"):
+            for unit in range(10):
+                respondent = (configuration, unit)
+                a_passes = unit % 2 == 0
+                outcome = a_passes if configuration == "a" else not a_passes
+                matrix[respondent] = {"q1": "PASS" if outcome else "FAIL"}
+                models[respondent] = configuration
+        result = _panel_holdout_validation(
+            matrix, models, {"a": "C1", "b": "C2"})
+        self.assertEqual(result["status"], "REVERSED_SIGNAL")
+        self.assertEqual(result["reversed_direction_evaluations"], 2)
+        self.assertEqual(result["confirmed_direction_evaluations"], 0)
+        self.assertEqual({row["classification"]
+                          for fold in result["folds"]
+                          for row in fold["holdout_evaluations"]}, {"REVERSED"})
+
+    def test_panel_holdout_validation_preserves_shared_clusters_and_sparse_gate(self):
+        matrix, models, clusters = {}, {}, {}
+        for bundle in range(10):
+            for configuration, outcome in (("a", "PASS"), ("b", "FAIL")):
+                respondent = (bundle, configuration)
+                matrix[respondent] = {"q1": outcome}
+                models[respondent] = configuration
+                clusters[respondent] = f"bundle-{bundle}"
+        stable = _panel_holdout_validation(
+            matrix, models, {"a": "a", "b": "b"}, clusters=clusters)
+        self.assertEqual(stable["status"], "STABLE")
+        for fold in stable["folds"]:
+            self.assertEqual(set(fold["training_independent_units"].values()), {5})
+            self.assertEqual(set(fold["holdout_independent_units"].values()), {5})
+
+        sparse_matrix = {respondent: rows for respondent, rows in matrix.items()
+                         if respondent[0] < 5}
+        sparse_models = {respondent: models[respondent] for respondent in sparse_matrix}
+        sparse_clusters = {respondent: clusters[respondent]
+                           for respondent in sparse_matrix}
+        sparse = _panel_holdout_validation(
+            sparse_matrix, sparse_models, {"a": "a", "b": "b"},
+            clusters=sparse_clusters)
+        self.assertEqual(sparse["status"], "INSUFFICIENT")
+        self.assertEqual(sparse["eligible_direction_evaluations"], 0)
+
     def test_calibration_proves_directional_configuration_separation(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -1754,7 +1819,7 @@ class CalibrationTests(unittest.TestCase):
             analysis = analyze_runs(runs)
             rendered = render_analysis(analysis)
 
-        self.assertEqual(analysis["schema_version"], 8)
+        self.assertEqual(analysis["schema_version"], 9)
         group = analysis["groups"][0]
         self.assertEqual(
             [(row["configuration"], row["sources"], row["respondents"])
@@ -1781,8 +1846,11 @@ class CalibrationTests(unittest.TestCase):
         self.assertEqual(panel["directional_targets"], 1)
         self.assertEqual([row["item"] for row in panel["selected_items"]], ["q1"])
         self.assertEqual(panel["robust_dependency_pairs_considered"], 45)
+        self.assertEqual(group["panel_holdout_validation"]["status"],
+                         "INSUFFICIENT")
         self.assertIn("Decisive after Holm correction: **1/1**", rendered)
         self.assertIn("Discriminative item panel", rendered)
+        self.assertIn("Out-of-fold panel validation", rendered)
         for private in ("Secret Strong", "private/a", "secret-a"):
             self.assertNotIn(private, rendered)
 
@@ -2010,7 +2078,7 @@ class PanelConfigTests(unittest.TestCase):
             root = Path(tmp)
             runs = self._separating_runs(root)
             config, analysis = build_panel_config(runs, max_items=1, repetitions=5)
-        self.assertEqual(analysis["schema_version"], 8)
+        self.assertEqual(analysis["schema_version"], 9)
         self.assertEqual(config["rounds"], [1])
         self.assertEqual(config["repetitions"], 5)
         self.assertEqual(config["timeout_seconds"], 34)
@@ -2021,9 +2089,12 @@ class PanelConfigTests(unittest.TestCase):
         self.assertEqual({tuple(model["item_filters"]["1"])
                           for model in config["models"]}, {(1,)})
         focus = config["panel_focus"]
+        self.assertEqual(focus["schema_version"], 2)
         self.assertEqual(focus["source_run_count"], 10)
         self.assertEqual(focus["groups"][0]["status"], "COMPLETE")
         self.assertEqual(focus["groups"][0]["selected_items"], ["q1"])
+        self.assertEqual(focus["groups"][0]["holdout_status"], "INSUFFICIENT")
+        self.assertFalse(focus["holdout_stability_required"])
         self.assertNotIn(str(root), json.dumps(focus))
         self.assertNotIn("private-source", json.dumps(focus))
         validate_config(config, check_runtime=False)
@@ -2045,10 +2116,15 @@ class PanelConfigTests(unittest.TestCase):
             "uncovered_directional_targets": [],
         }
         analysis = {
-            "schema_version": 8,
+            "schema_version": 9,
             "groups": [
                 {"round": 1, "pack": "sha256:" + digit * 64,
-                 "discriminative_item_panel": panel}
+                 "discriminative_item_panel": panel,
+                 "panel_holdout_validation": {
+                     "status": "STABLE", "folds_evaluated": 2,
+                     "direction_confirmation_rate": 1.0,
+                     "reversed_direction_evaluations": 0,
+                 }}
                 for digit in ("a", "b")
             ],
         }
@@ -2074,6 +2150,12 @@ class PanelConfigTests(unittest.TestCase):
         self.assertEqual({len(model["item_filters"]["1"])
                           for model in config["models"]}, {1})
 
+    def test_panel_config_can_require_stable_holdout_evidence(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = self._separating_runs(Path(tmp))
+            with self.assertRaisesRegex(ValueError, "out-of-fold"):
+                build_panel_config(runs, require_holdout_stable=True)
+
     def test_panel_config_output_refuses_overwrite_and_wrong_extension(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -2089,19 +2171,22 @@ class PanelConfigTests(unittest.TestCase):
 
     def test_focus_cli_forwards_budget_repetitions_and_partial_authority(self):
         returned = (Path("focused.json"),
-                    {"models": [{}, {}], "rounds": [1]},
-                    {"schema_version": 8})
+                    {"models": [{}, {}], "rounds": [1], "panel_focus": {
+                        "groups": [{"holdout_status": "STABLE"}]}},
+                    {"schema_version": 9})
         stdout = io.StringIO()
         with patch("llm_hardtest.cli.write_panel_config", return_value=returned) as write, \
                 patch("sys.stdout", stdout):
             exit_code = main([
                 "focus", "run-a", "run-b", "--output", "focused.json",
                 "--panel-max-items", "3", "--repetitions", "7", "--allow-partial",
+                "--require-holdout-stable",
             ])
         self.assertEqual(exit_code, 0)
         write.assert_called_once_with(
             [Path("run-a"), Path("run-b")], Path("focused.json"),
-            max_items=3, repetitions=7, allow_partial=True)
+            max_items=3, repetitions=7, allow_partial=True,
+            require_holdout_stable=True)
         self.assertIn("LOCAL CONFIG", stdout.getvalue())
 
 
@@ -2675,6 +2760,7 @@ class PublicResultTests(unittest.TestCase):
         self.assertIn("Community repeat-adjusted item separation", document)
         self.assertIn("Community pair-specific item coverage", document)
         self.assertIn("Community discriminative item panel", document)
+        self.assertIn("Community out-of-fold panel validation", document)
         self.assertIn("Corrected discrimination", document)
         self.assertIn("Independent bundles", document)
         self.assertIn("Robust", document)

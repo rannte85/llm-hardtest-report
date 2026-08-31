@@ -933,6 +933,151 @@ def _discriminative_item_panel(coverage: dict, relationships: list[dict],
     }
 
 
+def _panel_holdout_validation(matrix: dict, models: dict, aliases: dict,
+                              max_items: int | None = None,
+                              clusters: dict | None = None) -> dict:
+    """Select panels on one fold and test their directions on the other fold."""
+    units_by_respondent = {
+        respondent: (clusters.get(respondent, respondent)
+                     if clusters else respondent)
+        for respondent in matrix
+    }
+    configurations_by_unit = defaultdict(set)
+    for respondent, unit in units_by_respondent.items():
+        configurations_by_unit[unit].add(models[respondent])
+
+    fold_by_unit = {}
+    configuration_counts = [defaultdict(int), defaultdict(int)]
+    for index, unit in enumerate(sorted(configurations_by_unit, key=repr)):
+        configurations = configurations_by_unit[unit]
+        scores = [sum(configuration_counts[fold][configuration]
+                      for configuration in configurations)
+                  for fold in (0, 1)]
+        fold = index % 2 if scores[0] == scores[1] else scores.index(min(scores))
+        fold_by_unit[unit] = fold
+        for configuration in configurations:
+            configuration_counts[fold][configuration] += 1
+
+    identity_by_alias = {alias: identity for identity, alias in aliases.items()}
+    folds = []
+    all_evaluations = []
+    selected_sets = []
+    for holdout_fold in (0, 1):
+        training_matrix = {
+            respondent: rows for respondent, rows in matrix.items()
+            if fold_by_unit[units_by_respondent[respondent]] != holdout_fold
+        }
+        holdout_matrix = {
+            respondent: rows for respondent, rows in matrix.items()
+            if fold_by_unit[units_by_respondent[respondent]] == holdout_fold
+        }
+        relationships = _item_relationships(
+            training_matrix, clusters if clusters else None)
+        coverage = _configuration_item_coverage(
+            training_matrix, models, aliases, clusters if clusters else None)
+        panel = _discriminative_item_panel(coverage, relationships, max_items)
+        selected_items = [row["item"] for row in panel["selected_items"]]
+        selected_sets.append(set(selected_items))
+        holdout_rows = _cluster_item_rows(
+            holdout_matrix, models, clusters if clusters else None)
+        evaluations = []
+        for selected in panel["selected_items"]:
+            item = selected["item"]
+            for target in selected["new_directional_targets"]:
+                higher_alias, separator, lower_alias = target.partition(">")
+                higher = identity_by_alias.get(higher_alias)
+                lower = identity_by_alias.get(lower_alias)
+                higher_values = [row[item] for row in holdout_rows.get(higher, {}).values()
+                                 if item in row]
+                lower_values = [row[item] for row in holdout_rows.get(lower, {}).values()
+                                if item in row]
+                if (not separator or higher is None or lower is None
+                        or len(higher_values) < MIN_CONFIGURATION_RESPONDENTS
+                        or len(lower_values) < MIN_CONFIGURATION_RESPONDENTS):
+                    effect = None
+                    classification = "INSUFFICIENT"
+                else:
+                    effect = statistics.mean(higher_values) - statistics.mean(lower_values)
+                    if effect >= ITEM_PAIR_EFFECT_THRESHOLD:
+                        classification = "CONFIRMED"
+                    elif effect <= -ITEM_PAIR_EFFECT_THRESHOLD:
+                        classification = "REVERSED"
+                    else:
+                        classification = "WEAK"
+                evaluations.append({
+                    "item": item,
+                    "directional_target": target,
+                    "higher_holdout_units": len(higher_values),
+                    "lower_holdout_units": len(lower_values),
+                    "holdout_pass_rate_difference": (
+                        round(effect, 6) if effect is not None else None),
+                    "classification": classification,
+                })
+        all_evaluations.extend(evaluations)
+        training_units = {
+            alias: configuration_counts[1 - holdout_fold][identity]
+            for identity, alias in aliases.items()
+        }
+        holdout_units = {
+            alias: configuration_counts[holdout_fold][identity]
+            for identity, alias in aliases.items()
+        }
+        folds.append({
+            "fold": holdout_fold + 1,
+            "training_independent_units": training_units,
+            "holdout_independent_units": holdout_units,
+            "training_panel_status": panel["status"],
+            "selected_items": selected_items,
+            "selected_directional_targets": sum(
+                len(row["new_directional_targets"])
+                for row in panel["selected_items"]),
+            "holdout_evaluations": evaluations,
+        })
+
+    counts = {
+        classification.lower(): sum(
+            row["classification"] == classification for row in all_evaluations)
+        for classification in ("CONFIRMED", "WEAK", "REVERSED", "INSUFFICIENT")
+    }
+    eligible = counts["confirmed"] + counts["weak"] + counts["reversed"]
+    folds_evaluated = sum(any(
+        row["classification"] != "INSUFFICIENT"
+        for row in fold["holdout_evaluations"])
+        for fold in folds)
+    if counts["reversed"]:
+        status = "REVERSED_SIGNAL"
+    elif (folds_evaluated < 2 or eligible == 0
+          or counts["insufficient"]):
+        status = "INSUFFICIENT"
+    elif counts["weak"]:
+        status = "WEAK_GENERALIZATION"
+    else:
+        status = "STABLE"
+    union = selected_sets[0] | selected_sets[1]
+    selection_jaccard = (
+        len(selected_sets[0] & selected_sets[1]) / len(union) if union else None)
+    return {
+        "status": status,
+        "method": "deterministic_stratified_two_fold_cross_validation",
+        "minimum_units_per_configuration_per_side": MIN_CONFIGURATION_RESPONDENTS,
+        "effect_threshold": ITEM_PAIR_EFFECT_THRESHOLD,
+        "folds_evaluated": folds_evaluated,
+        "eligible_direction_evaluations": eligible,
+        "confirmed_direction_evaluations": counts["confirmed"],
+        "weak_direction_evaluations": counts["weak"],
+        "reversed_direction_evaluations": counts["reversed"],
+        "insufficient_direction_evaluations": counts["insufficient"],
+        "direction_confirmation_rate": (
+            round(counts["confirmed"] / eligible, 6) if eligible else None),
+        "selection_jaccard": (
+            round(selection_jaccard, 6) if selection_jaccard is not None else None),
+        "folds": folds,
+        "interpretation": (
+            "out-of-fold directional replication diagnostic; not an unseen-model "
+            "prediction or proof of benchmark validity"),
+    }
+
+
 def _hierarchical_difference_interval(left_rows: list[dict], right_rows: list[dict],
                                       items: list[str], seed: str) -> dict | None:
     """Resample respondents and items so repeat instability enters the effect interval."""
@@ -1112,6 +1257,8 @@ def analyze_runs(run_dirs: list[Path], panel_max_items: int | None = None) -> di
         relationships = _item_relationships(matrix)
         coverage = _configuration_item_coverage(
             matrix, group["models"], aliases)
+        panel = _discriminative_item_panel(
+            coverage, relationships, panel_max_items)
         analyses.append({
             "round": round_number,
             "pack": pack,
@@ -1127,10 +1274,11 @@ def analyze_runs(run_dirs: list[Path], panel_max_items: int | None = None) -> di
             "item_repeat_separation": _item_repeat_separation(
                 matrix, group["models"]),
             "configuration_item_coverage": coverage,
-            "discriminative_item_panel": _discriminative_item_panel(
-                coverage, relationships, panel_max_items),
+            "discriminative_item_panel": panel,
+            "panel_holdout_validation": _panel_holdout_validation(
+                matrix, group["models"], aliases, panel_max_items),
         })
-    return {"schema_version": 8, "source_runs": len(run_dirs), "groups": analyses}
+    return {"schema_version": 9, "source_runs": len(run_dirs), "groups": analyses}
 
 
 def _percent(value: float | None) -> str:
@@ -1161,6 +1309,7 @@ def render_analysis(analysis: dict) -> str:
         repeat_separation = group["item_repeat_separation"]
         item_coverage = group["configuration_item_coverage"]
         panel = group["discriminative_item_panel"]
+        holdout = group["panel_holdout_validation"]
         decisive = sum(row["classification"] in {"LEFT_HIGHER", "RIGHT_HIGHER"}
                        for row in comparisons)
         lines += [
@@ -1275,6 +1424,31 @@ def render_analysis(analysis: dict) -> str:
             lines += ["", "Uncovered directional targets: "
                       + ", ".join(panel["uncovered_directional_targets"]) + "."]
         lines += [
+            "", "### Out-of-fold panel validation", "",
+            f"Status: **{holdout['status']}** · folds evaluated: "
+            f"**{holdout['folds_evaluated']}/2** · confirmed/weak/reversed: "
+            f"**{holdout['confirmed_direction_evaluations']}/"
+            f"{holdout['weak_direction_evaluations']}/"
+            f"{holdout['reversed_direction_evaluations']}** · direction confirmation: "
+            f"**{_percent(holdout['direction_confirmation_rate'])}** · selection Jaccard: "
+            f"**{holdout['selection_jaccard'] if holdout['selection_jaccard'] is not None else 'n/a'}**.",
+            "",
+            "| Fold | Training panel | Selected items | Direction | Holdout units | Holdout difference | Result |",
+            "|---:|---|---|---|---:|---:|---|",
+        ]
+        for fold in holdout["folds"]:
+            if not fold["holdout_evaluations"]:
+                lines.append(
+                    f"| {fold['fold']} | {fold['training_panel_status']} | "
+                    f"{', '.join(fold['selected_items']) or 'none'} | none | 0/0 | n/a | INSUFFICIENT |")
+            for row in fold["holdout_evaluations"]:
+                lines.append(
+                    f"| {fold['fold']} | {fold['training_panel_status']} | "
+                    f"{row['item']} | {row['directional_target']} | "
+                    f"{row['higher_holdout_units']}/{row['lower_holdout_units']} | "
+                    f"{_percent(row['holdout_pass_rate_difference'])} | "
+                    f"{row['classification']} |")
+        lines += [
             "", "### Item diagnostics", "",
             "| Item | Scored | Independent units | Pass raw | Clustered pass [95%] | Balance raw / clustered | Corrected discrimination (raw) | Clustered corrected discrimination [95%] | "
             "Observed signal | Robust signal | Incomplete | Review | Invalid | Missing |",
@@ -1382,6 +1556,11 @@ def render_analysis(analysis: dict) -> str:
         "  simultaneous margins when coverage ties. It is deterministic but not guaranteed",
         "  globally minimal. A budget-limited",
         "  partial panel exposes every uncovered direction and never mutates a benchmark pack.",
+        "- Out-of-fold panel validation selects a panel on one deterministic half of",
+        "  independent units and evaluates its directional effects only on the other half.",
+        f"  Each side needs {MIN_CONFIGURATION_RESPONDENTS} units per configuration; shared",
+        "  public bundles remain in one fold. `REVERSED_SIGNAL` is direct evidence that a",
+        "  selected direction did not replicate, while `INSUFFICIENT` is not a pass.",
         f"- Pair comparisons require at least {MIN_PAIR_ITEMS} commonly scored items.",
         "- Between-configuration disagreement measures observed separation. Within-configuration",
         "  disagreement measures repeat instability. Net separation requires both.",

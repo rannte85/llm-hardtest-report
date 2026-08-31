@@ -10,7 +10,8 @@ from pathlib import Path
 
 from .calibration import (
     _configuration_item_coverage, _discriminative_item_panel, _estimate_interval,
-    _item_metrics, _item_relationships, _item_repeat_separation, _pairwise_stability,
+    _item_metrics, _item_relationships, _item_repeat_separation,
+    _pairwise_stability, _panel_holdout_validation,
 )
 from .github_submit import submission_relative_path
 from .public_pilots import load_public_pilot_bundle
@@ -522,6 +523,10 @@ def aggregate_item_diagnostics(submissions: list[dict]) -> list[dict]:
             "configuration_item_coverage": coverage,
             "discriminative_item_panel": _discriminative_item_panel(
                 coverage, relationships),
+            "panel_holdout_validation": _panel_holdout_validation(
+                group["matrix"], group["models"],
+                {identity: identity for identity in set(group["models"].values())},
+                clusters=group["clusters"]),
         })
     return rows
 
@@ -698,6 +703,32 @@ def render_index(submissions: list[dict]) -> str:
                     f"{', '.join(f'`{_cell(value)}`' for value in row['robustly_dependent_with_selected']) or 'none'} |")
             if not panel["selected_items"]:
                 lines.append("| none | none | n/a | 0 | none |")
+            holdout = group["panel_holdout_validation"]
+            lines += [
+                "", "#### Community out-of-fold panel validation", "",
+                f"Status: **{holdout['status']}** · folds evaluated: "
+                f"**{holdout['folds_evaluated']}/2** · confirmed/weak/reversed: "
+                f"**{holdout['confirmed_direction_evaluations']}/"
+                f"{holdout['weak_direction_evaluations']}/"
+                f"{holdout['reversed_direction_evaluations']}** · confirmation: "
+                f"**{_percent(holdout['direction_confirmation_rate'])}** · "
+                f"selection Jaccard: "
+                f"**{holdout['selection_jaccard'] if holdout['selection_jaccard'] is not None else 'n/a'}**",
+                "",
+                "| Fold | Item | Direction | Independent bundles | Holdout difference | Result |",
+                "|---:|---|---|---:|---:|---|",
+            ]
+            for fold in holdout["folds"]:
+                if not fold["holdout_evaluations"]:
+                    lines.append(
+                        f"| {fold['fold']} | none | none | 0/0 | n/a | INSUFFICIENT |")
+                for row in fold["holdout_evaluations"]:
+                    lines.append(
+                        f"| {fold['fold']} | `{_cell(row['item'])}` | "
+                        f"`{_cell(row['directional_target'])}` | "
+                        f"{row['higher_holdout_units']}/{row['lower_holdout_units']} | "
+                        f"{_percent(row['holdout_pass_rate_difference'])} | "
+                        f"{row['classification']} |")
     lines += [
         "",
         f"Baselines appear only after at least {MIN_BASELINE_SUBMISSIONS} distinct accepted bundles",
@@ -717,7 +748,9 @@ def render_index(submissions: list[dict]) -> str:
         "for an unseen model or a different runtime configuration. The discriminative panel",
         "is a deterministic greedy review aid over already-decisive directions. It penalizes",
         "robust empirical dependencies but is not a globally minimal set or an automatic pack",
-        "change.",
+        "change. Community out-of-fold validation keeps every shared contribution in one",
+        "fold and requires five independent bundles per configuration on both training and",
+        "holdout sides. `INSUFFICIENT` never means that a panel replicated.",
         "",
     ]
     return "\n".join(lines)

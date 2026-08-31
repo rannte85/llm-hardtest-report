@@ -283,6 +283,9 @@ def main(argv=None) -> int:
     p_focus.add_argument(
         "--allow-partial", action="store_true",
         help="allow a budget-limited panel with uncovered configuration directions")
+    p_focus.add_argument(
+        "--require-holdout-stable", action="store_true",
+        help="require both out-of-fold direction checks to replicate")
     p_inspect = sub.add_parser("inspect", help="show unresolved campaign items")
     p_inspect.add_argument("run_dir")
     p_inspect.add_argument("--json", action="store_true", help="emit machine-readable JSON")
@@ -430,10 +433,13 @@ def main(argv=None) -> int:
             output, config, analysis = write_panel_config(
                 [Path(value) for value in args.run_dirs], Path(args.output),
                 max_items=args.panel_max_items, repetitions=args.repetitions,
-                allow_partial=args.allow_partial)
+                allow_partial=args.allow_partial,
+                require_holdout_stable=args.require_holdout_stable)
             print(f"Focused config: {output}")
             print(f"Models: {len(config['models'])}; rounds: {config['rounds']}")
             print(f"Analysis schema: {analysis['schema_version']}")
+            print("Holdout status: " + ", ".join(
+                group["holdout_status"] for group in config["panel_focus"]["groups"]))
             print("LOCAL CONFIG: review endpoint and environment-variable fields before sharing")
             return 0
         if args.command == "inspect":

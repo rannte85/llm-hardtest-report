@@ -5,6 +5,22 @@ out separately from harness features.
 
 ## Unreleased
 
+## 2.16.0 — 2026-09-01
+
+- Added analysis-schema-v9 deterministic two-fold validation that selects panels on
+  training evidence and evaluates their directional effects only on held-out units.
+- Added explicit `STABLE`, `WEAK_GENERALIZATION`, `REVERSED_SIGNAL`, and `INSUFFICIENT`
+  group states plus confirmed, weak, reversed, and insufficient direction outcomes.
+- Preserved shared community-bundle dependence by assigning every row from one bundle
+  to a single fold and balancing configuration evidence deterministically.
+- Added direction confirmation rates, item-selection Jaccard overlap, full fold traces,
+  and local/community Markdown summaries.
+- Added `focus --require-holdout-stable` and concise holdout provenance in generated
+  panel-focus schema v2 configs; insufficient evidence never satisfies the strict gate.
+- Added adversarial controls for stable replication, fold-specific reversal, sparse
+  evidence, shared clusters, determinism, and private-identity exclusion.
+- Kept public result schema v2 and canonical Round 1–4 content and grading unchanged.
+
 ## 2.15.0 — 2026-09-01
 
 - Added `focus`, which converts locally revalidated discriminative panels into runnable

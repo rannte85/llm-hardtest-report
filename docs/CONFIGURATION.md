@@ -18,6 +18,7 @@ Top-level fields:
 - `models`: one or more model configurations.
 - `panel_focus`: optional generated provenance for a `focus` campaign. It contains
   selected item IDs and pack fingerprints, not source paths or source run names.
+  Schema v2 also records out-of-fold validation summaries.
 
 Model fields:
 
@@ -43,13 +44,17 @@ Build a focused config from statistically confirmed discriminative panels:
 
 ```bash
 llm-hardtest focus runs/campaign-a runs/campaign-b \
-  --repetitions 5 --output panel-benchmark.json
+  --repetitions 5 --require-holdout-stable --output panel-benchmark.json
 ```
 
 `focus` merges only exact inference configurations, validates selected evidence against
 the installed pack, and refuses incomplete directional coverage unless
 `--allow-partial` is explicit. Its output is local configuration rather than a public
 export and may contain endpoint URLs and `api_key_env` names copied from source runs.
+The optional `--require-holdout-stable` gate additionally requires two-fold directional
+replication, which normally needs at least ten independent units per configuration.
+Without the gate, the generated `panel_focus.groups` still records holdout status,
+confirmation rate, evaluated folds, and reversals.
 
 `validate` is deliberately offline. Use `doctor` before a campaign to authenticate to
 `/v1/models`, verify the exact model ID, and probe Chat Completions or Responses as

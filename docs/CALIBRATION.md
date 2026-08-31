@@ -161,7 +161,7 @@ a plausible but uncertain item.
 ## Discriminative item panel
 
 Pair-specific evidence may leave many items that reproduce the same confirmed model
-direction. Analysis schema v8 includes a compact review panel over those results:
+direction. Analysis schema v9 includes a compact review panel over those results:
 
 ```bash
 llm-hardtest analyze runs/campaign-a runs/campaign-b \
@@ -193,6 +193,33 @@ for task-content review, or authorization to mutate a benchmark pack automatical
 Its selected item IDs can be copied into advanced `item_filters` for a focused follow-up
 campaign, but canonical reports should continue to identify that focused selection.
 
+## Out-of-fold panel validation
+
+Selecting and assessing a panel on the same observations can reward sample-specific
+noise. Analysis schema v9 therefore performs deterministic stratified two-fold
+validation. For each fold it:
+
+1. assigns every independent local attempt to exactly one fold while balancing each
+   configuration;
+2. keeps every row from one community contribution bundle in the same fold;
+3. recomputes pair-specific simultaneous inference, dependencies, and panel selection
+   using only the training fold; and
+4. measures each newly covered direction on the untouched holdout fold.
+
+Every selected direction is `CONFIRMED` when its holdout pass-rate difference remains
+at least `0.1` in the selected direction, `REVERSED` when it reaches `0.1` in the
+opposite direction, `WEAK` when it falls between those thresholds, and `INSUFFICIENT`
+when either configuration has fewer than five scored holdout units. The group is
+`STABLE` only when both folds contain evaluable directions and every one is confirmed.
+Any reversal yields `REVERSED_SIGNAL`; non-reversed shrinkage yields
+`WEAK_GENERALIZATION`. Fewer than two evaluable folds remains `INSUFFICIENT`.
+
+The report also records direction confirmation rate and Jaccard overlap between the
+two selected item sets. These answer different questions: two alternative items can
+replicate the same directions while selection overlap is low. This diagnostic is an
+out-of-sample check within the observed configurations and pack. It is not a confidence
+interval, unseen-model prediction, or proof that prompt content is valid.
+
 ## Focused follow-up configuration
 
 `focus` performs that conversion automatically from the same locally revalidated raw
@@ -200,7 +227,8 @@ evidence:
 
 ```bash
 llm-hardtest focus runs/campaign-a runs/campaign-b \
-  --panel-max-items 8 --repetitions 5 --output panel-benchmark.json
+  --panel-max-items 8 --repetitions 5 --require-holdout-stable \
+  --output panel-benchmark.json
 ```
 
 Only round/pack groups with selected panel items enter the generated campaign. The
@@ -214,7 +242,9 @@ different rounds or item filters. Distinct inference settings remain distinct, a
 colliding filesystem keys receive deterministic numeric suffixes. The generated
 `panel_focus` metadata records the analysis schema, selection method, source-run count,
 pack fingerprints, selected items, and uncovered targets without source paths or run
-names. The rest of the file intentionally preserves the local model configurations
+names. It also records the holdout status, direction confirmation rate, fold count, and
+reversal count. `--require-holdout-stable` refuses `WEAK_GENERALIZATION`,
+`REVERSED_SIGNAL`, and `INSUFFICIENT` panels. The rest of the file intentionally preserves the local model configurations
 needed to run it, including endpoint URLs and environment-variable names. Treat it as
 private configuration, validate and probe it before execution, and use `export --public`
 only on completed runs when preparing a sanitized contribution.

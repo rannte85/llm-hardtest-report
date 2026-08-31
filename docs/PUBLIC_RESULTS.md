@@ -103,6 +103,12 @@ opposing item dependencies. The operation does not expose bundle IDs, change acc
 submissions, or mutate benchmark content. Without sufficient independent bundles it
 emits `INSUFFICIENT` rather than proposing a panel.
 
+Community out-of-fold validation keeps every row from one contribution in a single
+fold, recomputes panel selection on training bundles, and checks selected directions on
+the untouched half. The index reports confirmation rate and selected-item Jaccard as
+separate diagnostics. This reduces selection bias for observed configurations but does
+not predict an unseen model, server, or hardware environment.
+
 See [Community Data Model](COMMUNITY_DATA_MODEL.md) for the normalization and staged
 path from descriptive observations to an environment-aware serving recommendation.
 

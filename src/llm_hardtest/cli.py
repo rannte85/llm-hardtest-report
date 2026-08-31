@@ -26,7 +26,7 @@ from .community_results import (
     build_index, build_pilot_index, load_pilot_submission_directory,
     load_submission_directory, recommend_configurations, render_recommendation,
 )
-from .community_database import build_database
+from .community_database import build_database, recommend_database
 from .calibration import write_analysis
 from .round5 import run_pilot
 from .pilot_analysis import write_pilot_analysis
@@ -345,7 +345,10 @@ def main(argv=None) -> int:
     p_results_recommend = results_commands.add_parser(
         "recommend", help="query gated Pareto candidates from public observations")
     p_results_recommend.add_argument(
-        "directory", nargs="?", default="results/submissions")
+        "directory", nargs="?",
+        help="public submission directory (default: results/submissions)")
+    p_results_recommend.add_argument(
+        "--database", help="query a normalized SQLite database instead of JSON")
     p_results_recommend.add_argument("--round", type=int, required=True)
     p_results_recommend.add_argument(
         "--pack", help="exact sha256 pack fingerprint; required when multiple exist")
@@ -518,7 +521,7 @@ def main(argv=None) -> int:
                 action = "VALID" if args.check else "BUILT"
                 print(f"{action}: {args.output} ({bundles} bundle(s), {groups} group(s))")
                 return 0
-            directory = Path(args.directory)
+            directory = Path(args.directory or "results/submissions")
             if args.results_command == "validate":
                 submissions = load_submission_directory(directory)
                 print(f"VALID: {len(submissions)} public result bundle(s)")
@@ -537,7 +540,9 @@ def main(argv=None) -> int:
                 print(f"Content fingerprint: {summary['content_fingerprint']}")
                 return 0
             if args.results_command == "recommend":
-                submissions = load_submission_directory(directory)
+                if args.database and args.directory is not None:
+                    raise ValueError(
+                        "recommend accepts either a submission directory or --database")
                 constraints = {
                     key: value for key, value in {
                         "os": args.os,
@@ -552,10 +557,20 @@ def main(argv=None) -> int:
                         "max_parameter_count_b": args.max_parameter_count_b,
                     }.items() if value is not None
                 }
-                result = recommend_configurations(
-                    submissions, round_number=args.round, pack=args.pack,
-                    constraints=constraints, objectives=args.objective,
-                    accuracy_floor=args.accuracy_floor)
+                recommendation_arguments = {
+                    "round_number": args.round,
+                    "pack": args.pack,
+                    "constraints": constraints,
+                    "objectives": args.objective,
+                    "accuracy_floor": args.accuracy_floor,
+                }
+                if args.database:
+                    result = recommend_database(
+                        Path(args.database), **recommendation_arguments)
+                else:
+                    submissions = load_submission_directory(directory)
+                    result = recommend_configurations(
+                        submissions, **recommendation_arguments)
                 document = (json.dumps(result, indent=2, sort_keys=True,
                                        ensure_ascii=False) + "\n"
                             if args.json else render_recommendation(result))

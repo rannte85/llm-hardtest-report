@@ -1,4 +1,4 @@
-# Release Notes — 2.18.0
+# Release Notes — 2.19.0
 
 This repository is ready to publish as `rannte85/llm-hardtest-report`. It contains no campaign
 outputs, credentials, local model files, personal filesystem paths, or generated
@@ -6,7 +6,18 @@ Python caches.
 
 The release validation covers:
 
-- normalized SQLite database schema v1 over validated public repository bundles;
+- direct gated Pareto recommendations from verified normalized SQLite databases;
+- one shared recommendation implementation for canonical JSON and database aggregate
+  adapters, with byte-identical machine-readable results for identical evidence;
+- database schema v2 numeric-normalized, independently recomputable fingerprints and
+  an explicit rebuild gate for version-2.18 schema-v1 generated files;
+- standalone semantic checks for canonical/flattened configuration agreement, safe
+  public fields, identities, relational links, metric domains, statuses, and flags;
+- adversarial cross-adapter, repeat-cluster, stale-fingerprint, obsolete-schema,
+  fresh-fingerprint semantic-tamper, ambiguous-source, and installed-wheel controls;
+
+- the normalized SQLite database v1 foundation over validated public repository bundles
+  (superseded by the independently verifiable schema v2 in this release);
 - bundle-cluster provenance across exact configurations, benchmark runs, item rows,
   and Round 4 task rows without ingesting raw local evidence;
 - queryable model, server, hardware, environment, and generation coordinates plus

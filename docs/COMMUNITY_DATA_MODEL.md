@@ -120,9 +120,16 @@ must not launch until it has, per target population:
 The first database implementation should ingest only validated repository JSON and
 retain bundle IDs as provenance. Raw local evidence should remain outside the service.
 
-Version 2.18 implements that boundary with `llm-hardtest results database`. It emits a
+Version 2.18 implemented that boundary with `llm-hardtest results database`. It emits a
 normalized SQLite schema with bundle, exact configuration, benchmark-run, item, and
 Round 4 task tables; validates every source bundle; and supports read-only staleness and
 integrity checking. The database is a reproducible descriptive input, not authorization
 to skip the predictive-service promotion gates above. See
 [Community Observation Database](COMMUNITY_DATABASE.md).
+
+Version 2.19 adds database schema v2 and direct `results recommend --database` queries.
+The database path and canonical-JSON path must produce identical bundle-clustered
+aggregates and Pareto results. Standalone reads recompute the logical fingerprint and
+revalidate public identities, canonical configuration JSON, flattened coordinates,
+numeric domains, and relational links before analysis. This makes the snapshot usable
+as a service input while retaining the same descriptive-evidence limits.

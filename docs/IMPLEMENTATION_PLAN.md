@@ -500,3 +500,32 @@ Acceptance checks:
   a modified database fails `--check`.
 - Empty repositories build and validate, wrong extensions fail, and no raw/private
   evidence field has a database column.
+
+## Phase 19 — Database-backed serving-candidate queries
+
+Goal: make the normalized database a verified service input without creating a second,
+divergent recommendation implementation.
+
+Deliverables:
+
+1. Refactor candidate gating and Pareto selection to consume normalized aggregate rows,
+   with canonical JSON and SQLite adapters sharing that final implementation.
+2. Reproduce bundle-level aggregation directly from database runs and item observations,
+   retaining duplicate rows within one bundle cluster.
+3. Add `results recommend --database` and reject ambiguous directory-plus-database input.
+4. Add schema v2 numeric-normalized fingerprints that can be recomputed after SQLite
+   type affinity, plus an explicit schema-v1 rebuild requirement.
+5. On standalone reads, verify schema/integrity/fingerprint and semantic identities,
+   canonical JSON, flattened settings, environment links, domains, statuses, and flags.
+
+Acceptance checks:
+
+- Five two-configuration bundles produce exactly equal aggregate rows and recommendation
+  JSON through canonical source files and the generated database.
+- Constraints, three-axis objectives, accuracy floors, exclusions, and Pareto ordering
+  are identical across adapters.
+- Repeated model rows remain one independent bundle and cannot unlock an interval.
+- A stale fingerprint, obsolete schema, unexpected table, unsafe configuration row with
+  a freshly recomputed fingerprint, or two simultaneous input sources is rejected.
+- Source and installed-package CI exercise empty database build, check, and recommendation
+  paths on Linux Python 3.10/3.12 and macOS Python 3.12.

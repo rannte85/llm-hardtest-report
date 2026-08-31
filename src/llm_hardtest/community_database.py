@@ -2,17 +2,29 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
+import re
 import sqlite3
+import statistics
 import tempfile
+from collections import defaultdict
 from pathlib import Path
 
-from .community_results import _configuration_id, load_submission_directory
+from .community_results import (
+    _cluster_interval, _configuration_id, _percentile, _recommend_aggregate_rows,
+    load_submission_directory,
+)
+from .public_results import (
+    FINGERPRINT, MODEL_PARAMETER_FIELDS, PUBLIC_ITEM_STATUSES,
+    PUBLIC_METADATA_FIELDS, PUBLIC_METADATA_NUMERIC_FIELDS, _public_text,
+)
 
 
-DATABASE_SCHEMA_VERSION = 1
+DATABASE_SCHEMA_VERSION = 2
 DATABASE_APPLICATION_ID = 0x4C484452  # "LHDR"
 DATABASE_KIND = "validated_public_observation_database"
+DATABASE_FINGERPRINT_METHOD = "canonical_relational_rows_numeric_v2"
 
 SCHEMA_SQL = """
 PRAGMA foreign_keys = ON;
@@ -21,6 +33,7 @@ CREATE TABLE dataset_metadata (
     singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
     schema_version INTEGER NOT NULL,
     kind TEXT NOT NULL,
+    fingerprint_method TEXT NOT NULL,
     content_fingerprint TEXT NOT NULL,
     bundle_count INTEGER NOT NULL,
     configuration_count INTEGER NOT NULL,
@@ -152,6 +165,23 @@ TABLE_COLUMNS = {
         "tampering", "timed_out", "wall_seconds", "completion_tokens"),
 }
 
+REAL_COLUMNS = {
+    "configurations": {
+        "context_window", "max_tokens", "temperature", "top_p", "top_k",
+        "min_p", "parameter_count_b", "accelerator_count", "memory_gb",
+        "system_memory_gb",
+    },
+    "benchmark_runs": {
+        "scored_passed", "scored_total", "incomplete", "manual_review",
+        "infrastructure_errors", "mean_wall_seconds",
+    },
+    "item_observations": {"wall_seconds"},
+    "task_observations": {
+        "public_passed", "public_total", "hidden_passed", "hidden_total",
+        "auto_score", "wall_seconds",
+    },
+}
+
 
 def _canonical(value: object) -> str:
     return json.dumps(value, sort_keys=True, separators=(",", ":"),
@@ -250,14 +280,25 @@ def normalize_submissions(submissions: list[dict]) -> dict[str, list[tuple]]:
 
 
 def _content_fingerprint(rows: dict[str, list[tuple]]) -> str:
-    content = {table: rows[table] for table in sorted(rows)}
+    content = {}
+    for table in sorted(rows):
+        real_indices = {
+            TABLE_COLUMNS[table].index(column)
+            for column in REAL_COLUMNS.get(table, set())
+        }
+        content[table] = [
+            tuple(float(value) if index in real_indices and value is not None else value
+                  for index, value in enumerate(row))
+            for row in rows[table]
+        ]
     return "sha256:" + hashlib.sha256(
         _canonical(content).encode("utf-8")).hexdigest()
 
 
 def _metadata_row(rows: dict[str, list[tuple]]) -> tuple:
     return (
-        1, DATABASE_SCHEMA_VERSION, DATABASE_KIND, _content_fingerprint(rows),
+        1, DATABASE_SCHEMA_VERSION, DATABASE_KIND, DATABASE_FINGERPRINT_METHOD,
+        _content_fingerprint(rows),
         len(rows["bundles"]), len(rows["configurations"]),
         len(rows["benchmark_runs"]), len(rows["item_observations"]),
         len(rows["task_observations"]),
@@ -281,7 +322,16 @@ def _schema_manifest(connection: sqlite3.Connection) -> list[tuple]:
     ).fetchall()
 
 
-def _validate_database(path: Path, expected: dict[str, list[tuple]]) -> None:
+def _expected_schema_manifest() -> list[tuple]:
+    reference = sqlite3.connect(":memory:")
+    reference.executescript(SCHEMA_SQL)
+    manifest = _schema_manifest(reference)
+    reference.close()
+    return manifest
+
+
+def load_database(path: Path) -> dict[str, list[tuple]]:
+    """Read a self-consistent schema-v2 observation database in read-only mode."""
     if not path.is_file() or path.is_symlink():
         raise ValueError(f"community database does not exist as a regular file: {path}")
     try:
@@ -292,27 +342,316 @@ def _validate_database(path: Path, expected: dict[str, list[tuple]]) -> None:
         user_version = connection.execute("PRAGMA user_version").fetchone()[0]
         integrity = connection.execute("PRAGMA integrity_check").fetchone()[0]
         foreign_keys = connection.execute("PRAGMA foreign_key_check").fetchall()
+        schema_manifest = _schema_manifest(connection)
+        if (application_id != DATABASE_APPLICATION_ID
+                or user_version != DATABASE_SCHEMA_VERSION):
+            raise ValueError("community database schema identity is invalid")
+        if schema_manifest != _expected_schema_manifest():
+            raise ValueError(
+                f"community database schema does not match schema v{DATABASE_SCHEMA_VERSION}")
+        if integrity != "ok" or foreign_keys:
+            raise ValueError("community database integrity check failed")
+        actual = _read_rows(connection)
         metadata = connection.execute(
             "SELECT * FROM dataset_metadata WHERE singleton = 1").fetchone()
-        schema_manifest = _schema_manifest(connection)
-        actual = _read_rows(connection)
     except sqlite3.Error as exc:
         raise ValueError(f"invalid community database: {path}") from exc
     finally:
         if "connection" in locals():
             connection.close()
-    if application_id != DATABASE_APPLICATION_ID or user_version != DATABASE_SCHEMA_VERSION:
-        raise ValueError("community database schema identity is invalid")
-    reference = sqlite3.connect(":memory:")
-    reference.executescript(SCHEMA_SQL)
-    expected_schema_manifest = _schema_manifest(reference)
-    reference.close()
-    if schema_manifest != expected_schema_manifest:
-        raise ValueError("community database schema does not match schema v1")
-    if integrity != "ok" or foreign_keys:
-        raise ValueError("community database integrity check failed")
-    if metadata != _metadata_row(expected) or actual != expected:
+    if metadata != _metadata_row(actual):
+        raise ValueError(
+            "community database is stale or internally inconsistent; rebuild it")
+    _validate_relational_semantics(actual)
+    return actual
+
+
+def _validate_database(path: Path, expected: dict[str, list[tuple]]) -> None:
+    actual = load_database(path)
+    if actual != expected:
         raise ValueError(f"community database is stale; rebuild {path}")
+
+
+def _row_dicts(rows: dict[str, list[tuple]], table: str) -> list[dict]:
+    columns = TABLE_COLUMNS[table]
+    return [dict(zip(columns, row)) for row in rows[table]]
+
+
+def _validate_relational_semantics(rows: dict[str, list[tuple]]) -> None:
+    def valid_nonnegative_number(value: object, *, optional: bool = True) -> bool:
+        return ((optional and value is None)
+                or (not isinstance(value, bool) and isinstance(value, (int, float))
+                    and math.isfinite(value) and value >= 0))
+
+    def valid_fingerprint(value: object) -> bool:
+        return isinstance(value, str) and FINGERPRINT.fullmatch(value) is not None
+
+    def valid_python(value: object) -> bool:
+        return isinstance(value, str) and re.fullmatch(r"[0-9]+\.[0-9]+", value) is not None
+
+    bundles = {row["bundle_id"]: row for row in _row_dicts(rows, "bundles")}
+    for bundle in bundles.values():
+        if (not valid_fingerprint(bundle["bundle_id"])
+                or bundle["public_schema_version"] not in {1, 2}
+                or bundle["tool_name"] != "llm-hardtest-report"
+                or _public_text(bundle["tool_version"], maximum=32) is None
+                or bundle["os"] not in {"Linux", "Darwin", "Windows", "Other"}
+                or _public_text(bundle["architecture"], maximum=32) is None
+                or not valid_python(bundle["python"])
+                or bundle["submission_mode"] != "explicit-opt-in"):
+            raise ValueError("community database contains an invalid bundle row")
+
+    configurations = {}
+    for configuration in _row_dicts(rows, "configurations"):
+        try:
+            parameters = json.loads(configuration["parameters_json"])
+            metadata = json.loads(configuration["public_metadata_json"])
+        except (TypeError, json.JSONDecodeError) as exc:
+            raise ValueError(
+                "community database contains invalid configuration JSON") from exc
+        if (not isinstance(parameters, dict) or not isinstance(metadata, dict)
+                or _canonical(parameters) != configuration["parameters_json"]
+                or _canonical(metadata) != configuration["public_metadata_json"]
+                or set(parameters) - MODEL_PARAMETER_FIELDS
+                or set(metadata) - PUBLIC_METADATA_FIELDS
+                or _public_text(configuration["public_name"]) is None
+                or configuration["transport"] not in {"openai_compat", "codex_cli"}
+                or configuration["os"] not in {"Linux", "Darwin", "Windows", "Other"}
+                or _public_text(configuration["architecture"], maximum=32) is None
+                or not valid_python(configuration["python"])):
+            raise ValueError("community database contains an invalid configuration row")
+        for key, value in parameters.items():
+            if key == "reasoning_effort":
+                valid = _public_text(value, maximum=32) is not None
+            else:
+                valid = (not isinstance(value, bool)
+                         and isinstance(value, (int, float)) and math.isfinite(value))
+            if not valid or configuration[key] != value:
+                raise ValueError("community database configuration parameters disagree")
+        for key in MODEL_PARAMETER_FIELDS - set(parameters):
+            if configuration[key] is not None:
+                raise ValueError("community database has an undeclared parameter")
+        for key, value in metadata.items():
+            if key in PUBLIC_METADATA_NUMERIC_FIELDS:
+                valid = (not isinstance(value, bool)
+                         and isinstance(value, (int, float))
+                         and math.isfinite(value) and value > 0)
+            else:
+                valid = _public_text(value) is not None
+            if not valid or configuration[key] != value:
+                raise ValueError("community database serving metadata disagrees")
+        for key in PUBLIC_METADATA_FIELDS - set(metadata):
+            if configuration[key] is not None:
+                raise ValueError("community database has undeclared serving metadata")
+        identity_payload = {"environment": {
+            "os": configuration["os"],
+            "architecture": configuration["architecture"],
+            "python": configuration["python"],
+        }}
+        identity_model = {
+            "public_name": configuration["public_name"],
+            "transport": configuration["transport"],
+            "parameters": parameters,
+            "public_metadata": metadata,
+        }
+        if _configuration_id(identity_payload, identity_model) != configuration[
+                "configuration_id"]:
+            raise ValueError("community database configuration ID is invalid")
+        configurations[configuration["configuration_id"]] = configuration
+
+    runs = {}
+    for run in _row_dicts(rows, "benchmark_runs"):
+        bundle = bundles.get(run["bundle_id"])
+        configuration = configurations.get(run["configuration_id"])
+        try:
+            metrics = json.loads(run["metrics_json"])
+        except (TypeError, json.JSONDecodeError) as exc:
+            raise ValueError("community database contains invalid run JSON") from exc
+        expected_run_id = _stable_id(
+            "benchmark-run", run["bundle_id"], run["configuration_id"],
+            run["model_ordinal"], run["round"], run["pack"])
+        if (bundle is None or configuration is None
+                or tuple(bundle[key] for key in ("os", "architecture", "python"))
+                != tuple(configuration[key] for key in ("os", "architecture", "python"))
+                or not isinstance(run["model_ordinal"], int)
+                or run["model_ordinal"] < 1 or not isinstance(run["round"], int)
+                or run["round"] not in {1, 2, 3, 4}
+                or not valid_fingerprint(run["pack"])
+                or run["run_id"] != expected_run_id
+                or not isinstance(metrics, dict)
+                or _canonical(metrics) != run["metrics_json"]):
+            raise ValueError("community database contains an invalid benchmark run")
+        passed_key, total_key = (("release_ready", "attempts")
+                                 if run["round"] == 4 else ("passed", "total"))
+        metric_columns = {
+            "scored_passed": passed_key, "scored_total": total_key,
+            "incomplete": "incomplete", "manual_review": "manual_review",
+            "infrastructure_errors": "infrastructure_errors",
+            "mean_wall_seconds": "mean_wall_seconds",
+        }
+        if any(not valid_nonnegative_number(run[column])
+               or run[column] != metrics.get(metric)
+               for column, metric in metric_columns.items()):
+            raise ValueError("community database run metrics disagree")
+        runs[run["run_id"]] = run
+
+    for item in _row_dicts(rows, "item_observations"):
+        expected = _stable_id(
+            "item-observation", item["run_id"], item["item"], item["attempt"])
+        if (item["run_id"] not in runs or _public_text(item["item"], maximum=80) is None
+                or not isinstance(item["attempt"], int) or item["attempt"] < 1
+                or item["status"] not in PUBLIC_ITEM_STATUSES
+                or not valid_nonnegative_number(item["wall_seconds"])
+                or (item["completion_tokens"] is not None
+                    and (not isinstance(item["completion_tokens"], int)
+                         or item["completion_tokens"] < 0))
+                or item["observation_id"] != expected):
+            raise ValueError("community database contains an invalid item observation")
+    for task in _row_dicts(rows, "task_observations"):
+        expected = _stable_id(
+            "task-observation", task["run_id"], task["task_ordinal"],
+            task["task"], task["attempt"])
+        if (task["run_id"] not in runs
+                or not isinstance(task["task_ordinal"], int)
+                or task["task_ordinal"] < 1
+                or _public_text(task["task"], maximum=80) is None
+                or (task["attempt"] is not None
+                    and (not isinstance(task["attempt"], int) or task["attempt"] < 1))
+                or any(not valid_nonnegative_number(task[key]) for key in (
+                    "public_passed", "public_total", "hidden_passed", "hidden_total",
+                    "auto_score", "wall_seconds"))
+                or any(task[key] not in {None, 0, 1} for key in (
+                    "release_ready", "handoff_utility", "false_green", "tampering",
+                    "timed_out"))
+                or (task["completion_tokens"] is not None
+                    and (not isinstance(task["completion_tokens"], int)
+                         or task["completion_tokens"] < 0))
+                or task["observation_id"] != expected):
+            raise ValueError("community database contains an invalid task observation")
+
+
+def aggregate_database(rows: dict[str, list[tuple]]) -> list[dict]:
+    """Reproduce bundle-clustered community aggregates from normalized rows."""
+    configurations = {
+        row["configuration_id"]: row
+        for row in _row_dicts(rows, "configurations")
+    }
+    items_by_run = defaultdict(list)
+    for item in _row_dicts(rows, "item_observations"):
+        items_by_run[item["run_id"]].append(item)
+    bundle_groups = defaultdict(lambda: defaultdict(lambda: {
+        "runs": 0, "passed": 0, "total": 0, "incomplete": 0,
+        "manual_review": 0, "infrastructure_errors": 0,
+        "_item_walls": [], "_token_rates": [],
+    }))
+    identities = {}
+    for run in _row_dicts(rows, "benchmark_runs"):
+        configuration = configurations[run["configuration_id"]]
+        key = (run["round"], run["pack"], configuration["public_name"],
+               run["configuration_id"])
+        identity = {
+            "environment": {
+                "os": configuration["os"],
+                "architecture": configuration["architecture"],
+                "python": configuration["python"],
+            },
+            "model": configuration["public_name"],
+            "transport": configuration["transport"],
+            "parameters": json.loads(configuration["parameters_json"]),
+            "public_metadata": json.loads(configuration["public_metadata_json"]),
+        }
+        previous = identities.setdefault(run["configuration_id"], identity)
+        if previous != identity:
+            raise ValueError("community database configuration identity collision")
+        local = bundle_groups[run["bundle_id"]][key]
+        local["runs"] += 1
+        for target, source in (
+                ("passed", "scored_passed"), ("total", "scored_total"),
+                ("incomplete", "incomplete"),
+                ("manual_review", "manual_review"),
+                ("infrastructure_errors", "infrastructure_errors")):
+            value = run[source]
+            if value is not None:
+                local[target] += value
+        for item in items_by_run[run["run_id"]]:
+            wall = item["wall_seconds"]
+            tokens = item["completion_tokens"]
+            if wall is not None:
+                local["_item_walls"].append(float(wall))
+                if wall > 0 and tokens is not None:
+                    local["_token_rates"].append(tokens / wall)
+
+    groups = defaultdict(lambda: {
+        "submissions": 0, "runs": 0, "passed": 0, "total": 0,
+        "incomplete": 0, "manual_review": 0, "infrastructure_errors": 0,
+        "_bundle_pass_rates": [], "_bundle_completion_rates": [],
+        "_bundle_mean_walls": [], "_bundle_mean_token_rates": [],
+    })
+    for local_groups in bundle_groups.values():
+        for key, local in local_groups.items():
+            group = groups[key]
+            group["submissions"] += 1
+            for field in ("runs", "passed", "total", "incomplete",
+                          "manual_review", "infrastructure_errors"):
+                group[field] += local[field]
+            if local["total"] > 0:
+                group["_bundle_pass_rates"].append(
+                    local["passed"] / local["total"])
+            attempted = (local["total"] + local["incomplete"]
+                         + local["manual_review"]
+                         + local["infrastructure_errors"])
+            if attempted > 0:
+                group["_bundle_completion_rates"].append(
+                    local["total"] / attempted)
+            if local["_item_walls"]:
+                group["_bundle_mean_walls"].append(
+                    statistics.mean(local["_item_walls"]))
+            if local["_token_rates"]:
+                group["_bundle_mean_token_rates"].append(
+                    statistics.mean(local["_token_rates"]))
+
+    result = []
+    for (round_number, pack, model_name, configuration_id), totals in sorted(
+            groups.items(), key=lambda item: (
+                item[0][0], item[0][2].lower(), item[0][3])):
+        identity = identities[configuration_id]
+        rates = totals["_bundle_pass_rates"]
+        result.append({
+            "round": round_number,
+            "pack": pack,
+            "model": model_name,
+            "configuration": configuration_id,
+            **identity,
+            **{key: value for key, value in totals.items()
+               if not key.startswith("_")},
+            "observed_submissions": len(rates),
+            "bundle_pass_rate_interval95": _cluster_interval(rates),
+            "bundle_completion_rate_interval95": _cluster_interval(
+                totals["_bundle_completion_rates"]),
+            "bundle_item_wall_p50_seconds": _percentile(
+                totals["_bundle_mean_walls"], 0.5),
+            "bundle_item_wall_p90_seconds": _percentile(
+                totals["_bundle_mean_walls"], 0.9),
+            "bundle_item_wall_observed_submissions": len(
+                totals["_bundle_mean_walls"]),
+            "bundle_tokens_per_second_p50": _percentile(
+                totals["_bundle_mean_token_rates"], 0.5),
+            "bundle_token_rate_observed_submissions": len(
+                totals["_bundle_mean_token_rates"]),
+        })
+    return result
+
+
+def recommend_database(path: Path, *, round_number: int,
+                       pack: str | None = None,
+                       constraints: dict | None = None,
+                       objectives: list[str] | None = None,
+                       accuracy_floor: float | None = None) -> dict:
+    """Query the same gated Pareto shortlist directly from SQLite."""
+    return _recommend_aggregate_rows(
+        aggregate_database(load_database(path)), round_number=round_number,
+        pack=pack, constraints=constraints, objectives=objectives,
+        accuracy_floor=accuracy_floor)
 
 
 def build_database(directory: Path, output: Path, *, check: bool = False) -> dict:
@@ -351,7 +690,7 @@ def build_database(directory: Path, output: Path, *, check: bool = False) -> dic
                     f"INSERT INTO {table} ({', '.join(columns)}) VALUES ({placeholders})",
                     rows[table])
             connection.execute(
-                "INSERT INTO dataset_metadata VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO dataset_metadata VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 _metadata_row(rows))
         connection.close()
         _validate_database(temporary, rows)

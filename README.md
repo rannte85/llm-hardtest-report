@@ -4,11 +4,11 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-**Current release: 2.18.0** — adds a normalized SQLite observation database. Validated
-public bundles become linked bundle, configuration, benchmark-run, item, and Round 4
-task records with full SHA-256 provenance. A deterministic logical fingerprint,
-foreign-key/integrity checks, and `--check` mode make the database reproducible without
-turning the CLI into telemetry. Repeated rows remain attached to one independent bundle.
+**Current release: 2.19.0** — connects the normalized SQLite database directly to the
+serving-candidate recommender. JSON and database inputs now produce the same cluster-
+aware metrics, gates, exclusions, and Pareto candidates. Database schema v2 adds a
+recomputable numeric-normalized fingerprint, and standalone queries reject corrupt,
+stale, structurally altered, or semantically inconsistent rows before analysis.
 Canonical Round 1–4 questions, grading contracts, and public submission schema are
 unchanged.
 
@@ -264,7 +264,8 @@ The database is built only from already-public, validated repository bundles. It
 not scan local runs, contact model servers, or collect telemetry. Bundle IDs remain the
 independence boundary even when a contribution contains repeated attempts or duplicate
 model rows. See the [database contract](docs/COMMUNITY_DATABASE.md) and published
-[`database-schema-v1.sql`](results/database-schema-v1.sql).
+[`database-schema-v2.sql`](results/database-schema-v2.sql). Databases produced by
+v2.18 use schema v1 and must be rebuilt from their canonical submission JSON.
 
 ## Query observed serving candidates
 
@@ -282,8 +283,20 @@ llm-hardtest results recommend results/submissions \
   --objective latency
 ```
 
-Use `--json` for a stable machine-readable result suitable for a future database or
-service. At least five independent bundles are required for accuracy and completion;
+Querying a verified database uses the identical recommendation contract:
+
+```bash
+llm-hardtest results recommend \
+  --database results/community.sqlite3 \
+  --round 1 \
+  --pack sha256:<full-pack-fingerprint> \
+  --max-memory-gb 24 \
+  --objective accuracy \
+  --objective latency
+```
+
+Use `--json` for a stable machine-readable result suitable for a service or API. At
+least five independent bundles are required for accuracy and completion;
 latency and throughput also require five bundles containing those measurements. The
 accuracy floor is applied to the bundle-cluster 95% lower bound, not the point estimate.
 Missing metadata fails a requested constraint, multiple pack versions require an

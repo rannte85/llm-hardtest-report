@@ -5,6 +5,22 @@ out separately from harness features.
 
 ## Unreleased
 
+## 2.19.0 — 2026-09-01
+
+- Added `results recommend --database` for gated Pareto queries directly from normalized
+  SQLite observations, with no bundle IDs or contributor history in the response.
+- Refactored JSON and database adapters to share one aggregate-row recommendation path;
+  identical evidence now produces identical metrics, gates, exclusions, and candidates.
+- Added database schema v2 with a numeric-normalized, independently recomputable content
+  fingerprint; version-2.18 schema-v1 databases must be rebuilt from canonical JSON.
+- Added standalone semantic validation for canonical configuration JSON, flattened
+  settings, safe text, identities, pack/environment links, numeric domains, statuses,
+  and Round 4 boolean/null flags.
+- Rejected ambiguous directory-plus-database queries and added cross-adapter, stale,
+  obsolete-schema, semantic-tamper, repeat-cluster, CLI, and installed-package controls.
+- Kept public result schema v2, recommendation result schema v1, and canonical Round 1–4
+  content and grading unchanged.
+
 ## 2.18.0 — 2026-09-01
 
 - Added `results database` to materialize validated public submissions as a normalized

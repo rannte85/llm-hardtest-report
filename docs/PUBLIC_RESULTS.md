@@ -134,6 +134,20 @@ fingerprint are checked before a build is accepted. See
 [Community Observation Database](COMMUNITY_DATABASE.md) for the table contract and
 query examples.
 
+The serving-candidate query can consume this verified snapshot directly:
+
+```bash
+llm-hardtest results recommend \
+  --database results/community.sqlite3 \
+  --round 1 --pack sha256:<full-pack-fingerprint> \
+  --objective accuracy --objective latency --json
+```
+
+Database and JSON inputs use the same aggregation and recommendation implementation.
+Schema v2 independently recomputes its numeric-normalized fingerprint and validates
+relational semantics before returning a result. A schema-v1 file from version 2.18 must
+be rebuilt from canonical JSON.
+
 ## Descriptive serving-candidate query
 
 `results recommend` is read-only: it validates accepted JSON and writes nothing unless

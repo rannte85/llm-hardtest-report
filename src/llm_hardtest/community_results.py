@@ -266,12 +266,12 @@ def _dominates(left: dict, right: dict, objectives: list[str]) -> bool:
         better for _, better in comparisons)
 
 
-def recommend_configurations(submissions: list[dict], *, round_number: int,
-                             pack: str | None = None,
-                             constraints: dict | None = None,
-                             objectives: list[str] | None = None,
-                             accuracy_floor: float | None = None) -> dict:
-    """Return a gated Pareto shortlist from validated, exact-pack observations."""
+def _recommend_aggregate_rows(aggregate_rows: list[dict], *, round_number: int,
+                              pack: str | None = None,
+                              constraints: dict | None = None,
+                              objectives: list[str] | None = None,
+                              accuracy_floor: float | None = None) -> dict:
+    """Return a gated Pareto shortlist from normalized aggregate rows."""
     if isinstance(round_number, bool) or round_number not in {1, 2, 3, 4}:
         raise ValueError("recommendation round must be one of 1, 2, 3, or 4")
     if constraints is not None and not isinstance(constraints, dict):
@@ -311,8 +311,7 @@ def recommend_configurations(submissions: list[dict], *, round_number: int,
             not isinstance(pack, str) or PACK_FINGERPRINT.fullmatch(pack) is None):
         raise ValueError("recommendation pack must be an exact sha256 fingerprint")
 
-    rows = [row for row in aggregate_submissions(submissions)
-            if row["round"] == round_number]
+    rows = [row for row in aggregate_rows if row["round"] == round_number]
     available_packs = sorted({row["pack"] for row in rows})
     if pack is None:
         selected_pack = available_packs[0] if len(available_packs) == 1 else None
@@ -401,6 +400,18 @@ def recommend_configurations(submissions: list[dict], *, round_number: int,
             "non-dominated observed configurations; this is not a prediction for "
             "untested hardware or settings")
     return result
+
+
+def recommend_configurations(submissions: list[dict], *, round_number: int,
+                             pack: str | None = None,
+                             constraints: dict | None = None,
+                             objectives: list[str] | None = None,
+                             accuracy_floor: float | None = None) -> dict:
+    """Return a gated Pareto shortlist from validated public bundles."""
+    return _recommend_aggregate_rows(
+        aggregate_submissions(submissions), round_number=round_number, pack=pack,
+        constraints=constraints, objectives=objectives,
+        accuracy_floor=accuracy_floor)
 
 
 def _configuration_summary(candidate: dict) -> str:

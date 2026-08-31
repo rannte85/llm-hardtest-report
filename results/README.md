@@ -8,7 +8,9 @@ project does not automatically collect telemetry or local campaign data.
 - `submissions/` contains one canonical JSON document per accepted bundle.
 - `INDEX.md` is generated from accepted submissions and contains descriptive examples.
 - `recommendation-schema-v1.json` documents the deterministic serving-candidate query.
-- `database-schema-v1.sql` documents the normalized SQLite observation schema.
+- `database-schema-v2.sql` documents the current normalized SQLite observation schema.
+- `database-schema-v1.sql` documents the v2.18 generated-database format; rebuild it
+  with the current CLI before querying.
 - `pilot-schema-v1.json` documents the sanitized Round 5 summary shape.
 - `pilots/` contains accepted Round 5 pilot summaries.
 - `PILOTS.md` is the separately generated Round 5 community index.
@@ -27,6 +29,7 @@ llm-hardtest results build --check
 llm-hardtest results database --output results/community.sqlite3
 llm-hardtest results database --output results/community.sqlite3 --check
 llm-hardtest results recommend --round 1 --json
+llm-hardtest results recommend --database results/community.sqlite3 --round 1 --json
 llm-hardtest results pilots validate
 llm-hardtest results pilots build
 llm-hardtest results pilots build --check
@@ -51,3 +54,8 @@ missing metadata or predict performance on untested hardware.
 run, item, and task rows. It preserves bundle IDs as uncertainty clusters and emits a
 deterministic logical content fingerprint. The generated SQLite file is ignored by Git;
 the canonical repository sources remain the reviewed JSON submissions.
+
+`results recommend --database` verifies the standalone database and reproduces the
+same bundle-clustered aggregates and candidate result as the JSON path. It emits no
+bundle IDs or contributor history. Supplying both a directory and `--database` fails
+instead of silently selecting one source.

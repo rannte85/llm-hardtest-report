@@ -15,7 +15,7 @@ from .report import collect
 from .results import item_status
 
 
-PUBLIC_SCHEMA_VERSION = 2
+PUBLIC_SCHEMA_VERSION = 3
 PUBLIC_METADATA_FIELDS = {
     "model_revision", "quantization", "model_format", "parameter_count_b",
     "server", "server_version", "accelerator", "accelerator_count",
@@ -51,6 +51,8 @@ PRIVATE_STRING = re.compile(
 SECRET_STRING = re.compile(
     r"(?:AKIA[0-9A-Z]{16}|(?:sk|gh[opusr])-[A-Za-z0-9_-]{16,})")
 FINGERPRINT = re.compile(r"^sha256:[0-9a-f]{64}$")
+SERVING_ENVIRONMENT_SCOPES = {"same_host", "remote", "unreported"}
+SERVING_ENVIRONMENT_SYSTEMS = {"Linux", "Darwin", "Windows", "Other"}
 FORBIDDEN_KEYS = {
     "api_key", "api_key_env", "base_url", "content", "error", "generated_at",
     "key", "label", "prompt", "raw_usage", "response", "run_id", "transcript",
@@ -88,6 +90,65 @@ def _public_environment() -> dict:
         "architecture": architecture,
         "python": f"{sys.version_info.major}.{sys.version_info.minor}",
     }
+
+
+def _clean_serving_environment(model: dict, runner_environment: dict,
+                               warnings: list[str], model_number: int) -> dict:
+    """Build explicit serving-host provenance without inferring remote hardware."""
+    raw = model.get("public_serving_environment")
+    if raw is None:
+        if model.get("transport") == "codex_cli" and model.get(
+                "codex_provider") == "openai":
+            return {"scope": "remote", "os": None, "architecture": None}
+        warnings.append(
+            f"model-{model_number}: serving environment is unreported; set "
+            "public_serving_environment to publish an attested relationship")
+        return {"scope": "unreported", "os": None, "architecture": None}
+    if not isinstance(raw, dict) or set(raw) - {"scope", "os", "architecture"}:
+        raise ValueError(
+            f"model-{model_number}: public_serving_environment has unexpected fields")
+    scope = raw.get("scope")
+    if scope not in SERVING_ENVIRONMENT_SCOPES:
+        raise ValueError(
+            f"model-{model_number}: serving environment scope is invalid")
+    if scope == "same_host":
+        if (model.get("transport") == "codex_cli"
+                and model.get("codex_provider") == "openai"):
+            raise ValueError(
+                f"model-{model_number}: signed-in OpenAI Codex cannot be same_host")
+        for field in ("os", "architecture"):
+            if raw.get(field) not in {None, runner_environment[field]}:
+                raise ValueError(
+                    f"model-{model_number}: same_host {field} contradicts runner")
+        return {
+            "scope": scope,
+            "os": runner_environment["os"],
+            "architecture": runner_environment["architecture"],
+        }
+    if scope == "unreported":
+        if raw.get("os") is not None or raw.get("architecture") is not None:
+            raise ValueError(
+                f"model-{model_number}: unreported serving environment cannot have coordinates")
+        return {"scope": scope, "os": None, "architecture": None}
+    system = raw.get("os")
+    architecture = raw.get("architecture")
+    if (system is not None and (
+            not isinstance(system, str)
+            or system not in SERVING_ENVIRONMENT_SYSTEMS)):
+        raise ValueError(f"model-{model_number}: remote serving os is invalid")
+    if architecture is not None:
+        architecture = _public_text(architecture, maximum=32)
+        if architecture is None:
+            raise ValueError(
+                f"model-{model_number}: remote serving architecture is unsafe")
+    return {"scope": scope, "os": system, "architecture": architecture}
+
+
+def normalized_serving_environment(payload: dict, model: dict) -> dict:
+    """Return the v3 serving identity or an explicit legacy unknown marker."""
+    if payload.get("schema_version", 1) >= 3:
+        return model["serving_environment"]
+    return {"scope": "unreported", "os": None, "architecture": None}
 
 
 def _clean_metadata(model: dict, warnings: list[str], model_number: int) -> dict:
@@ -222,6 +283,7 @@ def build_public_result(run_dir: Path) -> tuple[dict, list[str]]:
             "with the original benchmark version before exporting")
 
     warnings = []
+    runner_environment = _public_environment()
     by_key = {entry["key"]: entry for entry in summary["models"]}
     models = []
     for index, model in enumerate(summary["config"]["models"], 1):
@@ -248,6 +310,8 @@ def build_public_result(run_dir: Path) -> tuple[dict, list[str]]:
         models.append({
             "public_name": name,
             "transport": model.get("transport"),
+            "serving_environment": _clean_serving_environment(
+                model, runner_environment, warnings, index),
             "rounds": rounds,
             "parameters": parameters,
             "public_metadata": _clean_metadata(model, warnings, index),
@@ -260,7 +324,7 @@ def build_public_result(run_dir: Path) -> tuple[dict, list[str]]:
             "rounds": selected_rounds,
             "packs": {str(number): packs[str(number)] for number in selected_rounds},
         },
-        "environment": _public_environment(),
+        "environment": runner_environment,
         "models": models,
         "privacy": {
             "raw_artifacts_included": False,
@@ -293,7 +357,9 @@ def validate_public_result(payload: dict) -> dict:
     required = {"schema_version", "bundle_id", "tool", "benchmark",
                 "environment", "models", "privacy"}
     schema_version = payload.get("schema_version")
-    if set(payload) != required or schema_version not in {1, PUBLIC_SCHEMA_VERSION}:
+    if (set(payload) != required or isinstance(schema_version, bool)
+            or not isinstance(schema_version, int)
+            or schema_version not in {1, 2, PUBLIC_SCHEMA_VERSION}):
         raise ValueError("public result has unsupported or unexpected top-level fields")
     without_id = {key: value for key, value in payload.items() if key != "bundle_id"}
     if (not isinstance(payload.get("bundle_id"), str)
@@ -332,12 +398,34 @@ def validate_public_result(payload: dict) -> dict:
         raise ValueError("public result requires at least one model")
     for index, model in enumerate(models, 1):
         expected = {"public_name", "transport", "rounds", "parameters", "public_metadata"}
+        if schema_version >= 3:
+            expected.add("serving_environment")
         if not isinstance(model, dict) or set(model) != expected:
             raise ValueError(f"public model {index} has unexpected fields")
         if _public_text(model["public_name"]) is None:
             raise ValueError(f"public model {index} has an unsafe public_name")
         if model["transport"] not in {"openai_compat", "codex_cli"}:
             raise ValueError(f"public model {index} has an invalid transport")
+        if schema_version >= 3:
+            serving = model["serving_environment"]
+            if (not isinstance(serving, dict)
+                    or set(serving) != {"scope", "os", "architecture"}
+                    or serving.get("scope") not in SERVING_ENVIRONMENT_SCOPES
+                    or (serving.get("os") is not None
+                        and (not isinstance(serving["os"], str)
+                             or serving["os"] not in SERVING_ENVIRONMENT_SYSTEMS))
+                    or (serving.get("architecture") is not None
+                        and _public_text(serving["architecture"], maximum=32) is None)):
+                raise ValueError(f"public model {index} serving environment is invalid")
+            if serving["scope"] == "same_host" and (
+                    serving["os"] != environment["os"]
+                    or serving["architecture"] != environment["architecture"]):
+                raise ValueError(
+                    f"public model {index} same_host environment contradicts runner")
+            if serving["scope"] == "unreported" and (
+                    serving["os"] is not None or serving["architecture"] is not None):
+                raise ValueError(
+                    f"public model {index} unreported environment has coordinates")
         if not isinstance(model["rounds"], dict):
             raise ValueError(f"public model {index} rounds must be an object")
         if set(model["rounds"]) - {str(value) for value in rounds}:

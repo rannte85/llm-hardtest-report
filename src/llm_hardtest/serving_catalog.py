@@ -9,9 +9,10 @@ from .community_results import (
 )
 
 
-CATALOG_SCHEMA_VERSION = 2
+CATALOG_SCHEMA_VERSION = 3
 FACET_FIELDS = (
     "configuration", "model", "os", "architecture", "python", "transport",
+    "serving_scope", "serving_os", "serving_architecture",
     "reasoning_effort", "context_window", "max_tokens", "temperature", "top_p",
     "top_k", "min_p", "model_revision", "quantization", "model_format",
     "parameter_count_b", "server", "server_version", "accelerator",
@@ -26,7 +27,9 @@ METADATA_FACETS = {
     "server_version", "accelerator", "accelerator_count", "memory_gb",
     "system_memory_gb",
 }
-OPTIONAL_FACETS = PARAMETER_FACETS | METADATA_FACETS
+OPTIONAL_FACETS = PARAMETER_FACETS | METADATA_FACETS | {
+    "serving_os", "serving_architecture",
+}
 
 
 def _validate_filters(round_number: int | None, pack: str | None) -> None:
@@ -45,6 +48,8 @@ def _facet_value(row: dict, field: str):
         return row["model"]
     if field in {"os", "architecture", "python"}:
         return row["environment"][field]
+    if field.startswith("serving_"):
+        return row["serving_environment"].get(field.removeprefix("serving_"))
     if field == "transport":
         return row["transport"]
     if field in PARAMETER_FACETS:
@@ -137,6 +142,7 @@ def build_catalog(aggregate_rows: list[dict], *, round_number: int | None = None
             "configuration": row["configuration"],
             "model": row["model"],
             "environment": row["environment"],
+            "serving_environment": row["serving_environment"],
             "transport": row["transport"],
             "parameters": row["parameters"],
             "public_metadata": row["public_metadata"],
@@ -201,11 +207,12 @@ def render_catalog(catalog: dict) -> str:
     ]
     if catalog["configurations"]:
         lines += [
-            "| Model | Config | Environment | Serving / build | Generation settings | Round / pack | Bundles | Ready objectives |",
-            "|---|---|---|---|---|---|---:|---|",
+            "| Model | Config | Runner | Serving environment | Server / build | Generation settings | Round / pack | Bundles | Ready objectives |",
+            "|---|---|---|---|---|---|---|---:|---|",
         ]
         for configuration in catalog["configurations"]:
             environment = configuration["environment"]
+            serving_environment = configuration["serving_environment"]
             metadata = configuration["public_metadata"]
             for index, observation in enumerate(configuration["observations"]):
                 ready = ", ".join(
@@ -220,7 +227,10 @@ def render_catalog(catalog: dict) -> str:
                     f"| {_cell(configuration['model']) if index == 0 else '↳'} | "
                     f"`{configuration['configuration']}` | "
                     f"{_cell(environment['os'])}/{_cell(environment['architecture'])}/"
-                    f"py{_cell(environment['python'])} · "
+                    f"py{_cell(environment['python'])} | "
+                    f"{_cell(serving_environment['scope'])}/"
+                    f"{_cell(serving_environment.get('os') or 'unspecified')}/"
+                    f"{_cell(serving_environment.get('architecture') or 'unspecified')} · "
                     f"{_cell(metadata.get('accelerator', 'unspecified'))} | "
                     f"{_cell(serving)} | "
                     f"{_cell(json.dumps(configuration['parameters'], sort_keys=True))} | "

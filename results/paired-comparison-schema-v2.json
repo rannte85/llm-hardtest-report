@@ -1,0 +1,514 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rannte85/llm-hardtest-report/blob/main/results/paired-comparison-schema-v2.json",
+  "title": "LLM Hardtest paired serving configuration comparison v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "kind",
+    "round",
+    "pack",
+    "available_packs",
+    "left_configuration",
+    "right_configuration",
+    "objectives",
+    "minimum_paired_bundles",
+    "multiplicity_method",
+    "familywise_alpha",
+    "status",
+    "reason",
+    "left",
+    "right",
+    "shared_configuration_bundles",
+    "tested_objectives",
+    "objectives_result"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 2
+    },
+    "kind": {
+      "const": "paired_serving_configuration_comparison"
+    },
+    "round": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 4
+    },
+    "pack": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/pack"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "available_packs": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/pack"
+      }
+    },
+    "left_configuration": {
+      "$ref": "#/$defs/configurationId"
+    },
+    "right_configuration": {
+      "$ref": "#/$defs/configurationId"
+    },
+    "objectives": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/objective"
+      }
+    },
+    "minimum_paired_bundles": {
+      "const": 5
+    },
+    "multiplicity_method": {
+      "const": "holm_across_tested_objectives"
+    },
+    "familywise_alpha": {
+      "const": 0.05
+    },
+    "status": {
+      "enum": [
+        "PACK_REQUIRED",
+        "NO_OBSERVATIONS",
+        "NO_MATCH",
+        "INSUFFICIENT_EVIDENCE",
+        "INCONCLUSIVE",
+        "LEFT_DIRECTIONAL_EVIDENCE",
+        "RIGHT_DIRECTIONAL_EVIDENCE",
+        "MIXED_DIRECTIONAL_EVIDENCE"
+      ]
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 240
+    },
+    "left": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/configuration"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "right": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/configuration"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "shared_configuration_bundles": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "tested_objectives": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4
+    },
+    "objectives_result": {
+      "type": "array",
+      "maxItems": 4,
+      "items": {
+        "$ref": "#/$defs/objectiveResult"
+      }
+    }
+  },
+  "$defs": {
+    "safeText": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160
+    },
+    "pack": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "configurationId": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{10}$"
+    },
+    "objective": {
+      "enum": [
+        "accuracy",
+        "completion",
+        "latency",
+        "throughput"
+      ]
+    },
+    "environment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "os",
+        "architecture",
+        "python"
+      ],
+      "properties": {
+        "os": {
+          "enum": [
+            "Linux",
+            "Darwin",
+            "Windows",
+            "Other"
+          ]
+        },
+        "architecture": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32
+        },
+        "python": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+$"
+        }
+      }
+    },
+    "parameters": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "reasoning_effort": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32
+        },
+        "context_window": {
+          "type": "number"
+        },
+        "max_tokens": {
+          "type": "number"
+        },
+        "temperature": {
+          "type": "number"
+        },
+        "top_p": {
+          "type": "number"
+        },
+        "top_k": {
+          "type": "number"
+        },
+        "min_p": {
+          "type": "number"
+        }
+      }
+    },
+    "publicMetadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "model_revision": {
+          "$ref": "#/$defs/safeText"
+        },
+        "quantization": {
+          "$ref": "#/$defs/safeText"
+        },
+        "model_format": {
+          "$ref": "#/$defs/safeText"
+        },
+        "parameter_count_b": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "server": {
+          "$ref": "#/$defs/safeText"
+        },
+        "server_version": {
+          "$ref": "#/$defs/safeText"
+        },
+        "accelerator": {
+          "$ref": "#/$defs/safeText"
+        },
+        "accelerator_count": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "memory_gb": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "system_memory_gb": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        }
+      }
+    },
+    "configuration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "configuration",
+        "model",
+        "environment",
+        "serving_environment",
+        "transport",
+        "parameters",
+        "public_metadata"
+      ],
+      "properties": {
+        "configuration": {
+          "$ref": "#/$defs/configurationId"
+        },
+        "model": {
+          "$ref": "#/$defs/safeText"
+        },
+        "environment": {
+          "$ref": "#/$defs/environment"
+        },
+        "serving_environment": {
+          "$ref": "#/$defs/servingEnvironment"
+        },
+        "transport": {
+          "enum": [
+            "openai_compat",
+            "codex_cli"
+          ]
+        },
+        "parameters": {
+          "$ref": "#/$defs/parameters"
+        },
+        "public_metadata": {
+          "$ref": "#/$defs/publicMetadata"
+        }
+      }
+    },
+    "interval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "low",
+        "high",
+        "method",
+        "samples"
+      ],
+      "properties": {
+        "low": {
+          "type": "number"
+        },
+        "high": {
+          "type": "number"
+        },
+        "method": {
+          "const": "paired_bundle_cluster_bootstrap_95"
+        },
+        "samples": {
+          "const": 2000
+        }
+      }
+    },
+    "test": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "p_value",
+        "method",
+        "assignments",
+        "evaluated_permutations",
+        "extreme_permutations"
+      ],
+      "properties": {
+        "p_value": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "method": {
+          "enum": [
+            "exact_paired_sign_flip_two_sided",
+            "deterministic_monte_carlo_paired_sign_flip_two_sided"
+          ]
+        },
+        "assignments": {
+          "type": "integer",
+          "minimum": 32
+        },
+        "evaluated_permutations": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "extreme_permutations": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "objectiveResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "objective",
+        "unit",
+        "effect_definition",
+        "paired_bundles",
+        "left_mean",
+        "right_mean",
+        "left_advantage",
+        "interval95",
+        "p_raw",
+        "p_holm",
+        "test",
+        "classification"
+      ],
+      "properties": {
+        "objective": {
+          "$ref": "#/$defs/objective"
+        },
+        "unit": {
+          "enum": [
+            "rate",
+            "seconds",
+            "tokens_per_second"
+          ]
+        },
+        "effect_definition": {
+          "enum": [
+            "left_minus_right_positive_favors_left",
+            "right_minus_left_seconds_positive_favors_left"
+          ]
+        },
+        "paired_bundles": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "left_mean": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "right_mean": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "left_advantage": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "interval95": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/interval"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "p_raw": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "p_holm": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "test": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/test"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "classification": {
+          "enum": [
+            "INSUFFICIENT",
+            "INCONCLUSIVE",
+            "LEFT_BETTER",
+            "RIGHT_BETTER"
+          ]
+        }
+      }
+    },
+    "servingEnvironment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scope",
+        "os",
+        "architecture"
+      ],
+      "properties": {
+        "scope": {
+          "enum": [
+            "same_host",
+            "remote",
+            "unreported"
+          ]
+        },
+        "os": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "Linux",
+            "Darwin",
+            "Windows",
+            "Other",
+            null
+          ]
+        },
+        "architecture": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1,
+          "maxLength": 32
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "scope": {
+                "const": "unreported"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "os": {
+                "const": null
+              },
+              "architecture": {
+                "const": null
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

@@ -4,13 +4,12 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-**Current release: 2.25.0** — adds a measured GPT-5.6 Luna Round 1 control and fixes
-Codex token provenance. Rounds 1–3 now consume Codex JSONL usage and publish only
-measured output tokens as completion-throughput evidence. Legacy Codex totals are
-quarantined instead of being mislabeled. The first sanitized Luna observation is
-included in the community dataset with 20/20 accuracy and measured latency; its
-legacy total-token values are intentionally absent. Canonical Round 1–4 questions,
-grading contracts, public schema v2, and database schema v2 are unchanged.
+**Current release: 2.26.0** — separates the machine running this client from the
+machine serving the model. Public schema v3 records an explicit `same_host`, `remote`,
+or `unreported` relationship; legacy submissions remain readable but are never guessed
+to be local. Remote Codex/Luna results with undisclosed host coordinates can contribute
+observations, but cannot manufacture serving-environment diversity or portability
+evidence.
 
 LLM Hardtest Report is a local-first command-line benchmark for comparing language
 models as reasoners, coding workers, and safe handoff agents. Point it at one or more
@@ -239,7 +238,7 @@ llm-hardtest pilot submit pilot-bundle.zip --preview
 llm-hardtest pilot submit pilot-bundle.zip --open-pr --yes
 ```
 
-Standard campaign exports use public schema v2. Every item outcome is included by
+Standard campaign exports use public schema v3. Every item outcome is included by
 default as a status, attempt number, wall time, and completion-token count. Prompt and
 response content is never included. Accepted v2 bundles let the community index
 recompute item difficulty, corrected discrimination, and within/between-configuration
@@ -264,8 +263,10 @@ The database is built only from already-public, validated repository bundles. It
 not scan local runs, contact model servers, or collect telemetry. Bundle IDs remain the
 independence boundary even when a contribution contains repeated attempts or duplicate
 model rows. See the [database contract](docs/COMMUNITY_DATABASE.md) and published
-[`database-schema-v2.sql`](results/database-schema-v2.sql). Databases produced by
-v2.18 use schema v1 and must be rebuilt from their canonical submission JSON.
+[`database-schema-v3.sql`](results/database-schema-v3.sql). Older databases must be
+rebuilt from canonical submission JSON; public bundle v1/v2 inputs remain valid.
+Configuration IDs are recomputed under the v3 identity, so query them again with
+`results catalog` after rebuilding instead of persisting an older database ID.
 
 ## Discover observed serving settings
 
@@ -283,10 +284,11 @@ llm-hardtest results catalog results/submissions \
 The catalog groups case-insensitive text facets and normalized numeric facets, preserves
 each exact configuration, shows independent-bundle counts and which objectives have
 enough evidence, and counts every missing optional coordinate explicitly. Facets cover
-configuration ID, model, environment/Python, transport, generation parameters, revision,
+configuration ID, model, runner environment/Python, serving scope/OS/architecture,
+transport, generation parameters, revision,
 format, quantization, server/version, accelerator/count, and declared capacity. Canonical
 JSON and a verified SQLite snapshot produce identical machine-readable output. The
-current contract is [`results/catalog-schema-v2.json`](results/catalog-schema-v2.json).
+current contract is [`results/catalog-schema-v3.json`](results/catalog-schema-v3.json).
 `EMPTY` means the
 source contains no observations; `NO_MATCH` means observations exist but none match the
 optional round/pack filter.
@@ -302,6 +304,8 @@ llm-hardtest results recommend results/submissions \
   --pack sha256:<full-pack-fingerprint> \
   --configuration 0123456789 \
   --model "org/model" \
+  --serving-scope same_host \
+  --serving-os Linux \
   --server-version "1.2.3" \
   --context-window 32768 \
   --temperature 0 \
@@ -326,7 +330,7 @@ llm-hardtest results recommend \
 
 Use `--json` for a stable machine-readable result suitable for a service or API; the
 current contract is
-[`results/recommendation-schema-v2.json`](results/recommendation-schema-v2.json). At
+[`results/recommendation-schema-v3.json`](results/recommendation-schema-v3.json). At
 least five independent bundles are required for accuracy and completion;
 latency and throughput also require five bundles containing those measurements. The
 accuracy floor is applied to the bundle-cluster 95% lower bound, not the point estimate.
@@ -357,7 +361,7 @@ llm-hardtest results compare \
 ```
 
 The machine-readable response follows
-[`results/paired-comparison-schema-v1.json`](results/paired-comparison-schema-v1.json).
+[`results/paired-comparison-schema-v2.json`](results/paired-comparison-schema-v2.json).
 Each metric requires at least five shared independent bundles. Repeated runs are
 collapsed within their bundle before comparison. A deterministic paired-cluster
 bootstrap supplies the 95% effect interval, a two-sided sign-flip test supplies the
@@ -381,18 +385,20 @@ llm-hardtest results readiness \
 ```
 
 The audit counts independent bundles per exact configuration and objective, paired
-configuration edges with at least five shared bundles, distinct declared serving
-environments, and exact model profiles repeated with five bundles in at least two
-environments. A model profile includes model name, transport, generation settings,
+configuration edges with at least five shared bundles, distinct serving environments
+with attested OS and architecture, and exact model profiles repeated with five bundles
+in at least two such environments. Runner/client coordinates and remote hosts without
+published coordinates never satisfy these gates. A model profile includes model name,
+transport, generation settings,
 revision, format, quantization, and parameter count, so a renamed or requantized model
 cannot act as a portability bridge.
 
 `DESIGN_TARGET_MET_VALIDATION_REQUIRED` is deliberately not permission to deploy a
-predictor. The v1 contract always returns `predictive_service_authorized: false` until
+predictor. The v2 contract always returns `predictive_service_authorized: false` until
 pre-registered temporal validation, maintainer abuse/implausibility review, and future
 pack/server drift monitoring are available. Threshold flags are acquisition-planning
 targets, not universal scientific guarantees. See
-[`results/prediction-readiness-schema-v1.json`](results/prediction-readiness-schema-v1.json).
+[`results/prediction-readiness-schema-v2.json`](results/prediction-readiness-schema-v2.json).
 
 ## Plan the next independent submissions
 
@@ -411,7 +417,7 @@ llm-hardtest results plan \
 ```
 
 The result follows
-[`results/collection-plan-schema-v1.json`](results/collection-plan-schema-v1.json).
+[`results/collection-plan-schema-v2.json`](results/collection-plan-schema-v2.json).
 Each objective has its own observed count and deficit because a bundle can contain
 scores without latency or token measurements. The reported total is a lower bound:
 it assumes each new independent bundle contains every selected metric for one exact
@@ -483,6 +489,7 @@ Use Rounds 1–3 with any server that exposes `/v1/chat/completions`:
       "label": "Model A Q4",
       "model": "model-a",
       "transport": "openai_compat",
+      "public_serving_environment": {"scope": "same_host"},
       "rounds": [1, 2, 3],
       "base_url": "http://127.0.0.1:8000/v1",
       "api_key_env": "LLM_HARDTEST_API_KEY",
@@ -498,6 +505,11 @@ List the exact model IDs exposed by a running server instead of guessing:
 ```bash
 llm-hardtest discover --base-url http://127.0.0.1:11434/v1
 ```
+
+`public_serving_environment` affects only sanitized result provenance. Use
+`same_host` for a server on this machine, `remote` for another machine or cloud
+provider, and `unreported` when the relationship is unknown. For a known remote host,
+you may also declare public `os` and `architecture`; the tool never guesses them.
 
 The interactive initializer includes presets for Ollama, LM Studio, llama.cpp, vLLM,
 and MLX-LM. Current Ollama, LM Studio, llama.cpp, and vLLM releases expose both Chat

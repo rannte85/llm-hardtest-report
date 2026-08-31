@@ -98,7 +98,7 @@ bundle-cluster interval lower bounds. Latency is the p90 across bundle-level mea
 latencies; throughput is the p50 across bundle-level mean item token rates. Sparse
 performance observations are not promoted merely because accuracy has enough data.
 
-The current machine-readable result follows `results/recommendation-schema-v2.json`. It omits
+The current machine-readable result follows `results/recommendation-schema-v3.json`. It omits
 bundle IDs and contributor history, retains only public configuration coordinates,
 and has explicit `PACK_REQUIRED`, `NO_MATCH`, `INSUFFICIENT_EVIDENCE`,
 `SINGLE_ELIGIBLE_CONFIGURATION`, and `DESCRIPTIVE_CANDIDATES` states. A declared
@@ -181,8 +181,18 @@ unlocked by repeated rows or one-off metadata variants and returns identical res
 from canonical JSON and verified SQLite without provenance IDs.
 
 Passing those observable operator targets is reported as
-`DESIGN_TARGET_MET_VALIDATION_REQUIRED`, not predictive readiness. Public schema v2
+`DESIGN_TARGET_MET_VALIDATION_REQUIRED`, not predictive readiness. Public schema v3
 does not contain a trustworthy collection timestamp, automated structural validation
 does not replace abuse and implausibility review, and a current snapshot cannot prove
 future pack/server drift control. Version 2.24 therefore fixes
 `predictive_service_authorized` to false and names every remaining external gate.
+
+Version 2.26 separates observation provenance that earlier versions could conflate.
+The top-level environment is now explicitly the runner/client; public schema v3 adds
+each model's serving relationship and optional serving OS/architecture. Configuration
+identity includes both because client/network placement can affect latency. Legacy v1/v2
+bundles normalize to `unreported`, and signed-in Codex defaults to remote with unknown
+coordinates. Such observations remain usable for their measured outcomes but do not
+count toward readiness environment diversity or portability bridges. Database v3,
+catalog/recommendation v3, comparison/collection-plan v2, and readiness v2 expose the
+same distinction end to end.

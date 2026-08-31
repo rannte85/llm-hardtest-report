@@ -36,6 +36,16 @@ Model fields:
 - `temperature`, `top_p`, `top_k`, `min_p`: optional direct API sampling fields.
 - `item_filters`: optional advanced mapping from round numbers to question IDs or
   Round 4 task IDs. The `replay` and `focus` commands create this field automatically.
+- `public_serving_environment`: publication-only serving provenance. Use
+  `{"scope":"same_host"}` when the endpoint runs on this runner, or
+  `{"scope":"remote","os":"Linux","architecture":"x86_64"}` when those remote
+  coordinates are known. Omit remote coordinates when they are not known. Signed-in
+  OpenAI Codex is always remote and cannot be declared `same_host`.
+
+`scope` is `same_host`, `remote`, or `unreported`. The exporter copies runner OS and
+architecture only for `same_host`; it never infers a remote server from the client.
+The field is included in sanitized public results, so declare only facts you intend to
+publish. It has no effect on model execution.
 
 Model configurations count independently. The same model identifier at two reasoning
 efforts should use two different keys.

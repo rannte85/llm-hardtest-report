@@ -1,0 +1,535 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rannte85/llm-hardtest-report/results/recommendation-schema-v3.json",
+  "title": "LLM Hardtest serving recommendation v3",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "kind",
+    "round",
+    "pack",
+    "available_packs",
+    "constraints",
+    "objectives",
+    "accuracy_floor",
+    "minimum_independent_bundles",
+    "status",
+    "reason",
+    "matched_configurations",
+    "eligible_configurations",
+    "candidates",
+    "excluded"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 3
+    },
+    "kind": {
+      "const": "descriptive_serving_candidates"
+    },
+    "round": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 4
+    },
+    "pack": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "available_packs": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      }
+    },
+    "constraints": {
+      "$ref": "#/$defs/constraints"
+    },
+    "objectives": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "accuracy",
+          "completion",
+          "latency",
+          "throughput"
+        ]
+      }
+    },
+    "accuracy_floor": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "minimum_independent_bundles": {
+      "type": "integer",
+      "minimum": 5
+    },
+    "status": {
+      "enum": [
+        "PACK_REQUIRED",
+        "NO_MATCH",
+        "INSUFFICIENT_EVIDENCE",
+        "SINGLE_ELIGIBLE_CONFIGURATION",
+        "DESCRIPTIVE_CANDIDATES"
+      ]
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1
+    },
+    "matched_configurations": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "eligible_configurations": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "candidates": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/candidate"
+      }
+    },
+    "excluded": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "constraints",
+        "insufficient_bundles",
+        "missing_objective",
+        "accuracy_floor",
+        "dominated"
+      ],
+      "properties": {
+        "constraints": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "insufficient_bundles": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "missing_objective": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "accuracy_floor": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "dominated": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    }
+  },
+  "$defs": {
+    "safeText": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160
+    },
+    "constraints": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "model": {
+          "$ref": "#/$defs/safeText"
+        },
+        "os": {
+          "$ref": "#/$defs/safeText"
+        },
+        "architecture": {
+          "$ref": "#/$defs/safeText"
+        },
+        "transport": {
+          "enum": [
+            "openai_compat",
+            "codex_cli"
+          ]
+        },
+        "accelerator": {
+          "$ref": "#/$defs/safeText"
+        },
+        "server": {
+          "$ref": "#/$defs/safeText"
+        },
+        "quantization": {
+          "$ref": "#/$defs/safeText"
+        },
+        "model_format": {
+          "$ref": "#/$defs/safeText"
+        },
+        "max_memory_gb": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "max_system_memory_gb": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "max_parameter_count_b": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "configuration": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{10}$"
+        },
+        "python": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+$"
+        },
+        "reasoning_effort": {
+          "$ref": "#/$defs/safeText"
+        },
+        "model_revision": {
+          "$ref": "#/$defs/safeText"
+        },
+        "server_version": {
+          "$ref": "#/$defs/safeText"
+        },
+        "context_window": {
+          "type": "number"
+        },
+        "max_tokens": {
+          "type": "number"
+        },
+        "temperature": {
+          "type": "number"
+        },
+        "top_p": {
+          "type": "number"
+        },
+        "top_k": {
+          "type": "number"
+        },
+        "min_p": {
+          "type": "number"
+        },
+        "parameter_count_b": {
+          "type": "number"
+        },
+        "accelerator_count": {
+          "type": "number"
+        },
+        "memory_gb": {
+          "type": "number"
+        },
+        "system_memory_gb": {
+          "type": "number"
+        },
+        "serving_scope": {
+          "enum": [
+            "same_host",
+            "remote",
+            "unreported"
+          ]
+        },
+        "serving_os": {
+          "enum": [
+            "Linux",
+            "Darwin",
+            "Windows",
+            "Other"
+          ]
+        },
+        "serving_architecture": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32
+        }
+      }
+    },
+    "environment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "os",
+        "architecture",
+        "python"
+      ],
+      "properties": {
+        "os": {
+          "enum": [
+            "Linux",
+            "Darwin",
+            "Windows",
+            "Other"
+          ]
+        },
+        "architecture": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32
+        },
+        "python": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+$"
+        }
+      }
+    },
+    "parameters": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "reasoning_effort": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32
+        },
+        "context_window": {
+          "type": "number"
+        },
+        "max_tokens": {
+          "type": "number"
+        },
+        "temperature": {
+          "type": "number"
+        },
+        "top_p": {
+          "type": "number"
+        },
+        "top_k": {
+          "type": "number"
+        },
+        "min_p": {
+          "type": "number"
+        }
+      }
+    },
+    "publicMetadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "model_revision": {
+          "$ref": "#/$defs/safeText"
+        },
+        "quantization": {
+          "$ref": "#/$defs/safeText"
+        },
+        "model_format": {
+          "$ref": "#/$defs/safeText"
+        },
+        "parameter_count_b": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "server": {
+          "$ref": "#/$defs/safeText"
+        },
+        "server_version": {
+          "$ref": "#/$defs/safeText"
+        },
+        "accelerator": {
+          "$ref": "#/$defs/safeText"
+        },
+        "accelerator_count": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "memory_gb": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "system_memory_gb": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        }
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "accuracy_lower95",
+        "accuracy_observed",
+        "completion_lower95",
+        "completion_observed",
+        "bundle_mean_item_latency_p90_seconds",
+        "latency_observed_bundles",
+        "bundle_mean_completion_tokens_per_second_p50",
+        "throughput_observed_bundles"
+      ],
+      "properties": {
+        "accuracy_lower95": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "accuracy_observed": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "completion_lower95": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "completion_observed": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "bundle_mean_item_latency_p90_seconds": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "latency_observed_bundles": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "bundle_mean_completion_tokens_per_second_p50": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "throughput_observed_bundles": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "configuration",
+        "model",
+        "environment",
+        "serving_environment",
+        "transport",
+        "parameters",
+        "public_metadata",
+        "independent_bundles",
+        "metrics"
+      ],
+      "properties": {
+        "configuration": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{10}$"
+        },
+        "model": {
+          "$ref": "#/$defs/safeText"
+        },
+        "environment": {
+          "$ref": "#/$defs/environment"
+        },
+        "serving_environment": {
+          "$ref": "#/$defs/servingEnvironment"
+        },
+        "transport": {
+          "enum": [
+            "openai_compat",
+            "codex_cli"
+          ]
+        },
+        "parameters": {
+          "$ref": "#/$defs/parameters"
+        },
+        "public_metadata": {
+          "$ref": "#/$defs/publicMetadata"
+        },
+        "independent_bundles": {
+          "type": "integer",
+          "minimum": 5
+        },
+        "metrics": {
+          "$ref": "#/$defs/metrics"
+        }
+      }
+    },
+    "servingEnvironment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scope",
+        "os",
+        "architecture"
+      ],
+      "properties": {
+        "scope": {
+          "enum": [
+            "same_host",
+            "remote",
+            "unreported"
+          ]
+        },
+        "os": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "Linux",
+            "Darwin",
+            "Windows",
+            "Other",
+            null
+          ]
+        },
+        "architecture": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1,
+          "maxLength": 32
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "scope": {
+                "const": "unreported"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "os": {
+                "const": null
+              },
+              "architecture": {
+                "const": null
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

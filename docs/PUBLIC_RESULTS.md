@@ -20,7 +20,7 @@ Round 5 follows the same consent boundary with `pilot export --public`,
 `pilot submit --preview`, and `pilot submit --open-pr --yes`. Nothing is uploaded
 automatically.
 
-## Public schema v2
+## Public schema v3
 
 Current exports contain every content-free item outcome, aggregate benchmark results,
 and an allowlisted set of reproducibility fields:
@@ -28,7 +28,9 @@ and an allowlisted set of reproducibility fields:
 - schema and tool version;
 - a content-derived bundle ID;
 - selected rounds and pack fingerprints;
-- operating-system family, CPU architecture, and Python major/minor version;
+- runner operating-system family, CPU architecture, and Python major/minor version;
+- a per-model `same_host`, `remote`, or `unreported` serving relationship and optional
+  attested remote OS/architecture;
 - a public model name, transport, selected generation parameters, and optional
   explicitly configured public metadata;
 - aggregate per-round scores, incomplete/review/invalid counts, release readiness,
@@ -39,8 +41,10 @@ and an allowlisted set of reproducibility fields:
 The exporter never includes raw prompts or responses, transcripts, diffs, source
 repositories, API keys, environment-variable names, endpoint URLs, campaign/run IDs,
 timestamps, local paths, usernames, model keys, display labels, Codex homes, or error
-messages. The current shape is documented in `results/schema-v2.json`; aggregate-only
-schema-v1 bundles remain valid. The CLI applies additional semantic and privacy checks
+messages. The current shape is documented in `results/schema-v3.json`; schema-v1 and
+schema-v2 bundles remain valid. Their serving coordinates normalize to `unreported`:
+the loader never reinterprets the historical client environment as a server. The CLI
+applies additional semantic and privacy checks
 without requiring a JSON Schema dependency.
 
 Model identifiers containing an absolute path, URL, email-like value, control
@@ -80,7 +84,8 @@ descriptive baselines. Aggregates are observational examples, not predictions of
 unseen model and not evidence that different hardware, quantization, prompts, server
 versions, or pack fingerprints are directly comparable.
 
-`results build` groups records only when model name, environment, transport,
+`results build` groups records only when model name, runner environment, serving
+environment, transport,
 generation parameters, declared metadata, round, and pack fingerprint match. It
 withholds a descriptive pass-rate baseline until five distinct accepted bundles with
 observed scores exist in that exact group. Each bundle contributes one rate regardless
@@ -164,7 +169,7 @@ quantization, server/version, accelerator/count, and declared memory/model size.
 round/pack observation shows its independent-bundle count, conservative metrics, and
 readiness for accuracy, completion, latency, and throughput. Every missing optional
 coordinate is counted separately and never converted into a match. JSON follows
-`results/catalog-schema-v2.json`; it contains no bundle IDs, contributor identity, or
+`results/catalog-schema-v3.json`; it contains no bundle IDs, contributor identity, or
 tool-version history. Canonical JSON and a verified database produce identical output.
 
 ## Descriptive serving-candidate query
@@ -186,7 +191,7 @@ an optional accuracy floor to the 95% lower bound, and returns the non-dominated
 Repeated attempts or duplicate model rows inside one bundle cannot unlock a candidate.
 Constraints with missing metadata do not match. Results remain descriptive for the
 exact pack and public configuration; they are not predictions for untested hardware.
-The machine-readable result follows `results/recommendation-schema-v2.json`. Exact
+The machine-readable result follows `results/recommendation-schema-v3.json`. Exact
 filters cover every allowlisted configuration coordinate; `max-memory-gb`,
 `max-system-memory-gb`, and `max-parameter-count-b` remain ceiling filters rather than
 exact settings.
@@ -219,7 +224,7 @@ the left configuration. The deterministic paired-bundle bootstrap interval and
 two-sided sign-flip p-value must both support a direction after Holm correction across
 all tested objectives.
 
-The response follows `results/paired-comparison-schema-v1.json`. It contains exact
+The response follows `results/paired-comparison-schema-v2.json`. It contains exact
 public configuration records, shared counts, effects, intervals, tests, and decisions,
 but never the bundle IDs that formed a pair or contributor/tool history. Left/right
 swaps reproduce the same p-values and exactly negated effects and intervals. Statistical
@@ -247,10 +252,10 @@ The profile key includes model name, transport, generation parameters, revision,
 format, quantization, and parameter count. Repeated rows, one-bundle metadata variants,
 or differently quantized models cannot create a bridge.
 
-The response follows `results/prediction-readiness-schema-v1.json`, omits bundle and
+The response follows `results/prediction-readiness-schema-v2.json`, omits bundle and
 contributor identity, and is identical for canonical JSON and verified SQLite. Its
 `predictive_service_authorized` field is always false: a temporal holdout cannot be
-derived because public schema v2 intentionally has no collection timestamp, structural
+derived because public schema v3 intentionally has no collection timestamp, structural
 validation is not maintainer abuse/implausibility review, and one pack snapshot cannot
 establish future server/pack drift stability. Passing operator targets therefore yields
 `DESIGN_TARGET_MET_VALIDATION_REQUIRED`, never a deployment authorization.
@@ -272,7 +277,7 @@ llm-hardtest results plan --database results/community.sqlite3 \
   --target-bundles 10 --json
 ```
 
-Both sources return the same `results/collection-plan-schema-v1.json` response. For
+Both sources return the same `results/collection-plan-schema-v2.json` response. For
 each exact matching configuration, the plan keeps accuracy, completion, latency, and
 throughput bundle counts separate and subtracts them from the selected target. Its
 minimum-additional total is the maximum objective deficit per configuration, summed

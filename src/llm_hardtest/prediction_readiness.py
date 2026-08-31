@@ -11,7 +11,7 @@ from .community_results import (
 from .paired_comparison import _bundle_observations
 
 
-PREDICTION_READINESS_SCHEMA_VERSION = 1
+PREDICTION_READINESS_SCHEMA_VERSION = 2
 DEFAULT_TARGET_BUNDLES = 10
 DEFAULT_MINIMUM_CONFIGURATIONS = 3
 DEFAULT_MINIMUM_ENVIRONMENTS = 2
@@ -38,10 +38,15 @@ def _bounded_integer(name: str, value: int, low: int, high: int) -> int:
     return value
 
 
-def _environment_record(observation: dict) -> dict:
+def _environment_record(observation: dict) -> dict | None:
+    serving = observation["serving_environment"]
+    if (serving["scope"] == "unreported"
+            or serving.get("os") is None
+            or serving.get("architecture") is None):
+        return None
     metadata = observation["public_metadata"]
     record = {
-        "environment": observation["environment"],
+        "serving_environment": serving,
         "runtime": {field: metadata.get(field) for field in _RUNTIME_FIELDS},
     }
     canonical = json.dumps(
@@ -145,6 +150,7 @@ def audit_prediction_readiness(
             "configurations_meeting_objective_targets": 0,
             "distinct_models": 0,
             "distinct_serving_environments": 0,
+            "configurations_without_attested_serving_coordinates": 0,
             "observed_paired_edges": 0,
             "eligible_paired_edges": 0,
             "model_profiles_repeated_across_environments": 0,
@@ -170,16 +176,17 @@ def audit_prediction_readiness(
     for row in rows:
         configuration = row["configuration"]
         identity = {key: row[key] for key in (
-            "configuration", "model", "environment", "transport", "parameters",
+            "configuration", "model", "environment", "serving_environment",
+            "transport", "parameters",
             "public_metadata")}
         previous = identities.setdefault(configuration, identity)
         if previous != identity:
             raise ValueError("readiness configuration identity collision")
         environment = _environment_record(row)
-        previous_environment = environment_by_configuration.setdefault(
-            configuration, environment)
-        if previous_environment != environment:
+        if (configuration in environment_by_configuration
+                and environment_by_configuration[configuration] != environment):
             raise ValueError("readiness configuration environment collision")
+        environment_by_configuration[configuration] = environment
         previous_row = rows_by_bundle[row["bundle"]].setdefault(configuration, row)
         if previous_row != row:
             raise ValueError("duplicate readiness bundle observation")
@@ -201,8 +208,9 @@ def audit_prediction_readiness(
         }
         configurations.append({
             **identity,
-            "serving_environment_id": environment_by_configuration[
-                configuration]["environment_id"],
+            "serving_environment_id": (
+                environment_by_configuration[configuration]["environment_id"]
+                if environment_by_configuration[configuration] is not None else None),
             "observed_independent_bundles": observed,
             "bundle_deficits": deficits,
             "meets_objective_targets": not any(deficits.values()),
@@ -241,6 +249,9 @@ def audit_prediction_readiness(
     profile_labels = {}
     for configuration, identity in identities.items():
         environment = environment_by_configuration[configuration]
+        if environment is None:
+            model_names.add(identity["model"].casefold())
+            continue
         environment_id = environment["environment_id"]
         previous_environment = environment_records.setdefault(
             environment_id, environment)
@@ -258,9 +269,11 @@ def audit_prediction_readiness(
         profile_environments[profile_id].add(environment_id)
         profile_configurations[profile_id].add(configuration)
     for row in rows:
+        environment = environment_by_configuration[row["configuration"]]
+        if environment is None:
+            continue
         profile_id = _model_profile_record(row)["model_profile_id"]
-        environment_id = environment_by_configuration[
-            row["configuration"]]["environment_id"]
+        environment_id = environment["environment_id"]
         profile_environment_bundles[(profile_id, environment_id)].add(row["bundle"])
     serving_environments = [{
         **environment_records[environment_id],
@@ -302,6 +315,8 @@ def audit_prediction_readiness(
         "configurations_meeting_objective_targets": ready_configurations,
         "distinct_models": len(model_names),
         "distinct_serving_environments": len(serving_environments),
+        "configurations_without_attested_serving_coordinates": sum(
+            environment is None for environment in environment_by_configuration.values()),
         "observed_paired_edges": len(paired_edges),
         "eligible_paired_edges": eligible_edges,
         "model_profiles_repeated_across_environments": len(environment_bridges),
@@ -321,7 +336,7 @@ def audit_prediction_readiness(
             "serving_environment_diversity",
             "PASS" if len(serving_environments) >= minimum_environments else "GAP",
             len(serving_environments), minimum_environments,
-            "distinct declared serving environments"),
+            "distinct attested serving environments with OS and architecture"),
         _gate(
             "paired_configuration_overlap",
             "PASS" if eligible_edges >= minimum_paired_edges else "GAP",
@@ -378,7 +393,9 @@ def render_prediction_readiness(result: dict) -> str:
         f"**{summary['configurations_meeting_objective_targets']}** · environments: "
         f"**{summary['distinct_serving_environments']}** · eligible paired edges: "
         f"**{summary['eligible_paired_edges']}** · cross-environment models: "
-        f"**{summary['model_profiles_repeated_across_environments']}**", "",
+        f"**{summary['model_profiles_repeated_across_environments']}** · without "
+        f"attested serving coordinates: "
+        f"**{summary['configurations_without_attested_serving_coordinates']}**", "",
     ]
     if result["gates"]:
         lines += [
@@ -399,8 +416,9 @@ def render_prediction_readiness(result: dict) -> str:
         for row in result["configurations"]:
             lines.append(
                 f"| {_cell(row['model'])} | `{row['configuration']}` | "
-                f"`{row['serving_environment_id']}` · "
-                f"{_configuration_summary(row).replace('|', chr(92) + '|')} | `"
+                + (f"`{row['serving_environment_id']}` · "
+                   if row["serving_environment_id"] else "unattested · ")
+                + f"{_configuration_summary(row).replace('|', chr(92) + '|')} | `"
                 f"{json.dumps(row['observed_independent_bundles'], sort_keys=True)}` | `"
                 f"{json.dumps(row['bundle_deficits'], sort_keys=True)}` | "
                 f"{row['meets_objective_targets']} |")

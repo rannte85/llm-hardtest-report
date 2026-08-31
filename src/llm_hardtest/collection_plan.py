@@ -8,7 +8,7 @@ from .community_results import (
 )
 
 
-COLLECTION_PLAN_SCHEMA_VERSION = 1
+COLLECTION_PLAN_SCHEMA_VERSION = 2
 
 
 def _objective_counts(row: dict) -> dict[str, int]:
@@ -96,6 +96,7 @@ def build_collection_plan(aggregate_rows: list[dict], *, round_number: int,
             "configuration": row["configuration"],
             "model": row["model"],
             "environment": row["environment"],
+            "serving_environment": row["serving_environment"],
             "transport": row["transport"],
             "parameters": row["parameters"],
             "public_metadata": row["public_metadata"],

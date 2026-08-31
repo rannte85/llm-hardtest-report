@@ -15,14 +15,15 @@ from .calibration import (
 )
 from .github_submit import submission_relative_path
 from .public_pilots import load_public_pilot_bundle
-from .public_results import load_public_bundle
+from .public_results import load_public_bundle, normalized_serving_environment
 
 
 MIN_BASELINE_SUBMISSIONS = 5
-RECOMMENDATION_SCHEMA_VERSION = 2
+RECOMMENDATION_SCHEMA_VERSION = 3
 RECOMMENDATION_OBJECTIVES = {"accuracy", "completion", "latency", "throughput"}
 RECOMMENDATION_TEXT_CONSTRAINTS = {
     "configuration", "model", "os", "architecture", "python", "transport",
+    "serving_scope", "serving_os", "serving_architecture",
     "reasoning_effort", "model_revision", "quantization", "model_format",
     "server", "server_version", "accelerator",
 }
@@ -103,7 +104,8 @@ def _canonical(value) -> bytes:
 
 def _configuration_id(payload: dict, model: dict) -> str:
     identity = {
-        "environment": payload["environment"],
+        "runner_environment": payload["environment"],
+        "serving_environment": normalized_serving_environment(payload, model),
         "public_name": model["public_name"],
         "transport": model["transport"],
         "parameters": model["parameters"],
@@ -129,6 +131,7 @@ def aggregate_submissions(submissions: list[dict]) -> list[dict]:
             configuration = _configuration_id(payload, model)
             identity = {
                 "environment": payload["environment"],
+                "serving_environment": normalized_serving_environment(payload, model),
                 "model": model["public_name"],
                 "transport": model["transport"],
                 "parameters": model["parameters"],
@@ -217,6 +220,8 @@ def _constraint_value(row: dict, key: str):
         return row.get("model")
     if key in {"os", "architecture", "python"}:
         return row["environment"].get(key)
+    if key in {"serving_scope", "serving_os", "serving_architecture"}:
+        return row["serving_environment"].get(key.removeprefix("serving_"))
     if key == "transport":
         return row.get("transport")
     if key in PARAMETER_CONSTRAINTS:
@@ -340,6 +345,16 @@ def _recommend_aggregate_rows(aggregate_rows: list[dict], *, round_number: int,
     if ("transport" in constraints
             and constraints["transport"] not in {"openai_compat", "codex_cli"}):
         raise ValueError("recommendation constraint transport is unsupported")
+    if ("serving_scope" in constraints and constraints["serving_scope"] not in {
+            "same_host", "remote", "unreported"}):
+        raise ValueError("recommendation constraint serving_scope is unsupported")
+    if ("serving_os" in constraints and constraints["serving_os"] not in {
+            "Linux", "Darwin", "Windows", "Other"}):
+        raise ValueError("recommendation constraint serving_os is unsupported")
+    if ("serving_architecture" in constraints
+            and len(constraints["serving_architecture"]) > 32):
+        raise ValueError(
+            "recommendation constraint serving_architecture must be at most 32 characters")
     if isinstance(objectives, str):
         raise ValueError("recommendation objectives must be a list")
     objectives = list(objectives or ["accuracy"])
@@ -405,6 +420,7 @@ def _recommend_aggregate_rows(aggregate_rows: list[dict], *, round_number: int,
             "configuration": row["configuration"],
             "model": row["model"],
             "environment": row["environment"],
+            "serving_environment": row["serving_environment"],
             "transport": row["transport"],
             "parameters": row["parameters"],
             "public_metadata": row["public_metadata"],
@@ -462,10 +478,17 @@ def recommend_configurations(submissions: list[dict], *, round_number: int,
 
 def _configuration_summary(candidate: dict) -> str:
     environment = candidate["environment"]
+    serving_environment = candidate["serving_environment"]
     metadata = candidate["public_metadata"]
     parameters = candidate["parameters"]
-    parts = [f"{environment['os']}/{environment['architecture']}/py{environment['python']}",
-             candidate["transport"]]
+    serving_coordinates = "/".join(filter(None, (
+        serving_environment.get("os"), serving_environment.get("architecture"))))
+    parts = [
+        f"runner={environment['os']}/{environment['architecture']}/py{environment['python']}",
+        "serving=" + serving_environment["scope"]
+        + (f"/{serving_coordinates}" if serving_coordinates else ""),
+        candidate["transport"],
+    ]
     for key, label in (
             ("model_revision", "revision"), ("quantization", "quant"),
             ("model_format", "format"), ("parameter_count_b", "parameters B"),

@@ -260,9 +260,14 @@ def selftest() -> int:
 def _add_serving_constraints(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--configuration")
     parser.add_argument("--model")
-    parser.add_argument("--os")
-    parser.add_argument("--architecture")
+    parser.add_argument("--os", "--runner-os", dest="os")
+    parser.add_argument("--architecture", "--runner-architecture",
+                        dest="architecture")
     parser.add_argument("--python-version", dest="python_version")
+    parser.add_argument("--serving-scope",
+                        choices=("same_host", "remote", "unreported"))
+    parser.add_argument("--serving-os")
+    parser.add_argument("--serving-architecture")
     parser.add_argument("--transport", choices=("openai_compat", "codex_cli"))
     parser.add_argument("--reasoning-effort")
     for name in ("context-window", "max-tokens", "temperature", "top-p", "top-k",
@@ -291,6 +296,9 @@ def _serving_constraints(args: argparse.Namespace) -> dict:
             "os": args.os,
             "architecture": args.architecture,
             "python": args.python_version,
+            "serving_scope": args.serving_scope,
+            "serving_os": args.serving_os,
+            "serving_architecture": args.serving_architecture,
             "transport": args.transport,
             "reasoning_effort": args.reasoning_effort,
             "context_window": args.context_window,

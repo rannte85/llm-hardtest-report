@@ -17,6 +17,7 @@
       "label": "Local model — reasoning",
       "model": "your-local-model-id",
       "transport": "openai_compat",
+      "public_serving_environment": {"scope": "same_host"},
       "rounds": [1, 2, 3],
       "base_url": "http://127.0.0.1:8000/v1",
       "api_key_env": "LLM_HARDTEST_API_KEY",
@@ -30,6 +31,7 @@
       "transport": "codex_cli",
       "rounds": [4],
       "codex_provider": "custom",
+      "public_serving_environment": {"scope": "same_host"},
       "base_url": "http://127.0.0.1:8000/v1",
       "api_key_env": "LLM_HARDTEST_API_KEY",
       "reasoning_effort": "medium",
@@ -43,6 +45,7 @@
       "transport": "codex_cli",
       "rounds": [4],
       "codex_provider": "openai",
+      "public_serving_environment": {"scope": "remote"},
       "reasoning_effort": "medium",
       "context_window": 131072,
       "max_tokens": 16000

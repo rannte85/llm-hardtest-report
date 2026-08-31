@@ -38,6 +38,7 @@ It requires the OpenAI chat-completions response shape. The benchmark forwards
   "label": "Local Model",
   "model": "server-model-id",
   "transport": "openai_compat",
+  "public_serving_environment": {"scope": "same_host"},
   "base_url": "http://127.0.0.1:8000/v1",
   "api_key_env": "LLM_HARDTEST_API_KEY",
   "max_tokens": 16000,
@@ -62,6 +63,7 @@ required by Round 4. Two provider modes are available.
   "model": "server-model-id",
   "transport": "codex_cli",
   "codex_provider": "custom",
+  "public_serving_environment": {"scope": "same_host"},
   "base_url": "http://127.0.0.1:8000/v1",
   "api_key_env": "LLM_HARDTEST_API_KEY",
   "reasoning_effort": "medium",
@@ -83,6 +85,7 @@ and does not modify the user's normal Codex configuration.
   "model": "your-codex-model-id",
   "transport": "codex_cli",
   "codex_provider": "openai",
+  "public_serving_environment": {"scope": "remote"},
   "reasoning_effort": "medium",
   "context_window": 131072,
   "max_tokens": 16000

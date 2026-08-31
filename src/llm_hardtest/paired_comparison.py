@@ -10,9 +10,10 @@ from .community_results import (
     CONFIGURATION_ID, MIN_BASELINE_SUBMISSIONS, PACK_FINGERPRINT,
     RECOMMENDATION_OBJECTIVES, _cell, _configuration_id,
 )
+from .public_results import normalized_serving_environment
 
 
-PAIRED_COMPARISON_SCHEMA_VERSION = 1
+PAIRED_COMPARISON_SCHEMA_VERSION = 2
 SIGN_FLIP_EXACT_LIMIT = 65_536
 SIGN_FLIP_MONTE_CARLO_SAMPLES = 20_000
 
@@ -32,6 +33,7 @@ def _bundle_observations(submissions: list[dict]) -> list[dict]:
                 "configuration": configuration,
                 "model": model["public_name"],
                 "environment": payload["environment"],
+                "serving_environment": normalized_serving_environment(payload, model),
                 "transport": model["transport"],
                 "parameters": model["parameters"],
                 "public_metadata": model["public_metadata"],
@@ -197,7 +199,8 @@ def compare_paired_observations(observations: list[dict], *, round_number: int,
     identities = {}
     for row in rows:
         identity = {key: row[key] for key in (
-            "configuration", "model", "environment", "transport", "parameters",
+            "configuration", "model", "environment", "serving_environment",
+            "transport", "parameters",
             "public_metadata")}
         previous = identities.setdefault(row["configuration"], identity)
         if previous != identity:

@@ -22,13 +22,14 @@ from .prediction_readiness import audit_prediction_readiness
 from .public_results import (
     FINGERPRINT, MODEL_PARAMETER_FIELDS, PUBLIC_ITEM_STATUSES,
     PUBLIC_METADATA_FIELDS, PUBLIC_METADATA_NUMERIC_FIELDS, _public_text,
+    normalized_serving_environment,
 )
 
 
-DATABASE_SCHEMA_VERSION = 2
+DATABASE_SCHEMA_VERSION = 3
 DATABASE_APPLICATION_ID = 0x4C484452  # "LHDR"
 DATABASE_KIND = "validated_public_observation_database"
-DATABASE_FINGERPRINT_METHOD = "canonical_relational_rows_numeric_v2"
+DATABASE_FINGERPRINT_METHOD = "canonical_relational_rows_numeric_v3"
 
 SCHEMA_SQL = """
 PRAGMA foreign_keys = ON;
@@ -64,6 +65,10 @@ CREATE TABLE configurations (
     os TEXT NOT NULL,
     architecture TEXT NOT NULL,
     python TEXT NOT NULL,
+    serving_scope TEXT NOT NULL,
+    serving_os TEXT,
+    serving_architecture TEXT,
+    serving_environment_json TEXT NOT NULL,
     reasoning_effort TEXT,
     context_window REAL,
     max_tokens REAL,
@@ -150,7 +155,8 @@ TABLE_COLUMNS = {
         "os", "architecture", "python", "submission_mode"),
     "configurations": (
         "configuration_id", "public_name", "transport", "os", "architecture",
-        "python", "reasoning_effort", "context_window", "max_tokens",
+        "python", "serving_scope", "serving_os", "serving_architecture",
+        "serving_environment_json", "reasoning_effort", "context_window", "max_tokens",
         "temperature", "top_p", "top_k", "min_p", "model_revision",
         "quantization", "model_format", "parameter_count_b", "server",
         "server_version", "accelerator", "accelerator_count", "memory_gb",
@@ -217,10 +223,13 @@ def normalize_submissions(submissions: list[dict]) -> dict[str, list[tuple]]:
             configuration_id = _configuration_id(payload, model)
             parameters = model["parameters"]
             metadata = model["public_metadata"]
+            serving = normalized_serving_environment(payload, model)
             configuration = (
                 configuration_id, model["public_name"], model["transport"],
                 environment["os"], environment["architecture"],
-                environment["python"], parameters.get("reasoning_effort"),
+                environment["python"], serving["scope"], serving.get("os"),
+                serving.get("architecture"), _canonical(serving),
+                parameters.get("reasoning_effort"),
                 parameters.get("context_window"), parameters.get("max_tokens"),
                 parameters.get("temperature"), parameters.get("top_p"),
                 parameters.get("top_k"), parameters.get("min_p"),
@@ -335,7 +344,7 @@ def _expected_schema_manifest() -> list[tuple]:
 
 
 def load_database(path: Path) -> dict[str, list[tuple]]:
-    """Read a self-consistent schema-v2 observation database in read-only mode."""
+    """Read a self-consistent schema-v3 observation database in read-only mode."""
     if not path.is_file() or path.is_symlink():
         raise ValueError(f"community database does not exist as a regular file: {path}")
     try:
@@ -396,7 +405,7 @@ def _validate_relational_semantics(rows: dict[str, list[tuple]]) -> None:
     bundles = {row["bundle_id"]: row for row in _row_dicts(rows, "bundles")}
     for bundle in bundles.values():
         if (not valid_fingerprint(bundle["bundle_id"])
-                or bundle["public_schema_version"] not in {1, 2}
+                or bundle["public_schema_version"] not in {1, 2, 3}
                 or bundle["tool_name"] != "llm-hardtest-report"
                 or _public_text(bundle["tool_version"], maximum=32) is None
                 or bundle["os"] not in {"Linux", "Darwin", "Windows", "Other"}
@@ -410,19 +419,37 @@ def _validate_relational_semantics(rows: dict[str, list[tuple]]) -> None:
         try:
             parameters = json.loads(configuration["parameters_json"])
             metadata = json.loads(configuration["public_metadata_json"])
+            serving = json.loads(configuration["serving_environment_json"])
         except (TypeError, json.JSONDecodeError) as exc:
             raise ValueError(
                 "community database contains invalid configuration JSON") from exc
         if (not isinstance(parameters, dict) or not isinstance(metadata, dict)
+                or not isinstance(serving, dict)
                 or _canonical(parameters) != configuration["parameters_json"]
                 or _canonical(metadata) != configuration["public_metadata_json"]
+                or _canonical(serving) != configuration["serving_environment_json"]
                 or set(parameters) - MODEL_PARAMETER_FIELDS
                 or set(metadata) - PUBLIC_METADATA_FIELDS
                 or _public_text(configuration["public_name"]) is None
                 or configuration["transport"] not in {"openai_compat", "codex_cli"}
                 or configuration["os"] not in {"Linux", "Darwin", "Windows", "Other"}
                 or _public_text(configuration["architecture"], maximum=32) is None
-                or not valid_python(configuration["python"])):
+                or not valid_python(configuration["python"])
+                or set(serving) != {"scope", "os", "architecture"}
+                or serving["scope"] not in {"same_host", "remote", "unreported"}
+                or serving["scope"] != configuration["serving_scope"]
+                or serving["os"] != configuration["serving_os"]
+                or serving["architecture"] != configuration["serving_architecture"]
+                or (serving["os"] is not None
+                    and serving["os"] not in {"Linux", "Darwin", "Windows", "Other"})
+                or (serving["architecture"] is not None
+                    and _public_text(serving["architecture"], maximum=32) is None)
+                or (serving["scope"] == "unreported"
+                    and (serving["os"] is not None
+                         or serving["architecture"] is not None))
+                or (serving["scope"] == "same_host" and (
+                    serving["os"] != configuration["os"]
+                    or serving["architecture"] != configuration["architecture"]))):
             raise ValueError("community database contains an invalid configuration row")
         for key, value in parameters.items():
             if key == "reasoning_effort":
@@ -447,7 +474,7 @@ def _validate_relational_semantics(rows: dict[str, list[tuple]]) -> None:
         for key in PUBLIC_METADATA_FIELDS - set(metadata):
             if configuration[key] is not None:
                 raise ValueError("community database has undeclared serving metadata")
-        identity_payload = {"environment": {
+        identity_payload = {"schema_version": 3, "environment": {
             "os": configuration["os"],
             "architecture": configuration["architecture"],
             "python": configuration["python"],
@@ -457,6 +484,7 @@ def _validate_relational_semantics(rows: dict[str, list[tuple]]) -> None:
             "transport": configuration["transport"],
             "parameters": parameters,
             "public_metadata": metadata,
+            "serving_environment": serving,
         }
         if _configuration_id(identity_payload, identity_model) != configuration[
                 "configuration_id"]:
@@ -559,6 +587,8 @@ def aggregate_database(rows: dict[str, list[tuple]]) -> list[dict]:
                 "architecture": configuration["architecture"],
                 "python": configuration["python"],
             },
+            "serving_environment": json.loads(
+                configuration["serving_environment_json"]),
             "model": configuration["public_name"],
             "transport": configuration["transport"],
             "parameters": json.loads(configuration["parameters_json"]),
@@ -695,6 +725,8 @@ def paired_database_observations(rows: dict[str, list[tuple]]) -> list[dict]:
                 "architecture": configuration["architecture"],
                 "python": configuration["python"],
             },
+            "serving_environment": json.loads(
+                configuration["serving_environment_json"]),
             "transport": configuration["transport"],
             "parameters": json.loads(configuration["parameters_json"]),
             "public_metadata": json.loads(configuration["public_metadata_json"]),

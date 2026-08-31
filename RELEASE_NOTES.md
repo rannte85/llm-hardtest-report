@@ -1,11 +1,22 @@
-# Release Notes — 2.25.0
+# Release Notes — 2.26.0
 
 This repository is ready to publish as `rannte85/llm-hardtest-report`. It contains no raw
 campaign outputs, credentials, local model files, personal filesystem paths, or
 generated Python caches. The included Luna result is the allowlist-only public bundle,
 not its prompts, responses, transcripts, account details, or local run directory.
 
-The release validation covers:
+The release validation now also covers:
+
+- public schema v3 with explicit same-host, remote, and unreported serving provenance;
+- conservative v1/v2 migration that never treats a contributor's client OS as the
+  model server OS;
+- signed-in GPT-5.6 Luna classified as remote without invented server coordinates;
+- SQLite v3 and schema parity across catalog, recommendation, paired comparison,
+  collection planning, and predictive-readiness paths;
+- exclusion of unattested hosts from environment-diversity and portability gates while
+  retaining their valid correctness and latency observations.
+
+The retained validation also covers:
 
 - one live signed-in Codex `gpt-5.6-luna` Round 1 control with 20/20 scored items,
   146.389 seconds total item wall time, no incomplete items, and no infrastructure

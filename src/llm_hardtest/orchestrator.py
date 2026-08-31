@@ -118,6 +118,35 @@ def validate_config(config: dict, check_runtime: bool = True) -> None:
                 not isinstance(api_key_env, str)
                 or re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", api_key_env) is None):
             raise ValueError(f'{model["key"]}: api_key_env must be a portable variable name')
+        serving = model.get("public_serving_environment")
+        if serving is not None:
+            if (not isinstance(serving, dict)
+                    or set(serving) - {"scope", "os", "architecture"}
+                    or serving.get("scope") not in {
+                        "same_host", "remote", "unreported"}):
+                raise ValueError(
+                    f'{model["key"]}: public_serving_environment is invalid')
+            if (serving["scope"] == "unreported"
+                    and (serving.get("os") is not None
+                         or serving.get("architecture") is not None)):
+                raise ValueError(
+                    f'{model["key"]}: unreported serving environment cannot have coordinates')
+            if (serving.get("os") is not None
+                    and (not isinstance(serving["os"], str)
+                         or serving["os"] not in {
+                             "Linux", "Darwin", "Windows", "Other"})):
+                raise ValueError(f'{model["key"]}: serving environment os is invalid')
+            architecture = serving.get("architecture")
+            if (architecture is not None and (
+                    not isinstance(architecture, str) or not architecture.strip()
+                    or len(architecture) > 32 or any(ord(char) < 32 for char in architecture))):
+                raise ValueError(
+                    f'{model["key"]}: serving environment architecture is invalid')
+            if (serving["scope"] == "same_host"
+                    and model.get("transport") == "codex_cli"
+                    and model.get("codex_provider") == "openai"):
+                raise ValueError(
+                    f'{model["key"]}: signed-in OpenAI Codex cannot be same_host')
         for field in ("context_window", "max_tokens"):
             if field in model:
                 value = model[field]

@@ -1,0 +1,125 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rannte85/llm-hardtest-report/results/schema-v3.json",
+  "title": "LLM Hardtest public result v3",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "bundle_id", "tool", "benchmark", "environment", "models", "privacy"],
+  "properties": {
+    "schema_version": {"const": 3},
+    "bundle_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "tool": {
+      "type": "object", "additionalProperties": false,
+      "required": ["name", "version"],
+      "properties": {
+        "name": {"const": "llm-hardtest-report"},
+        "version": {"type": "string", "minLength": 1, "maxLength": 32}
+      }
+    },
+    "benchmark": {
+      "type": "object", "additionalProperties": false,
+      "required": ["rounds", "packs"],
+      "properties": {
+        "rounds": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "integer", "minimum": 1, "maximum": 4}},
+        "packs": {"type": "object", "additionalProperties": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}}
+      }
+    },
+    "environment": {"$ref": "#/$defs/runnerEnvironment"},
+    "models": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/model"}},
+    "privacy": {
+      "type": "object", "additionalProperties": false,
+      "required": ["raw_artifacts_included", "credentials_included", "local_paths_included", "submission_mode"],
+      "properties": {
+        "raw_artifacts_included": {"const": false},
+        "credentials_included": {"const": false},
+        "local_paths_included": {"const": false},
+        "submission_mode": {"const": "explicit-opt-in"}
+      }
+    }
+  },
+  "$defs": {
+    "runnerEnvironment": {
+      "type": "object", "additionalProperties": false,
+      "required": ["os", "architecture", "python"],
+      "properties": {
+        "os": {"enum": ["Linux", "Darwin", "Windows", "Other"]},
+        "architecture": {"type": "string", "minLength": 1, "maxLength": 32},
+        "python": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+$"}
+      }
+    },
+    "servingEnvironment": {
+      "type": "object", "additionalProperties": false,
+      "required": ["scope", "os", "architecture"],
+      "properties": {
+        "scope": {"enum": ["same_host", "remote", "unreported"]},
+        "os": {"type": ["string", "null"], "enum": ["Linux", "Darwin", "Windows", "Other", null]},
+        "architecture": {"type": ["string", "null"], "minLength": 1, "maxLength": 32}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"scope": {"const": "unreported"}}},
+          "then": {"properties": {"os": {"const": null}, "architecture": {"const": null}}}
+        }
+      ]
+    },
+    "item": {
+      "type": "object", "additionalProperties": false,
+      "required": ["item", "attempt", "status", "wall_seconds", "tokens"],
+      "properties": {
+        "item": {"type": "string", "minLength": 1, "maxLength": 80},
+        "attempt": {"type": "integer", "minimum": 1},
+        "status": {"enum": ["PASS", "FAIL", "INCOMPLETE", "REVIEW", "INVALID"]},
+        "wall_seconds": {"type": ["number", "null"], "minimum": 0},
+        "tokens": {"type": ["integer", "null"], "minimum": 0}
+      }
+    },
+    "round": {
+      "type": "object", "required": ["items"],
+      "properties": {
+        "items": {"type": "array", "items": {"$ref": "#/$defs/item"}},
+        "tasks": {"type": "array", "items": {"type": "object"}}
+      },
+      "additionalProperties": {"type": ["number", "null"], "minimum": 0}
+    },
+    "model": {
+      "type": "object", "additionalProperties": false,
+      "required": ["public_name", "transport", "serving_environment", "rounds", "parameters", "public_metadata"],
+      "properties": {
+        "public_name": {"type": "string", "minLength": 1, "maxLength": 160},
+        "transport": {"enum": ["openai_compat", "codex_cli"]},
+        "serving_environment": {"$ref": "#/$defs/servingEnvironment"},
+        "rounds": {
+          "type": "object", "propertyNames": {"pattern": "^[1-4]$"},
+          "additionalProperties": {"$ref": "#/$defs/round"}
+        },
+        "parameters": {
+          "type": "object", "additionalProperties": false,
+          "properties": {
+            "reasoning_effort": {"type": "string", "minLength": 1, "maxLength": 32},
+            "context_window": {"type": "number"},
+            "max_tokens": {"type": "number"},
+            "temperature": {"type": "number"},
+            "top_p": {"type": "number"},
+            "top_k": {"type": "number"},
+            "min_p": {"type": "number"}
+          }
+        },
+        "public_metadata": {
+          "type": "object", "additionalProperties": false,
+          "properties": {
+            "model_revision": {"type": "string"},
+            "quantization": {"type": "string"},
+            "model_format": {"type": "string"},
+            "parameter_count_b": {"type": "number", "exclusiveMinimum": 0},
+            "server": {"type": "string"},
+            "server_version": {"type": "string"},
+            "accelerator": {"type": "string"},
+            "accelerator_count": {"type": "number", "exclusiveMinimum": 0},
+            "memory_gb": {"type": "number", "exclusiveMinimum": 0},
+            "system_memory_gb": {"type": "number", "exclusiveMinimum": 0}
+          }
+        }
+      }
+    }
+  }
+}

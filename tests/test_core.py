@@ -26,7 +26,7 @@ from llm_hardtest.replay import make_replay_config
 from llm_hardtest.packs import validate_pack
 from llm_hardtest.public_results import (
     build_public_result, export_public_bundle, load_public_bundle,
-    validate_public_result,
+    normalized_serving_environment, validate_public_result,
 )
 from llm_hardtest.github_submit import (
     open_submission_pr, preview_pilot_submission, preview_submission, submission_document,
@@ -746,6 +746,35 @@ class ConfigurationTests(unittest.TestCase):
         config["round4_tasks"] = ["not-a-task"]
         with self.assertRaisesRegex(ValueError, "unknown round4_tasks"):
             validate_config(config)
+
+    def test_public_serving_environment_contract_is_validated_offline(self):
+        base = {
+            "repetitions": 1, "rounds": [1],
+            "models": [{"key": "m", "model": "one",
+                        "transport": "openai_compat"}],
+        }
+        for serving in (
+                {"scope": "remote", "os": "Linux", "architecture": "x86_64"},
+                {"scope": "same_host"}, {"scope": "unreported"}):
+            config = json.loads(json.dumps(base))
+            config["models"][0]["public_serving_environment"] = serving
+            validate_config(config)
+        for serving in (
+                {"scope": "unknown"},
+                {"scope": "unreported", "os": "Linux"},
+                {"scope": "remote", "os": []},
+                {"scope": "remote", "architecture": "\nunsafe"}):
+            config = json.loads(json.dumps(base))
+            config["models"][0]["public_serving_environment"] = serving
+            with self.subTest(serving=serving), self.assertRaises(ValueError):
+                validate_config(config)
+        signed_in = json.loads(json.dumps(base))
+        signed_in["models"][0].update({
+            "transport": "codex_cli", "codex_provider": "openai",
+            "public_serving_environment": {"scope": "same_host"},
+        })
+        with self.assertRaisesRegex(ValueError, "cannot be same_host"):
+            validate_config(signed_in, check_runtime=False)
 
     def test_unsafe_campaign_name_is_rejected(self):
         with self.assertRaises(ValueError):
@@ -2314,6 +2343,7 @@ class PublicResultTests(unittest.TestCase):
                 "model": model_name, "transport": "openai_compat",
                 "base_url": "http://127.0.0.1:8000/v1",
                 "api_key_env": "VERY_PRIVATE_API_KEY", "max_tokens": 2048,
+                "public_serving_environment": {"scope": "same_host"},
                 "public_metadata": {
                     "quantization": "Q4_K_M", "server_version": "1.2.3",
                     "accelerator_count": 2, "unknown": "drop-me",
@@ -2397,6 +2427,9 @@ class PublicResultTests(unittest.TestCase):
         for index, payload in enumerate(first):
             payload["environment"]["os"] = "Darwin"
             payload["environment"]["architecture"] = "arm64"
+            for model in payload["models"]:
+                model["serving_environment"] = {
+                    "scope": "same_host", "os": "Darwin", "architecture": "arm64"}
             third = json.loads(json.dumps(payload["models"][0]))
             third["public_name"] = "org/balanced"
             third["public_metadata"]["memory_gb"] = 16
@@ -2410,6 +2443,9 @@ class PublicResultTests(unittest.TestCase):
         for index, payload in enumerate(second):
             payload["environment"]["os"] = "Linux"
             payload["environment"]["architecture"] = "x86_64"
+            for model in payload["models"]:
+                model["serving_environment"] = {
+                    "scope": "same_host", "os": "Linux", "architecture": "x86_64"}
             payload["tool"]["version"] = f"readiness-linux-{index}"
             body = {key: value for key, value in payload.items() if key != "bundle_id"}
             payload["bundle_id"] = _bundle_id(body)
@@ -2437,7 +2473,11 @@ class PublicResultTests(unittest.TestCase):
         self.assertEqual(payload["models"][0]["public_metadata"],
                          {"accelerator_count": 2, "quantization": "Q4_K_M",
                           "server_version": "1.2.3"})
-        self.assertEqual(payload["schema_version"], 2)
+        self.assertEqual(payload["schema_version"], 3)
+        self.assertEqual(payload["models"][0]["serving_environment"], {
+            "scope": "same_host", "os": payload["environment"]["os"],
+            "architecture": payload["environment"]["architecture"],
+        })
         self.assertEqual(payload["models"][0]["rounds"]["1"]["items"], [{
             "item": "q1", "attempt": 1, "status": "PASS",
             "wall_seconds": 2.0, "tokens": 20,
@@ -2452,6 +2492,7 @@ class PublicResultTests(unittest.TestCase):
             config = load_json(root / "config.json")
             config["models"][0].update({
                 "transport": "codex_cli", "codex_provider": "openai",
+                "public_serving_environment": {"scope": "remote"},
             })
             save_json(root / "config.json", config)
             payload, warnings = build_public_result(root)
@@ -2467,6 +2508,41 @@ class PublicResultTests(unittest.TestCase):
             self.assertEqual(
                 payload["models"][0]["rounds"]["1"]["items"][0]["tokens"], 20)
             self.assertFalse(any("total-token" in warning for warning in warnings))
+
+    def test_signed_in_codex_defaults_to_remote_without_invented_coordinates(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "run"
+            self._run(root)
+            config = load_json(root / "config.json")
+            config["models"][0].update({
+                "transport": "codex_cli", "codex_provider": "openai"})
+            config["models"][0].pop("public_serving_environment")
+            save_json(root / "config.json", config)
+            payload, _ = build_public_result(root)
+        self.assertEqual(payload["models"][0]["serving_environment"], {
+            "scope": "remote", "os": None, "architecture": None})
+        self.assertNotEqual(payload["models"][0]["serving_environment"]["os"],
+                            payload["environment"]["os"])
+
+    def test_public_v3_rejects_false_serving_provenance_after_rehash(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "run"
+            self._run(root)
+            payload, _ = build_public_result(root)
+        from llm_hardtest.public_results import _bundle_id
+        for serving, message in (
+                ({"scope": "same_host", "os": "Linux", "architecture": "x86_64"},
+                 "contradicts runner"),
+                ({"scope": "unreported", "os": "Linux", "architecture": None},
+                 "has coordinates")):
+            candidate = json.loads(json.dumps(payload))
+            candidate["models"][0]["serving_environment"] = serving
+            body = {key: value for key, value in candidate.items()
+                    if key != "bundle_id"}
+            candidate["bundle_id"] = _bundle_id(body)
+            with self.subTest(scope=serving["scope"]), self.assertRaisesRegex(
+                    ValueError, message):
+                validate_public_result(candidate)
 
     def test_private_model_path_is_replaced(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -2542,6 +2618,7 @@ class PublicResultTests(unittest.TestCase):
             payload, _ = build_public_result(root)
         payload["schema_version"] = 1
         for model in payload["models"]:
+            model.pop("serving_environment")
             for result in model["rounds"].values():
                 result.pop("items", None)
         from llm_hardtest.public_results import _bundle_id
@@ -2751,7 +2828,8 @@ class PublicResultTests(unittest.TestCase):
                               "item_observations", "task_observations")
             }
             configuration = connection.execute(
-                "SELECT public_name, server, quantization, memory_gb "
+                "SELECT public_name, server, quantization, memory_gb, serving_scope, "
+                "serving_os, serving_architecture "
                 "FROM configurations ORDER BY public_name LIMIT 1").fetchone()
             clustered = connection.execute(
                 "SELECT count(DISTINCT bundle_id), count(*) FROM benchmark_runs"
@@ -2771,6 +2849,9 @@ class PublicResultTests(unittest.TestCase):
         self.assertEqual(configuration[:3],
                          ("org/accurate", "Example Server", "Q4_K_M"))
         self.assertEqual(configuration[3], 24.0)
+        self.assertEqual(configuration[4:], (
+            "same_host", submissions[0]["environment"]["os"],
+            submissions[0]["environment"]["architecture"]))
         self.assertEqual(clustered, (5, 10))
         self.assertFalse(integrity)
         self.assertTrue({"prompt", "response", "transcript", "endpoint", "api_key",
@@ -2781,7 +2862,7 @@ class PublicResultTests(unittest.TestCase):
             self.assertNotIn(private, database_bytes)
 
     def test_published_database_schema_matches_the_builder(self):
-        published = (repo_root() / "results/database-schema-v2.sql").read_text(
+        published = (repo_root() / "results/database-schema-v3.sql").read_text(
             encoding="utf-8")
         published = "\n".join(
             line for line in published.splitlines()
@@ -2937,7 +3018,13 @@ class PublicResultTests(unittest.TestCase):
         self.assertEqual(catalog["facets"]["server"][0]["value"],
                          "Example Server")
         self.assertEqual(catalog["facets"]["server"][0]["configurations"], 2)
-        self.assertEqual(catalog["schema_version"], 2)
+        self.assertEqual(catalog["facets"]["serving_scope"][0]["value"],
+                         "same_host")
+        self.assertEqual(catalog["facets"]["serving_os"][0]["value"],
+                         submissions[0]["environment"]["os"])
+        self.assertEqual(catalog["missing_coordinates"]["serving_os"], {
+            "configurations": 0, "observations": 0})
+        self.assertEqual(catalog["schema_version"], 3)
         self.assertEqual(catalog["missing_coordinates"]["model_format"], {
             "configurations": 2, "observations": 2,
         })
@@ -3076,9 +3163,9 @@ class PublicResultTests(unittest.TestCase):
 
     def test_published_catalog_schema_has_the_runtime_contract(self):
         from llm_hardtest.serving_catalog import FACET_FIELDS, OPTIONAL_FACETS
-        schema = json.loads((repo_root() / "results/catalog-schema-v2.json").read_text(
+        schema = json.loads((repo_root() / "results/catalog-schema-v3.json").read_text(
             encoding="utf-8"))
-        self.assertEqual(schema["properties"]["schema_version"]["const"], 2)
+        self.assertEqual(schema["properties"]["schema_version"]["const"], 3)
         self.assertEqual(schema["properties"]["kind"]["const"],
                          "observed_serving_catalog")
         self.assertEqual(
@@ -3091,9 +3178,9 @@ class PublicResultTests(unittest.TestCase):
     def test_published_recommendation_schema_has_every_runtime_constraint(self):
         from llm_hardtest.community_results import RECOMMENDATION_CONSTRAINTS
         schema = json.loads((
-            repo_root() / "results/recommendation-schema-v2.json").read_text(
+            repo_root() / "results/recommendation-schema-v3.json").read_text(
                 encoding="utf-8"))
-        self.assertEqual(schema["properties"]["schema_version"]["const"], 2)
+        self.assertEqual(schema["properties"]["schema_version"]["const"], 3)
         self.assertEqual(set(schema["$defs"]["constraints"]["properties"]),
                          RECOMMENDATION_CONSTRAINTS)
 
@@ -3115,12 +3202,15 @@ class PublicResultTests(unittest.TestCase):
             "os": selected["environment"]["os"],
             "architecture": selected["environment"]["architecture"],
             "python": selected["environment"]["python"],
+            "serving_scope": selected["serving_environment"]["scope"],
+            "serving_os": selected["serving_environment"]["os"],
+            "serving_architecture": selected["serving_environment"]["architecture"],
             "transport": selected["transport"],
             **selected["parameters"], **selected["public_metadata"],
         }
         result = recommend_configurations(
             submissions, round_number=1, constraints=constraints)
-        self.assertEqual(result["schema_version"], 2)
+        self.assertEqual(result["schema_version"], 3)
         self.assertEqual(result["status"], "SINGLE_ELIGIBLE_CONFIGURATION")
         self.assertEqual(result["candidates"][0]["configuration"],
                          selected["configuration"])
@@ -3138,6 +3228,10 @@ class PublicResultTests(unittest.TestCase):
             elif key == "transport":
                 conflicting_value = (
                     "codex_cli" if value == "openai_compat" else "openai_compat")
+            elif key == "serving_scope":
+                conflicting_value = "remote" if value != "remote" else "unreported"
+            elif key == "serving_os":
+                conflicting_value = "Linux" if value != "Linux" else "Darwin"
             elif isinstance(value, str):
                 conflicting_value = value + "-not-observed"
             else:
@@ -3166,6 +3260,10 @@ class PublicResultTests(unittest.TestCase):
                 "--model", "ORG/FAST", "--os", selected["environment"]["os"],
                 "--architecture", selected["environment"]["architecture"],
                 "--python-version", selected["environment"]["python"],
+                "--serving-scope", selected["serving_environment"]["scope"],
+                "--serving-os", selected["serving_environment"]["os"],
+                "--serving-architecture",
+                selected["serving_environment"]["architecture"],
                 "--transport", selected["transport"], "--reasoning-effort", "high",
                 "--context-window", "8192", "--max-tokens", "2048",
                 "--temperature", "0", "--top-p", "0.9", "--top-k", "40",
@@ -3260,6 +3358,38 @@ class PublicResultTests(unittest.TestCase):
             connection.close()
             with self.assertRaisesRegex(ValueError, "invalid configuration row"):
                 recommend_database(database, round_number=1)
+
+    def test_database_rejects_rehashed_false_same_host_coordinates(self):
+        submissions = self._recommendation_submissions(1)
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp) / "submissions"
+            directory.mkdir()
+            payload = submissions[0]
+            digest = payload["bundle_id"].removeprefix("sha256:")
+            (directory / f"{digest}.json").write_text(
+                submission_document(payload), encoding="utf-8")
+            database = Path(tmp) / "community.sqlite3"
+            build_database(directory, database)
+            normalized = normalize_submissions(submissions)
+            changed = list(normalized["configurations"][0])
+            false_os = "Linux" if changed[3] != "Linux" else "Darwin"
+            changed[7] = false_os
+            changed[9] = json.dumps({
+                "architecture": changed[8], "os": false_os,
+                "scope": "same_host"}, separators=(",", ":"), sort_keys=True)
+            normalized["configurations"][0] = tuple(changed)
+            connection = sqlite3.connect(database)
+            connection.execute(
+                "UPDATE configurations SET serving_os = ?, "
+                "serving_environment_json = ? WHERE configuration_id = ?",
+                (changed[7], changed[9], changed[0]))
+            connection.execute(
+                "UPDATE dataset_metadata SET content_fingerprint = ?",
+                (_content_fingerprint(normalized),))
+            connection.commit()
+            connection.close()
+            with self.assertRaisesRegex(ValueError, "invalid configuration row"):
+                load_database(database)
 
     def test_database_recommendation_requires_current_schema(self):
         submissions = self._recommendation_submissions(1)
@@ -3421,6 +3551,14 @@ class PublicResultTests(unittest.TestCase):
         submissions = self._recommendation_submissions()
         with self.assertRaisesRegex(ValueError, "exact sha256"):
             recommend_configurations(submissions, round_number=1, pack="latest")
+        for constraints, message in (
+                ({"serving_scope": "local-ish"}, "serving_scope"),
+                ({"serving_os": "macOS"}, "serving_os"),
+                ({"serving_architecture": "x" * 33}, "serving_architecture")):
+            with self.subTest(constraints=constraints), self.assertRaisesRegex(
+                    ValueError, message):
+                recommend_configurations(
+                    submissions, round_number=1, constraints=constraints)
         with self.assertRaisesRegex(ValueError, "must be a list"):
             recommend_configurations(
                 submissions, round_number=1, objectives="accuracy")
@@ -3475,7 +3613,7 @@ class PublicResultTests(unittest.TestCase):
         result = plan_submissions(
             self._recommendation_submissions(1), round_number=1,
             objectives=["accuracy", "completion", "latency", "throughput"])
-        self.assertEqual(result["schema_version"], 1)
+        self.assertEqual(result["schema_version"], 2)
         self.assertEqual(result["status"], "COLLECTION_NEEDED")
         self.assertEqual(result["summary"], {
             "matched_configurations": 2,
@@ -3621,7 +3759,7 @@ class PublicResultTests(unittest.TestCase):
 
     def test_published_collection_plan_schema_matches_runtime_contract(self):
         schema = json.loads((
-            repo_root() / "results/collection-plan-schema-v1.json").read_text(
+            repo_root() / "results/collection-plan-schema-v2.json").read_text(
                 encoding="utf-8"))
         result = plan_submissions(
             self._full_coordinate_submissions(1), round_number=1,
@@ -3651,7 +3789,7 @@ class PublicResultTests(unittest.TestCase):
             left_configuration=configurations["org/fast"],
             right_configuration=configurations["org/accurate"],
             objectives=["accuracy", "latency", "throughput"])
-        self.assertEqual(result["schema_version"], 1)
+        self.assertEqual(result["schema_version"], 2)
         self.assertEqual(result["status"], "MIXED_DIRECTIONAL_EVIDENCE")
         self.assertEqual(result["shared_configuration_bundles"], 7)
         by_objective = {row["objective"]: row
@@ -3904,7 +4042,7 @@ class PublicResultTests(unittest.TestCase):
 
     def test_published_paired_comparison_schema_matches_runtime_contract(self):
         schema = json.loads((
-            repo_root() / "results/paired-comparison-schema-v1.json").read_text(
+            repo_root() / "results/paired-comparison-schema-v2.json").read_text(
                 encoding="utf-8"))
         submissions = self._full_coordinate_submissions(7)
         configurations = {
@@ -3939,6 +4077,7 @@ class PublicResultTests(unittest.TestCase):
             "configurations_meeting_objective_targets": 6,
             "distinct_models": 3,
             "distinct_serving_environments": 6,
+            "configurations_without_attested_serving_coordinates": 0,
             "observed_paired_edges": 6,
             "eligible_paired_edges": 6,
             "model_profiles_repeated_across_environments": 3,
@@ -4101,9 +4240,33 @@ class PublicResultTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "exact sha256"):
             audit_submissions(submissions, round_number=1, pack="latest")
 
+    def test_legacy_runner_hosts_never_unlock_serving_environment_gates(self):
+        from llm_hardtest.public_results import _bundle_id
+        submissions = self._readiness_submissions(5)
+        for payload in submissions:
+            payload["schema_version"] = 2
+            for model in payload["models"]:
+                model.pop("serving_environment")
+                self.assertEqual(normalized_serving_environment(payload, model), {
+                    "scope": "unreported", "os": None, "architecture": None})
+            body = {key: value for key, value in payload.items()
+                    if key != "bundle_id"}
+            payload["bundle_id"] = _bundle_id(body)
+            validate_public_result(payload)
+        result = audit_submissions(submissions, round_number=1, target_bundles=5)
+        self.assertEqual(result["summary"]["observed_configurations"], 6)
+        self.assertEqual(result["summary"]["distinct_serving_environments"], 0)
+        self.assertEqual(
+            result["summary"]["configurations_without_attested_serving_coordinates"],
+            6)
+        self.assertEqual(result["summary"][
+            "model_profiles_repeated_across_environments"], 0)
+        self.assertEqual(next(gate for gate in result["gates"] if gate["name"] ==
+                              "serving_environment_diversity")["status"], "GAP")
+
     def test_published_prediction_readiness_schema_matches_runtime_contract(self):
         schema = json.loads((
-            repo_root() / "results/prediction-readiness-schema-v1.json").read_text(
+            repo_root() / "results/prediction-readiness-schema-v2.json").read_text(
                 encoding="utf-8"))
         result = audit_submissions(
             self._readiness_submissions(5), round_number=1, target_bundles=5,
@@ -4129,6 +4292,7 @@ class PublicResultTests(unittest.TestCase):
         for index in range(5):
             payload = json.loads(json.dumps(original))
             payload["schema_version"] = 1
+            payload["models"][0].pop("serving_environment")
             result = payload["models"][0]["rounds"]["1"]
             result.pop("items")
             result["passed"] = 0

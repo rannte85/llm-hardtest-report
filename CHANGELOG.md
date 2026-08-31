@@ -5,6 +5,24 @@ out separately from harness features.
 
 ## Unreleased
 
+## 2.26.0 — 2026-09-01
+
+- Added public result schema v3 with an explicit per-model serving relationship:
+  `same_host`, `remote`, or `unreported`, plus optional attested remote OS/architecture.
+- Defined the existing top-level environment as the runner/client environment and
+  stopped inferring any serving host coordinates for public schema v1/v2 bundles.
+- Defaulted signed-in OpenAI Codex controls, including GPT-5.6 Luna, to remote with
+  undisclosed serving coordinates and rejected contradictory `same_host` declarations.
+- Included runner and serving identities in configuration hashes, SQLite schema v3,
+  catalog v3, recommendation v3, comparison v2, and collection-plan v2 outputs.
+- Prevented unknown remote or legacy hosts from satisfying predictive-readiness
+  environment diversity and cross-environment portability gates; readiness v2 reports
+  their count explicitly.
+- Added separate CLI filters for runner and serving coordinates while retaining `--os`
+  and `--architecture` as backward-compatible runner filters.
+- Preserved validation and ingestion of public schema v1/v2 submissions and historical
+  output schemas as immutable contracts.
+
 ## 2.25.0 — 2026-09-01
 
 - Added a reusable signed-in Codex `gpt-5.6-luna` configuration restricted to one

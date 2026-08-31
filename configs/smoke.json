@@ -9,6 +9,7 @@
       "label": "Local Model",
       "model": "replace-with-server-model-id",
       "transport": "openai_compat",
+      "public_serving_environment": {"scope": "same_host"},
       "base_url": "http://127.0.0.1:8000/v1",
       "api_key_env": "LLM_HARDTEST_API_KEY",
       "max_tokens": 4096,

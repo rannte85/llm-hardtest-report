@@ -724,3 +724,34 @@ Acceptance checks:
   local path, validates under schema v2, and produces equal JSON/SQLite catalog data.
 - Readiness counts one accuracy and latency bundle but zero throughput bundles and
   remains `EVIDENCE_GAPS` with predictive authorization false.
+
+## Phase 26 — Runner and serving provenance separation
+
+Goal: prevent a benchmark client, network hop, or cloud control from being mistaken for
+the machine that served the model.
+
+Deliverables:
+
+1. Publish result schema v3 with a per-model `same_host`, `remote`, or `unreported`
+   relationship and optional attested remote OS/architecture.
+2. Treat the existing top-level OS/architecture/Python fields as runner coordinates;
+   normalize legacy v1/v2 serving provenance to unknown without inference.
+3. Include both identities in configuration hashing, SQLite schema v3, discovery,
+   recommendation, comparison, and acquisition-planning results.
+4. Count only serving environments with attested OS and architecture in predictive
+   diversity and cross-environment model-profile gates.
+5. Preserve all historical public/output schema files and accept canonical v1/v2
+   public bundles through the current ingestion and database paths.
+
+Acceptance checks:
+
+- Signed-in Codex/Luna defaults to remote with null host coordinates and rejects a
+  `same_host` declaration.
+- Same-host exports copy exact runner coordinates; contradictory coordinates and
+  unreported coordinates fail even after a valid content rehash.
+- Varying legacy client OS/architecture creates no serving-environment diversity or
+  portability bridge, while all measured outcome observations remain available.
+- Catalog and recommendation expose separate runner and serving filters, and canonical
+  JSON/verified SQLite outputs remain byte-identical.
+- Every new Draft 2020-12 schema validates both itself and a populated runtime result;
+  the full source, installed-package, and repository self-tests pass.

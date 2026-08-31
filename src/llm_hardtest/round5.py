@@ -26,7 +26,9 @@ REPORT_FIELDS = {
 def _hashes(root: Path) -> dict[str, str]:
     return {
         str(path.relative_to(root)): hashlib.sha256(path.read_bytes()).hexdigest()
-        for path in sorted(root.rglob("*")) if path.is_file()
+        for path in sorted(root.rglob("*"))
+        if (path.is_file() and "__pycache__" not in path.parts
+            and path.suffix != ".pyc")
     }
 
 
@@ -170,6 +172,7 @@ def _prompts(task: dict) -> list[str]:
 
 def run_attempt(model: dict, attempt_dir: Path, timeout: int,
                 agent=None) -> dict:
+    attempt_dir = attempt_dir.resolve()
     if attempt_dir.exists():
         raise ValueError(f"refusing to overwrite Round 5 attempt evidence: {attempt_dir}")
     source = repo_root() / "rounds/round5/repo"
@@ -177,7 +180,8 @@ def run_attempt(model: dict, attempt_dir: Path, timeout: int,
     task = load_json(repo_root() / "rounds/round5/task.json")
     attempt_dir.mkdir(parents=True)
     workspace = attempt_dir / "workspace"
-    shutil.copytree(source, workspace)
+    shutil.copytree(source, workspace,
+                    ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
     before = _hashes(workspace)
     agent = agent or CodexBackend(model, attempt_dir.parent.parent.parent / "_state")
     session_id = None
@@ -256,6 +260,7 @@ def run_pilot(config: dict, runs_dir: Path, model_keys: list[str] | None,
     root = resume or runs_dir / (
         _safe_component(config.get("name", "campaign"), "campaign name")
         + "-round5-pilot-" + stamp())
+    root = root.resolve()
     root.mkdir(parents=True, exist_ok=True)
     snapshot = root / "config.json"
     if snapshot.exists() and load_json(snapshot) != config:

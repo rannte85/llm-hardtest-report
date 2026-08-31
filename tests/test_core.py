@@ -236,6 +236,12 @@ class BackendTests(unittest.TestCase):
             self.assertNotIn("real-secret", auth.read_text())
             self.assertEqual(stat.S_IMODE(auth.stat().st_mode), 0o600)
 
+    def test_custom_codex_state_paths_are_absolute(self):
+        backend = CodexBackend({
+            "key": "m", "model": "m", "codex_provider": "custom",
+        }, Path("relative-state"))
+        self.assertTrue(backend.state_dir.is_absolute())
+
     def test_codex_nonzero_exit_with_partial_output_is_infrastructure_error(self):
         with tempfile.TemporaryDirectory() as tmp:
             backend = CodexBackend({

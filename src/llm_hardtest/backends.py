@@ -24,7 +24,7 @@ class Backend:
 
     def __init__(self, model: dict, state_dir: Path):
         self.model = model
-        self.state_dir = state_dir
+        self.state_dir = state_dir.resolve()
 
     def complete(self, messages: list[dict], timeout: int) -> dict:
         raise NotImplementedError

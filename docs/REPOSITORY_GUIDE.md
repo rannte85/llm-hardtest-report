@@ -46,3 +46,6 @@ Campaign results belong under `runs/` and are ignored by Git. A result intended 
 publication should normally live in a separate release artifact or results repository,
 not in the harness history. Never commit local Codex homes, authentication material,
 model weights, caches, or personally identifying paths.
+
+The staged result-integrity, reuse, and Round 5 work is tracked in
+[`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md).

@@ -364,6 +364,8 @@ class ServerSetupTests(unittest.TestCase):
                         "base_url": "http://127.0.0.1:8000/v1", "rounds": [4]}],
         }
         with patch("llm_hardtest.cli.discover_models", return_value=["local/model"]), \
+                patch("llm_hardtest.orchestrator.shutil.which",
+                      return_value="/usr/bin/codex"), \
                 patch("llm_hardtest.cli._probe_codex") as probe:
             self.assertEqual(doctor_config(config), 0)
         probe.assert_called_once_with(config["models"][0], 30)

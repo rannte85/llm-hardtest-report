@@ -250,7 +250,9 @@ def _render(summary: dict) -> str:
 def run_pilot(config: dict, runs_dir: Path, model_keys: list[str] | None,
               attempts: int, timeout: int | None = None,
               resume: Path | None = None, agent_factory=None) -> Path:
-    validate_config(config)
+    # Validate the portable contract before host capabilities so callers receive
+    # configuration errors even on machines where Codex is not installed.
+    validate_config(config, check_runtime=False)
     if isinstance(attempts, bool) or attempts < 1:
         raise ValueError("pilot attempts must be at least 1")
     if timeout is not None and (isinstance(timeout, bool) or timeout < 1):
@@ -261,6 +263,8 @@ def run_pilot(config: dict, runs_dir: Path, model_keys: list[str] | None,
         raise ValueError("pilot model keys must identify configured models")
     if any(model.get("transport") != "codex_cli" for model in chosen):
         raise ValueError("Round 5 pilot requires transport=codex_cli for repository tools")
+    if agent_factory is None:
+        validate_config(config)
     root = resume or runs_dir / (
         _safe_component(config.get("name", "campaign"), "campaign name")
         + "-round5-pilot-" + stamp())

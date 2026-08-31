@@ -16,6 +16,7 @@ from .report import generate
 from .results import output_limited
 from .inspection import inspect_run, render_inspection
 from .replay import make_replay_config
+from .packs import validate_pack
 
 
 def _ask(prompt: str, default: str | None = None) -> str:
@@ -184,6 +185,11 @@ def selftest() -> int:
             load_json(root / rel)
         except Exception as exc:
             failures.append(f"{rel}: {exc}")
+    for number in (1, 2, 3, 4):
+        try:
+            validate_pack(root / "rounds" / f"round{number}")
+        except Exception as exc:
+            failures.append(f"round {number} pack: {exc}")
     cmd = [sys.executable, str(root / "rounds/round4/_harness_selftest/selftest.py")]
     proc = subprocess.run(cmd, cwd=root / "rounds/round4", text=True,
                           capture_output=True, timeout=300)
@@ -246,6 +252,11 @@ def main(argv=None) -> int:
     p_discover = sub.add_parser("discover", help="list model IDs exposed by a server")
     p_discover.add_argument("--base-url", required=True)
     p_discover.add_argument("--api-key-env")
+    p_pack = sub.add_parser("pack", help="validate and inspect reusable benchmark packs")
+    pack_commands = p_pack.add_subparsers(dest="pack_command", required=True)
+    p_pack_validate = pack_commands.add_parser("validate", help="validate a pack manifest")
+    p_pack_validate.add_argument("path")
+    p_pack_validate.add_argument("--json", action="store_true")
     sub.add_parser("selftest", help="validate datasets and graders without calling a model")
     args = parser.parse_args(argv)
     try:
@@ -286,6 +297,11 @@ def main(argv=None) -> int:
         if args.command == "discover":
             for model_id in discover_models(args.base_url, args.api_key_env):
                 print(model_id)
+            return 0
+        if args.command == "pack":
+            metadata = validate_pack(Path(args.path))
+            print(json.dumps(metadata, indent=2) if args.json else
+                  f'{metadata["id"]}: VALID {metadata["fingerprint"]}')
             return 0
         return selftest()
     except (ValueError, RuntimeError, OSError, json.JSONDecodeError,

@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "id": "round2",
+  "title": "Hardened exact-answer reasoning",
+  "runner_kind": "reasoning",
+  "capabilities": ["chat_completions"],
+  "unit_count": 20,
+  "time_limit_seconds": 3600,
+  "result_schema": "llm-hardtest.items.v1",
+  "assets": ["questions.json"],
+  "controls": []
+}

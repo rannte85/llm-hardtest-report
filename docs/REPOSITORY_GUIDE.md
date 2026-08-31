@@ -49,3 +49,5 @@ model weights, caches, or personally identifying paths.
 
 The staged result-integrity, reuse, and Round 5 work is tracked in
 [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md).
+Reusable pack manifests and authoring rules are documented in
+[`PACK_AUTHORING.md`](PACK_AUTHORING.md).

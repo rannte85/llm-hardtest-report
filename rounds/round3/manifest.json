@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "id": "round3",
+  "title": "Structured and multi-turn engineering reasoning",
+  "runner_kind": "structured",
+  "capabilities": ["chat_completions", "multi_turn"],
+  "unit_count": 5,
+  "time_limit_seconds": 3600,
+  "result_schema": "llm-hardtest.items.v1",
+  "assets": ["problems_v3.json", "shiftlib.py", "shiftlib_tests.txt", "q22_src/*"],
+  "controls": []
+}

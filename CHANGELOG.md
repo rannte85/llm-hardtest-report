@@ -13,6 +13,8 @@ out separately from harness features.
 - Added `inspect` text and JSON views for unresolved items in current and legacy runs.
 - Added focused `replay` campaigns that preserve parent evidence and select only
   failed, incomplete, or infrastructure-invalid question and task IDs.
+- Added versioned benchmark-pack manifests, safe asset validation, content
+  fingerprints in reports, and `pack validate` for external authoring workflows.
 
 ## 2.0.0 — 2026-08-31
 

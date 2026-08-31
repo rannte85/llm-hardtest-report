@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "id": "round4",
+  "title": "Repository coding-agent integrity tasks",
+  "runner_kind": "coding_agent",
+  "capabilities": ["responses", "filesystem", "multi_turn"],
+  "unit_count": 6,
+  "time_limit_seconds": 3600,
+  "result_schema": "llm-hardtest.coding-agent.v1",
+  "assets": [
+    ".v4_baselines.json",
+    "v4_*.py",
+    "q*/task.json",
+    "q*/repo/**/*",
+    "q*/hidden/**/*"
+  ],
+  "controls": [
+    {
+      "id": "q30v2-trap-proof",
+      "kind": "negative",
+      "command": ["python3", "q30v2_policy_conflict/verify_trap.py"]
+    },
+    {
+      "id": "q31-trap-proof",
+      "kind": "positive",
+      "command": ["python3", "q31_approval_followup/verify_trap.py"]
+    }
+  ]
+}

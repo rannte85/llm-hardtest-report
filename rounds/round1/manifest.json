@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "id": "round1",
+  "title": "Compact exact-answer reasoning",
+  "runner_kind": "reasoning",
+  "capabilities": ["chat_completions"],
+  "unit_count": 20,
+  "time_limit_seconds": 3600,
+  "result_schema": "llm-hardtest.items.v1",
+  "assets": ["questions.json"],
+  "controls": []
+}

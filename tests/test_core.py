@@ -20,6 +20,7 @@ from llm_hardtest.report import collect, render
 from llm_hardtest.results import item_status, result_counts
 from llm_hardtest.inspection import inspect_run, render_inspection
 from llm_hardtest.replay import make_replay_config
+from llm_hardtest.packs import validate_pack
 from llm_hardtest.round12 import run as run_round12
 from llm_hardtest.round3 import _fields, _grade
 from llm_hardtest.round4 import run as run_round4
@@ -610,6 +611,68 @@ class ConfigurationTests(unittest.TestCase):
             with patch("llm_hardtest.orchestrator.round12.run") as rerun:
                 run_campaign(config, Path(tmp), resume=run_dir)
             rerun.assert_called_once()
+
+
+class PackTests(unittest.TestCase):
+    def _pack(self, root, **changes):
+        manifest = {
+            "schema_version": 1, "id": "demo-pack", "title": "Demo",
+            "runner_kind": "reasoning", "capabilities": ["chat_completions"],
+            "unit_count": 1, "time_limit_seconds": 30,
+            "result_schema": "demo.v1", "assets": ["questions.json"],
+            "controls": [],
+        }
+        manifest.update(changes)
+        save_json(root / "manifest.json", manifest)
+        save_json(root / "questions.json", [{"id": 1}])
+
+    def test_pack_fingerprint_changes_with_graded_asset(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._pack(root)
+            first = validate_pack(root)
+            save_json(root / "questions.json", [{"id": 2}])
+            second = validate_pack(root)
+        self.assertNotEqual(first["fingerprint"], second["fingerprint"])
+
+    def test_generated_caches_do_not_change_pack_fingerprint(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._pack(root, assets=["**/*"])
+            first = validate_pack(root)
+            cache = root / "nested/__pycache__/module.cpython-314.pyc"
+            cache.parent.mkdir(parents=True)
+            cache.write_bytes(b"machine-specific cache")
+            second = validate_pack(root)
+        self.assertEqual(first["fingerprint"], second["fingerprint"])
+
+    def test_pack_rejects_traversal_and_unknown_schema(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._pack(root, assets=["../outside.json"])
+            with self.assertRaisesRegex(ValueError, "unsafe pack asset"):
+                validate_pack(root)
+            self._pack(root, schema_version=999)
+            with self.assertRaisesRegex(ValueError, "schema_version"):
+                validate_pack(root)
+
+    def test_pack_rejects_asset_symlink_escape(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            parent = Path(tmp)
+            root = parent / "pack"
+            root.mkdir()
+            self._pack(root, assets=["escaped.json"])
+            outside = parent / "outside.json"
+            save_json(outside, {"private": True})
+            (root / "escaped.json").symlink_to(outside)
+            with self.assertRaisesRegex(ValueError, "escapes"):
+                validate_pack(root)
+
+    def test_all_bundled_packs_validate(self):
+        root = Path(__file__).resolve().parents[1]
+        metadata = [validate_pack(root / "rounds" / f"round{number}")
+                    for number in (1, 2, 3, 4)]
+        self.assertEqual([item["unit_count"] for item in metadata], [20, 20, 5, 6])
 
 
 class ReportTests(unittest.TestCase):

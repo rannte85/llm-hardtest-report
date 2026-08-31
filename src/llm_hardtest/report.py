@@ -6,7 +6,8 @@ import statistics
 import time
 from pathlib import Path
 
-from .common import load_json, save_json
+from .common import load_json, repo_root, save_json
+from .packs import validate_pack
 from .results import result_counts
 
 
@@ -90,8 +91,13 @@ def collect(run_dir: Path) -> dict:
                 "tasks": task_rows,
             }
         models.append(entry)
+    packs = {}
+    for number in config.get("rounds", []):
+        manifest = repo_root() / "rounds" / f"round{int(number)}" / "manifest.json"
+        if manifest.is_file():
+            packs[str(number)] = validate_pack(manifest.parent)["fingerprint"]
     return {"generated_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
-            "run_id": run_dir.name, "config": config, "models": models}
+            "run_id": run_dir.name, "config": config, "packs": packs, "models": models}
 
 
 def render(summary: dict) -> str:
@@ -162,6 +168,8 @@ def render(summary: dict) -> str:
         "## Reproducibility", "",
         f'- Repetitions per task: {summary["config"]["repetitions"]}',
         f'- Selected rounds: {summary["config"]["rounds"]}',
+        *[f'- Round {number} pack: `{fingerprint}`'
+          for number, fingerprint in sorted(summary.get("packs", {}).items())],
         f'- Configuration snapshot: `config.json` in this run directory.',
         "- Raw responses, transcripts, working repositories, and grades remain under each model/round directory.", "",
     ]

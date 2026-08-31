@@ -26,6 +26,7 @@ from .community_results import (
     build_index, build_pilot_index, load_pilot_submission_directory,
     load_submission_directory, recommend_configurations, render_recommendation,
 )
+from .community_database import build_database
 from .calibration import write_analysis
 from .round5 import run_pilot
 from .pilot_analysis import write_pilot_analysis
@@ -332,6 +333,15 @@ def main(argv=None) -> int:
     p_results_build.add_argument("directory", nargs="?", default="results/submissions")
     p_results_build.add_argument("--output", default="results/INDEX.md")
     p_results_build.add_argument("--check", action="store_true")
+    p_results_database = results_commands.add_parser(
+        "database", help="build a normalized SQLite database from public observations")
+    p_results_database.add_argument(
+        "directory", nargs="?", default="results/submissions")
+    p_results_database.add_argument(
+        "--output", default="results/community.sqlite3")
+    p_results_database.add_argument(
+        "--check", action="store_true",
+        help="verify that an existing database exactly matches the submissions")
     p_results_recommend = results_commands.add_parser(
         "recommend", help="query gated Pareto candidates from public observations")
     p_results_recommend.add_argument(
@@ -512,6 +522,19 @@ def main(argv=None) -> int:
             if args.results_command == "validate":
                 submissions = load_submission_directory(directory)
                 print(f"VALID: {len(submissions)} public result bundle(s)")
+                return 0
+            if args.results_command == "database":
+                summary = build_database(
+                    directory, Path(args.output), check=args.check)
+                action = "VALID" if args.check else "BUILT"
+                print(
+                    f"{action}: {args.output} "
+                    f"({summary['bundles']} bundle(s), "
+                    f"{summary['configurations']} configuration(s), "
+                    f"{summary['benchmark_runs']} run(s), "
+                    f"{summary['item_observations']} item observation(s), "
+                    f"{summary['task_observations']} task observation(s))")
+                print(f"Content fingerprint: {summary['content_fingerprint']}")
                 return 0
             if args.results_command == "recommend":
                 submissions = load_submission_directory(directory)

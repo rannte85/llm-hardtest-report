@@ -5,6 +5,22 @@ out separately from harness features.
 
 ## Unreleased
 
+## 2.18.0 — 2026-09-01
+
+- Added `results database` to materialize validated public submissions as a normalized
+  SQLite observation database without scanning local runs or making network requests.
+- Added linked bundle, exact-configuration, benchmark-run, item-observation, and Round 4
+  task-observation tables with bundle IDs preserved as uncertainty clusters.
+- Added flattened model/server/hardware/generation coordinates, canonical allowlisted
+  JSON, full SHA-256 row identities, and a deterministic logical content fingerprint.
+- Added atomic output, SQLite integrity and foreign-key checks, application/schema
+  identifiers, and read-only `--check` comparison of every row to repository JSON.
+- Rejected symlinked submission directories and JSON entries before public-result or
+  pilot validation so generated indexes and databases cannot follow external evidence.
+- Published database schema v1, privacy/independence documentation, SQL examples, and
+  adversarial repeat, tamper, deterministic-build, CLI, and Round 4 controls.
+- Kept public result schema v2 and canonical Round 1–4 content and grading unchanged.
+
 ## 2.17.0 — 2026-09-01
 
 - Added analysis-schema-v10 two-sided label-permutation tests for every evaluable

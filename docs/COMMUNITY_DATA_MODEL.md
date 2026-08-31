@@ -119,3 +119,10 @@ must not launch until it has, per target population:
 
 The first database implementation should ingest only validated repository JSON and
 retain bundle IDs as provenance. Raw local evidence should remain outside the service.
+
+Version 2.18 implements that boundary with `llm-hardtest results database`. It emits a
+normalized SQLite schema with bundle, exact configuration, benchmark-run, item, and
+Round 4 task tables; validates every source bundle; and supports read-only staleness and
+integrity checking. The database is a reproducible descriptive input, not authorization
+to skip the predictive-service promotion gates above. See
+[Community Observation Database](COMMUNITY_DATABASE.md).

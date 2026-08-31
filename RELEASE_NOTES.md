@@ -1,10 +1,20 @@
-# Release Notes — 2.17.0
+# Release Notes — 2.18.0
 
 This repository is ready to publish as `rannte85/llm-hardtest-report`. It contains no campaign
 outputs, credentials, local model files, personal filesystem paths, or generated
 Python caches.
 
 The release validation covers:
+
+- normalized SQLite database schema v1 over validated public repository bundles;
+- bundle-cluster provenance across exact configurations, benchmark runs, item rows,
+  and Round 4 task rows without ingesting raw local evidence;
+- queryable model, server, hardware, environment, and generation coordinates plus
+  canonical allowlisted JSON and full SHA-256 row identities;
+- deterministic logical content fingerprints, atomic builds, integrity/foreign-key
+  validation, and read-only whole-database `--check` comparison;
+- published SQL/privacy/query documentation and adversarial duplicate-row, tamper,
+  deterministic-build, empty-dataset, CLI, and task-observation controls;
 
 - analysis schema v10 with two-sided held-out label-permutation tests and Holm
   family-wise correction across both validation folds;

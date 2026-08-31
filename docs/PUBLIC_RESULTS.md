@@ -114,6 +114,26 @@ correction covers every tested held-out direction.
 See [Community Data Model](COMMUNITY_DATA_MODEL.md) for the normalization and staged
 path from descriptive observations to an environment-aware serving recommendation.
 
+## Normalized SQLite database
+
+Maintainers can materialize the validated repository JSON without changing its privacy
+or independence boundaries:
+
+```bash
+llm-hardtest results database results/submissions \
+  --output results/community.sqlite3
+llm-hardtest results database results/submissions \
+  --output results/community.sqlite3 --check
+```
+
+The builder makes no network request and cannot read local campaign directories. It
+retains each public bundle as the uncertainty cluster, separates exact configurations,
+and links benchmark runs to content-free item and Round 4 task observations. Integrity,
+foreign keys, schema identity, every normalized row, and a deterministic logical
+fingerprint are checked before a build is accepted. See
+[Community Observation Database](COMMUNITY_DATABASE.md) for the table contract and
+query examples.
+
 ## Descriptive serving-candidate query
 
 `results recommend` is read-only: it validates accepted JSON and writes nothing unless

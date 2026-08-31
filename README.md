@@ -4,12 +4,11 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-**Current release: 2.17.0** — adds multiplicity-controlled holdout replication. Every
-held-out panel direction now needs both a practical effect and a two-sided label-
-permutation p-value below 0.05 after Holm correction across all tested directions.
-Small exact tests and larger deterministic Monte Carlo tests support local attempts and
-fractional public-bundle rates without splitting shared bundles. Focused configs can
-require this stricter evidence with `--require-holdout-stable`.
+**Current release: 2.18.0** — adds a normalized SQLite observation database. Validated
+public bundles become linked bundle, configuration, benchmark-run, item, and Round 4
+task records with full SHA-256 provenance. A deterministic logical fingerprint,
+foreign-key/integrity checks, and `--check` mode make the database reproducible without
+turning the CLI into telemetry. Repeated rows remain attached to one independent bundle.
 Canonical Round 1–4 questions, grading contracts, and public submission schema are
 unchanged.
 
@@ -249,6 +248,24 @@ item intervals and robust signals cluster by accepted bundle, so repeated attemp
 duplicate model rows in one contribution cannot manufacture item certainty. See the
 [community data model](docs/COMMUNITY_DATA_MODEL.md).
 
+## Build the community observation database
+
+Convert accepted public JSON into a queryable SQLite file, or verify that an existing
+file exactly matches the current submissions:
+
+```bash
+llm-hardtest results database results/submissions \
+  --output results/community.sqlite3
+llm-hardtest results database results/submissions \
+  --output results/community.sqlite3 --check
+```
+
+The database is built only from already-public, validated repository bundles. It does
+not scan local runs, contact model servers, or collect telemetry. Bundle IDs remain the
+independence boundary even when a contribution contains repeated attempts or duplicate
+model rows. See the [database contract](docs/COMMUNITY_DATABASE.md) and published
+[`database-schema-v1.sql`](results/database-schema-v1.sql).
+
 ## Query observed serving candidates
 
 After validated submissions have accumulated, query only configurations observed on
@@ -449,6 +466,7 @@ broad filesystem access may read the benchmark source. See
 - [Round 5 cross-pilot analysis](docs/PILOT_ANALYSIS.md)
 - [Voluntary public results](docs/PUBLIC_RESULTS.md)
 - [Community data model and serving recommendations](docs/COMMUNITY_DATA_MODEL.md)
+- [Normalized community SQLite database](docs/COMMUNITY_DATABASE.md)
 - [Benchmark integrity](docs/BENCHMARK_INTEGRITY.md)
 - [Repository and source guide](docs/REPOSITORY_GUIDE.md)
 - [Development and release guide](docs/DEVELOPMENT.md)

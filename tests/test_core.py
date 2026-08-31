@@ -4,6 +4,7 @@ import json
 import base64
 import io
 import os
+import sqlite3
 import stat
 import tempfile
 import threading
@@ -35,6 +36,9 @@ from llm_hardtest.community_results import (
     aggregate_item_diagnostics, aggregate_pilot_submissions, aggregate_submissions, build_index,
     build_pilot_index, load_pilot_submission_directory, load_submission_directory,
     recommend_configurations, render_index, render_pilot_index, render_recommendation,
+)
+from llm_hardtest.community_database import (
+    SCHEMA_SQL, build_database, normalize_submissions,
 )
 from llm_hardtest.calibration import (
     _configuration_comparisons, _configuration_item_coverage,
@@ -2556,6 +2560,12 @@ class PublicResultTests(unittest.TestCase):
         self.assertTrue(payload["models"][0]["rounds"]["4"]["tasks"][0]["release_ready"])
         community = aggregate_submissions([payload])[0]
         self.assertEqual((community["passed"], community["total"]), (1, 1))
+        database_rows = normalize_submissions([payload])
+        self.assertEqual(len(database_rows["task_observations"]), 1)
+        self.assertEqual(database_rows["task_observations"][0][3],
+                         "q26_hidden_tests")
+        self.assertEqual(database_rows["task_observations"][0][10], 1)
+        self.assertIsNone(database_rows["task_observations"][0][11])
 
     def test_community_directory_validation_and_sparse_baseline(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -2580,6 +2590,166 @@ class PublicResultTests(unittest.TestCase):
             output.write_text("stale\n", encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "stale"):
                 build_index(submissions, output, check=True)
+
+    def test_community_database_normalizes_public_observations(self):
+        submissions = self._recommendation_submissions()
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp) / "submissions"
+            directory.mkdir()
+            for payload in submissions:
+                digest = payload["bundle_id"].removeprefix("sha256:")
+                (directory / f"{digest}.json").write_text(
+                    submission_document(payload), encoding="utf-8")
+            first = Path(tmp) / "first.sqlite3"
+            second = Path(tmp) / "second.sqlite3"
+            summary = build_database(directory, first)
+            self.assertEqual(build_database(directory, first, check=True), summary)
+            self.assertEqual(build_database(directory, second), summary)
+            self.assertEqual(first.read_bytes(), second.read_bytes())
+            connection = sqlite3.connect(first)
+            counts = {
+                table: connection.execute(f"SELECT count(*) FROM {table}").fetchone()[0]
+                for table in ("bundles", "configurations", "benchmark_runs",
+                              "item_observations", "task_observations")
+            }
+            configuration = connection.execute(
+                "SELECT public_name, server, quantization, memory_gb "
+                "FROM configurations ORDER BY public_name LIMIT 1").fetchone()
+            clustered = connection.execute(
+                "SELECT count(DISTINCT bundle_id), count(*) FROM benchmark_runs"
+            ).fetchone()
+            columns = {
+                row[1] for table in ("bundles", "configurations", "benchmark_runs",
+                                     "item_observations", "task_observations")
+                for row in connection.execute(f"PRAGMA table_info({table})")
+            }
+            integrity = connection.execute("PRAGMA foreign_key_check").fetchall()
+            connection.close()
+            database_bytes = first.read_bytes()
+        self.assertEqual(counts, {
+            "bundles": 5, "configurations": 2, "benchmark_runs": 10,
+            "item_observations": 100, "task_observations": 0,
+        })
+        self.assertEqual(configuration[:3],
+                         ("org/accurate", "Example Server", "Q4_K_M"))
+        self.assertEqual(configuration[3], 24.0)
+        self.assertEqual(clustered, (5, 10))
+        self.assertFalse(integrity)
+        self.assertTrue({"prompt", "response", "transcript", "endpoint", "api_key",
+                         "local_path", "private_label", "timestamp"}.isdisjoint(columns))
+        for private in (b"private-campaign-name", b"Private User Label",
+                        b"private-user-key", b"VERY_PRIVATE_API_KEY",
+                        b"private raw response", b"/Users/private"):
+            self.assertNotIn(private, database_bytes)
+
+    def test_published_database_schema_matches_the_builder(self):
+        published = (repo_root() / "results/database-schema-v1.sql").read_text(
+            encoding="utf-8")
+        published = "\n".join(
+            line for line in published.splitlines()
+            if not line.startswith("--"))
+        self.assertEqual(published.strip(), SCHEMA_SQL.strip())
+
+    def test_community_database_detects_tampering_and_rejects_wrong_extension(self):
+        submissions = self._recommendation_submissions(1)
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp) / "submissions"
+            directory.mkdir()
+            payload = submissions[0]
+            digest = payload["bundle_id"].removeprefix("sha256:")
+            (directory / f"{digest}.json").write_text(
+                submission_document(payload), encoding="utf-8")
+            database = Path(tmp) / "observations.sqlite3"
+            build_database(directory, database)
+            connection = sqlite3.connect(database)
+            connection.execute(
+                "UPDATE configurations SET public_name = 'tampered'")
+            connection.commit()
+            connection.close()
+            with self.assertRaisesRegex(ValueError, "stale"):
+                build_database(directory, database, check=True)
+            with self.assertRaisesRegex(ValueError, r"\.sqlite"):
+                build_database(directory, Path(tmp) / "observations.json")
+
+    def test_community_database_rejects_unexpected_schema_objects(self):
+        submissions = self._recommendation_submissions(1)
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp) / "submissions"
+            directory.mkdir()
+            payload = submissions[0]
+            digest = payload["bundle_id"].removeprefix("sha256:")
+            (directory / f"{digest}.json").write_text(
+                submission_document(payload), encoding="utf-8")
+            database = Path(tmp) / "observations.sqlite3"
+            build_database(directory, database)
+            connection = sqlite3.connect(database)
+            connection.execute("CREATE TABLE injected_private_data (value TEXT)")
+            connection.commit()
+            connection.close()
+            with self.assertRaisesRegex(ValueError, "schema does not match"):
+                build_database(directory, database, check=True)
+
+    def test_community_database_rejects_external_submission_symlink(self):
+        submissions = self._recommendation_submissions(1)
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp) / "submissions"
+            directory.mkdir()
+            payload = submissions[0]
+            digest = payload["bundle_id"].removeprefix("sha256:")
+            external = Path(tmp) / "external.json"
+            external.write_text(submission_document(payload), encoding="utf-8")
+            (directory / f"{digest}.json").symlink_to(external)
+            with self.assertRaisesRegex(ValueError, "unexpected submission entry"):
+                build_database(directory, Path(tmp) / "observations.sqlite3")
+
+    def test_empty_community_database_is_valid_and_check_rejects_symlink(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp) / "submissions"
+            directory.mkdir()
+            database = Path(tmp) / "empty.sqlite3"
+            summary = build_database(directory, database)
+            self.assertEqual(summary["bundles"], 0)
+            self.assertEqual(build_database(directory, database, check=True), summary)
+            link = Path(tmp) / "linked.sqlite3"
+            link.symlink_to(database)
+            with self.assertRaisesRegex(ValueError, "regular file"):
+                build_database(directory, link, check=True)
+
+    def test_community_database_preserves_repeats_without_new_bundle_weight(self):
+        submissions = self._recommendation_submissions(1)
+        payload = submissions[0]
+        payload["models"].append(json.loads(json.dumps(payload["models"][0])))
+        from llm_hardtest.public_results import _bundle_id
+        body = {key: value for key, value in payload.items() if key != "bundle_id"}
+        payload["bundle_id"] = _bundle_id(body)
+        validate_public_result(payload)
+        rows = normalize_submissions(submissions)
+        self.assertEqual(len(rows["bundles"]), 1)
+        self.assertEqual(len(rows["configurations"]), 2)
+        self.assertEqual(len(rows["benchmark_runs"]), 3)
+        self.assertEqual({row[1] for row in rows["benchmark_runs"]},
+                         {payload["bundle_id"]})
+
+    def test_results_database_cli_builds_and_checks(self):
+        submissions = self._recommendation_submissions(1)
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp) / "submissions"
+            directory.mkdir()
+            payload = submissions[0]
+            digest = payload["bundle_id"].removeprefix("sha256:")
+            (directory / f"{digest}.json").write_text(
+                submission_document(payload), encoding="utf-8")
+            output = Path(tmp) / "community.sqlite3"
+            stdout = io.StringIO()
+            with patch("sys.stdout", stdout):
+                self.assertEqual(main([
+                    "results", "database", str(directory),
+                    "--output", str(output)]), 0)
+                self.assertEqual(main([
+                    "results", "database", str(directory),
+                    "--output", str(output), "--check"]), 0)
+        self.assertIn("1 bundle(s)", stdout.getvalue())
+        self.assertIn("Content fingerprint: sha256:", stdout.getvalue())
 
     def test_community_baseline_requires_five_distinct_bundles(self):
         with tempfile.TemporaryDirectory() as tmp:

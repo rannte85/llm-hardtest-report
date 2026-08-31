@@ -37,6 +37,10 @@ jobs:
         run: |
           PYTHONPATH=src ./llm-hardtest results validate
           PYTHONPATH=src ./llm-hardtest results build --check
+          PYTHONPATH=src ./llm-hardtest results database \
+            --output "${RUNNER_TEMP}/community.sqlite3"
+          PYTHONPATH=src ./llm-hardtest results database \
+            --output "${RUNNER_TEMP}/community.sqlite3" --check
           PYTHONPATH=src ./llm-hardtest results pilots validate
           PYTHONPATH=src ./llm-hardtest results pilots build --check
       - name: Installed package smoke test
@@ -44,6 +48,9 @@ jobs:
           python -m pip install .
           cd "$(mktemp -d)"
           llm-hardtest selftest
+          mkdir submissions
+          llm-hardtest results database submissions --output community.sqlite3
+          llm-hardtest results database submissions --output community.sqlite3 --check
       - name: Harness self-test
         run: ./llm-hardtest selftest
       - name: Q30v2 trap proof

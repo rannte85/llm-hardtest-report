@@ -469,3 +469,34 @@ Acceptance checks:
 - Fractional 11-vs-11 cluster rates trigger deterministic Monte Carlo and reproduce
   byte-for-byte across calls.
 - Sparse rows remain insufficient and never enter the multiplicity family.
+
+## Phase 18 — Normalized community observation database
+
+Goal: turn reviewed public bundles into a reproducible relational source for future
+environment-aware serving research without adding telemetry or weakening bundle-level
+independence.
+
+Deliverables:
+
+1. Materialize validated repository JSON into normalized bundle, exact-configuration,
+   benchmark-run, item-observation, and Round 4 task-observation SQLite tables.
+2. Retain bundle IDs as the uncertainty-cluster foreign key and preserve duplicate model
+   rows as auditable runs rather than new independent contributions.
+3. Flatten model, server, hardware, and generation coordinates for queries while also
+   retaining canonical allowlisted parameter and metadata JSON.
+4. Add full SHA-256 run/observation identities, a deterministic logical dataset
+   fingerprint, explicit SQLite application/schema versions, and published DDL.
+5. Write atomically and add read-only `--check` validation for integrity, foreign keys,
+   schema identity, row counts, fingerprint, and every normalized row.
+
+Acceptance checks:
+
+- Five two-configuration bundles produce five bundle clusters, two configurations,
+  ten runs, and one hundred item rows.
+- A repeated model row creates another run under the same bundle and configuration,
+  never another independent bundle.
+- Round 4 task flags retain boolean/null semantics and link to their benchmark run.
+- Two identical builds have the same logical fingerprint and deterministic local bytes;
+  a modified database fails `--check`.
+- Empty repositories build and validate, wrong extensions fail, and no raw/private
+  evidence field has a database column.

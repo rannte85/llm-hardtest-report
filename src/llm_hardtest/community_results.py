@@ -60,14 +60,15 @@ def _percentile(values: list[float], percentile: float) -> float | None:
 
 def load_submission_directory(directory: Path) -> list[dict]:
     """Validate canonical public JSON files and their content-derived filenames."""
-    if not directory.is_dir():
-        raise ValueError(f"submission directory does not exist: {directory}")
+    if not directory.is_dir() or directory.is_symlink():
+        raise ValueError(
+            f"submission directory does not exist as a regular directory: {directory}")
     submissions = []
     seen = set()
     for path in sorted(directory.iterdir()):
         if path.name == ".gitkeep":
             continue
-        if not path.is_file() or path.suffix.lower() != ".json":
+        if path.is_symlink() or not path.is_file() or path.suffix.lower() != ".json":
             raise ValueError(f"unexpected submission entry: {path.name}")
         payload = load_public_bundle(path)
         expected = Path(submission_relative_path(payload)).name
@@ -772,14 +773,15 @@ def build_index(directory: Path, output: Path, *, check: bool = False) -> tuple[
 
 def load_pilot_submission_directory(directory: Path) -> list[dict]:
     """Validate sanitized Round 5 JSON submissions and content-derived names."""
-    if not directory.is_dir():
-        raise ValueError(f"pilot submission directory does not exist: {directory}")
+    if not directory.is_dir() or directory.is_symlink():
+        raise ValueError(
+            f"pilot submission directory does not exist as a regular directory: {directory}")
     submissions = []
     seen = set()
     for path in sorted(directory.iterdir()):
         if path.name == ".gitkeep":
             continue
-        if not path.is_file() or path.suffix.lower() != ".json":
+        if path.is_symlink() or not path.is_file() or path.suffix.lower() != ".json":
             raise ValueError(f"unexpected pilot submission entry: {path.name}")
         payload = load_public_pilot_bundle(path)
         expected = Path(submission_relative_path(payload)).name

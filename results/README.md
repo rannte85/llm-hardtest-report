@@ -8,6 +8,7 @@ project does not automatically collect telemetry or local campaign data.
 - `submissions/` contains one canonical JSON document per accepted bundle.
 - `INDEX.md` is generated from accepted submissions and contains descriptive examples.
 - `recommendation-schema-v1.json` documents the deterministic serving-candidate query.
+- `database-schema-v1.sql` documents the normalized SQLite observation schema.
 - `pilot-schema-v1.json` documents the sanitized Round 5 summary shape.
 - `pilots/` contains accepted Round 5 pilot summaries.
 - `PILOTS.md` is the separately generated Round 5 community index.
@@ -23,6 +24,8 @@ Maintainers and contributors can reproduce repository checks locally:
 llm-hardtest results validate
 llm-hardtest results build
 llm-hardtest results build --check
+llm-hardtest results database --output results/community.sqlite3
+llm-hardtest results database --output results/community.sqlite3 --check
 llm-hardtest results recommend --round 1 --json
 llm-hardtest results pilots validate
 llm-hardtest results pilots build
@@ -43,3 +46,8 @@ penalties, not automatic removal rules, and sparse bundles cannot unlock a panel
 sufficient independent bundles, applies explicit environment constraints and selected
 objectives, and emits a non-dominated descriptive candidate set. It does not infer
 missing metadata or predict performance on untested hardware.
+
+`results database` materializes the validated JSON as linked bundle, configuration,
+run, item, and task rows. It preserves bundle IDs as uncertainty clusters and emits a
+deterministic logical content fingerprint. The generated SQLite file is ignored by Git;
+the canonical repository sources remain the reviewed JSON submissions.

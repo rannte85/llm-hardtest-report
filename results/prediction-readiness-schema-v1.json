@@ -1,0 +1,288 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rannte85/llm-hardtest-report/blob/main/results/prediction-readiness-schema-v1.json",
+  "title": "LLM Hardtest predictive serving readiness audit v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "kind", "round", "pack", "available_packs", "objectives",
+    "thresholds", "status", "reason", "predictive_service_authorized",
+    "remaining_external_gates", "summary", "gates", "configurations",
+    "paired_edges", "serving_environments", "environment_bridges"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "kind": {"const": "predictive_serving_readiness_audit"},
+    "round": {"type": "integer", "minimum": 1, "maximum": 4},
+    "pack": {"oneOf": [{"$ref": "#/$defs/pack"}, {"type": "null"}]},
+    "available_packs": {
+      "type": "array", "uniqueItems": true,
+      "items": {"$ref": "#/$defs/pack"}
+    },
+    "objectives": {
+      "type": "array", "minItems": 1, "uniqueItems": true,
+      "items": {"$ref": "#/$defs/objective"}
+    },
+    "thresholds": {"$ref": "#/$defs/thresholds"},
+    "status": {
+      "enum": [
+        "PACK_REQUIRED", "NO_OBSERVATIONS", "EVIDENCE_GAPS",
+        "DESIGN_TARGET_MET_VALIDATION_REQUIRED"
+      ]
+    },
+    "reason": {"type": "string", "minLength": 1, "maxLength": 240},
+    "predictive_service_authorized": {"const": false},
+    "remaining_external_gates": {
+      "type": "array", "minItems": 3, "maxItems": 3, "uniqueItems": true,
+      "items": {
+        "enum": [
+          "temporal_holdout_validation",
+          "abuse_duplicate_and_implausibility_review",
+          "pack_and_server_drift_monitoring"
+        ]
+      }
+    },
+    "summary": {"$ref": "#/$defs/summary"},
+    "gates": {"type": "array", "maxItems": 8, "items": {"$ref": "#/$defs/gate"}},
+    "configurations": {
+      "type": "array", "items": {"$ref": "#/$defs/configuration"}
+    },
+    "paired_edges": {"type": "array", "items": {"$ref": "#/$defs/pairedEdge"}},
+    "serving_environments": {
+      "type": "array", "items": {"$ref": "#/$defs/servingEnvironment"}
+    },
+    "environment_bridges": {
+      "type": "array", "items": {"$ref": "#/$defs/environmentBridge"}
+    }
+  },
+  "$defs": {
+    "safeText": {"type": "string", "minLength": 1, "maxLength": 160},
+    "pack": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "configurationId": {"type": "string", "pattern": "^[0-9a-f]{10}$"},
+    "environmentId": {"type": "string", "pattern": "^[0-9a-f]{10}$"},
+    "objective": {"enum": ["accuracy", "completion", "latency", "throughput"]},
+    "objectiveCounts": {
+      "type": "object", "additionalProperties": false, "minProperties": 1,
+      "properties": {
+        "accuracy": {"type": "integer", "minimum": 0},
+        "completion": {"type": "integer", "minimum": 0},
+        "latency": {"type": "integer", "minimum": 0},
+        "throughput": {"type": "integer", "minimum": 0}
+      }
+    },
+    "environment": {
+      "type": "object", "additionalProperties": false,
+      "required": ["os", "architecture", "python"],
+      "properties": {
+        "os": {"enum": ["Linux", "Darwin", "Windows", "Other"]},
+        "architecture": {"type": "string", "minLength": 1, "maxLength": 32},
+        "python": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+$"}
+      }
+    },
+    "parameters": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "reasoning_effort": {"type": "string", "minLength": 1, "maxLength": 32},
+        "context_window": {"type": "number"},
+        "max_tokens": {"type": "number"},
+        "temperature": {"type": "number"},
+        "top_p": {"type": "number"},
+        "top_k": {"type": "number"},
+        "min_p": {"type": "number"}
+      }
+    },
+    "publicMetadata": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "model_revision": {"$ref": "#/$defs/safeText"},
+        "quantization": {"$ref": "#/$defs/safeText"},
+        "model_format": {"$ref": "#/$defs/safeText"},
+        "parameter_count_b": {"type": "number", "exclusiveMinimum": 0},
+        "server": {"$ref": "#/$defs/safeText"},
+        "server_version": {"$ref": "#/$defs/safeText"},
+        "accelerator": {"$ref": "#/$defs/safeText"},
+        "accelerator_count": {"type": "number", "exclusiveMinimum": 0},
+        "memory_gb": {"type": "number", "exclusiveMinimum": 0},
+        "system_memory_gb": {"type": "number", "exclusiveMinimum": 0}
+      }
+    },
+    "thresholds": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "target_independent_bundles_per_configuration_objective",
+        "minimum_configurations_meeting_target",
+        "minimum_distinct_serving_environments",
+        "minimum_shared_bundles_per_paired_edge",
+        "minimum_eligible_paired_edges",
+        "minimum_model_profiles_repeated_across_environments",
+        "minimum_independent_bundles_per_environment_bridge"
+      ],
+      "properties": {
+        "target_independent_bundles_per_configuration_objective": {
+          "type": "integer", "minimum": 5, "maximum": 1000
+        },
+        "minimum_configurations_meeting_target": {
+          "type": "integer", "minimum": 2, "maximum": 1000
+        },
+        "minimum_distinct_serving_environments": {
+          "type": "integer", "minimum": 2, "maximum": 1000
+        },
+        "minimum_shared_bundles_per_paired_edge": {"const": 5},
+        "minimum_eligible_paired_edges": {
+          "type": "integer", "minimum": 1, "maximum": 100000
+        },
+        "minimum_model_profiles_repeated_across_environments": {
+          "type": "integer", "minimum": 1, "maximum": 1000
+        },
+        "minimum_independent_bundles_per_environment_bridge": {"const": 5}
+      }
+    },
+    "summary": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "observed_configurations", "configurations_meeting_objective_targets",
+        "distinct_models", "distinct_serving_environments", "observed_paired_edges",
+        "eligible_paired_edges", "model_profiles_repeated_across_environments"
+      ],
+      "properties": {
+        "observed_configurations": {"type": "integer", "minimum": 0},
+        "configurations_meeting_objective_targets": {"type": "integer", "minimum": 0},
+        "distinct_models": {"type": "integer", "minimum": 0},
+        "distinct_serving_environments": {"type": "integer", "minimum": 0},
+        "observed_paired_edges": {"type": "integer", "minimum": 0},
+        "eligible_paired_edges": {"type": "integer", "minimum": 0},
+        "model_profiles_repeated_across_environments": {
+          "type": "integer", "minimum": 0
+        }
+      }
+    },
+    "gate": {
+      "type": "object", "additionalProperties": false,
+      "required": ["name", "status", "current", "required", "reason"],
+      "properties": {
+        "name": {
+          "enum": [
+            "independent_objective_coverage", "configuration_diversity",
+            "serving_environment_diversity", "paired_configuration_overlap",
+            "cross_environment_model_repetition", "temporal_holdout_validation",
+            "abuse_duplicate_and_implausibility_review",
+            "pack_and_server_drift_monitoring"
+          ]
+        },
+        "status": {"enum": ["PASS", "GAP", "UNAVAILABLE", "REQUIRED"]},
+        "current": {"type": ["integer", "boolean"]},
+        "required": {"type": ["integer", "boolean"]},
+        "reason": {"type": "string", "minLength": 1, "maxLength": 240}
+      }
+    },
+    "configuration": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "configuration", "model", "environment", "transport", "parameters",
+        "public_metadata", "serving_environment_id", "observed_independent_bundles",
+        "bundle_deficits", "meets_objective_targets"
+      ],
+      "properties": {
+        "configuration": {"$ref": "#/$defs/configurationId"},
+        "model": {"$ref": "#/$defs/safeText"},
+        "environment": {"$ref": "#/$defs/environment"},
+        "transport": {"enum": ["openai_compat", "codex_cli"]},
+        "parameters": {"$ref": "#/$defs/parameters"},
+        "public_metadata": {"$ref": "#/$defs/publicMetadata"},
+        "serving_environment_id": {"$ref": "#/$defs/environmentId"},
+        "observed_independent_bundles": {"$ref": "#/$defs/objectiveCounts"},
+        "bundle_deficits": {"$ref": "#/$defs/objectiveCounts"},
+        "meets_objective_targets": {"type": "boolean"}
+      }
+    },
+    "pairedEdge": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "left_configuration", "right_configuration", "shared_independent_bundles",
+        "minimum_shared_selected_bundles", "eligible"
+      ],
+      "properties": {
+        "left_configuration": {"$ref": "#/$defs/configurationId"},
+        "right_configuration": {"$ref": "#/$defs/configurationId"},
+        "shared_independent_bundles": {"$ref": "#/$defs/objectiveCounts"},
+        "minimum_shared_selected_bundles": {"type": "integer", "minimum": 0},
+        "eligible": {"type": "boolean"}
+      }
+    },
+    "nullableText": {
+      "oneOf": [{"$ref": "#/$defs/safeText"}, {"type": "null"}]
+    },
+    "nullablePositive": {
+      "oneOf": [{"type": "number", "exclusiveMinimum": 0}, {"type": "null"}]
+    },
+    "runtime": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "server", "server_version", "accelerator", "accelerator_count",
+        "memory_gb", "system_memory_gb"
+      ],
+      "properties": {
+        "server": {"$ref": "#/$defs/nullableText"},
+        "server_version": {"$ref": "#/$defs/nullableText"},
+        "accelerator": {"$ref": "#/$defs/nullableText"},
+        "accelerator_count": {"$ref": "#/$defs/nullablePositive"},
+        "memory_gb": {"$ref": "#/$defs/nullablePositive"},
+        "system_memory_gb": {"$ref": "#/$defs/nullablePositive"}
+      }
+    },
+    "servingEnvironment": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "environment_id", "environment", "runtime", "observed_configurations",
+        "observed_models"
+      ],
+      "properties": {
+        "environment_id": {"$ref": "#/$defs/environmentId"},
+        "environment": {"$ref": "#/$defs/environment"},
+        "runtime": {"$ref": "#/$defs/runtime"},
+        "observed_configurations": {"type": "integer", "minimum": 1},
+        "observed_models": {"type": "integer", "minimum": 1}
+      }
+    },
+    "environmentBridge": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "model", "model_profile_id", "transport", "parameters", "model_metadata",
+        "serving_environments", "observed_environments", "observed_configurations"
+      ],
+      "properties": {
+        "model": {"$ref": "#/$defs/safeText"},
+        "model_profile_id": {"$ref": "#/$defs/configurationId"},
+        "transport": {"enum": ["openai_compat", "codex_cli"]},
+        "parameters": {"$ref": "#/$defs/parameters"},
+        "model_metadata": {"$ref": "#/$defs/modelProfileMetadata"},
+        "serving_environments": {
+          "type": "array", "minItems": 2, "uniqueItems": true,
+          "items": {"$ref": "#/$defs/environmentBridgeObservation"}
+        },
+        "observed_environments": {"type": "integer", "minimum": 2},
+        "observed_configurations": {"type": "integer", "minimum": 2}
+      }
+    },
+    "modelProfileMetadata": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "model_revision", "quantization", "model_format", "parameter_count_b"
+      ],
+      "properties": {
+        "model_revision": {"$ref": "#/$defs/nullableText"},
+        "quantization": {"$ref": "#/$defs/nullableText"},
+        "model_format": {"$ref": "#/$defs/nullableText"},
+        "parameter_count_b": {"$ref": "#/$defs/nullablePositive"}
+      }
+    },
+    "environmentBridgeObservation": {
+      "type": "object", "additionalProperties": false,
+      "required": ["serving_environment_id", "independent_bundles"],
+      "properties": {
+        "serving_environment_id": {"$ref": "#/$defs/environmentId"},
+        "independent_bundles": {"type": "integer", "minimum": 5}
+      }
+    }
+  }
+}

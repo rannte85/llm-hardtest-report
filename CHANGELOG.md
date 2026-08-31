@@ -5,6 +5,25 @@ out separately from harness features.
 
 ## Unreleased
 
+## 2.24.0 — 2026-09-01
+
+- Added `results readiness` to audit the observable data-design gates required before
+  fitting an environment-aware serving predictor.
+- Added per-objective independent coverage targets, exact-configuration and declared
+  serving-environment diversity, and five-shared-bundle paired-edge coverage.
+- Added exact model-profile environment bridges that fix model name, transport,
+  generation parameters, revision, format, quantization, and parameter count and
+  require five independent bundles in each of two environments.
+- Added explicit temporal-holdout, abuse/duplicate/implausibility-review, and future
+  pack/server-drift gates that keep `predictive_service_authorized` false even when
+  observable operator targets pass.
+- Added byte-identical canonical-JSON and verified-SQLite adapters, CLI/Markdown output,
+  and `prediction-readiness-schema-v1.json` without bundle or contributor identities.
+- Added repeat-inflation, missing-objective, one-bundle bridge, profile-confounding,
+  pack, threshold, source-ambiguity, schema, privacy, and cross-adapter controls.
+- Kept canonical benchmark content, graders, public result schema v2, SQLite schema v2,
+  catalog/recommendation schema v2, and earlier planning/comparison schemas unchanged.
+
 ## 2.23.0 — 2026-09-01
 
 - Added `results compare` for head-to-head analysis of two exact configurations using

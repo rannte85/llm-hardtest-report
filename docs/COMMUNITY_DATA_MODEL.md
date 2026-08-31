@@ -170,3 +170,19 @@ on the shared bundle differences, with Holm correction across selected objective
 Directional evidence requires the adjusted test and interval to agree. The result
 does not define universal practical importance and cannot extrapolate beyond the exact
 pack and configurations.
+
+Version 2.24 makes the predictive-service promotion boundary executable with
+`results readiness`. It audits per-objective independent coverage, exact-configuration
+diversity, five-bundle paired overlap, declared serving-environment diversity, and
+exact model-profile repetition across environments. A profile fixes model identity,
+transport, generation parameters, revision, format, quantization, and parameter count;
+each participating environment needs five independent bundles. The audit cannot be
+unlocked by repeated rows or one-off metadata variants and returns identical results
+from canonical JSON and verified SQLite without provenance IDs.
+
+Passing those observable operator targets is reported as
+`DESIGN_TARGET_MET_VALIDATION_REQUIRED`, not predictive readiness. Public schema v2
+does not contain a trustworthy collection timestamp, automated structural validation
+does not replace abuse and implausibility review, and a current snapshot cannot prove
+future pack/server drift control. Version 2.24 therefore fixes
+`predictive_service_authorized` to false and names every remaining external gate.

@@ -1,10 +1,21 @@
-# Release Notes — 2.23.0
+# Release Notes — 2.24.0
 
 This repository is ready to publish as `rannte85/llm-hardtest-report`. It contains no campaign
 outputs, credentials, local model files, personal filesystem paths, or generated
 Python caches.
 
 The release validation covers:
+
+- executable predictive-serving readiness audits over canonical JSON and verified
+  SQLite, with identical privacy-preserving results;
+- independent per-objective configuration coverage, exact-configuration and declared
+  environment diversity, and paired edges requiring five shared bundles;
+- exact model-profile environment bridges that fix inference/model identity and require
+  five independent bundles in each qualifying environment;
+- explicit temporal holdout, abuse/duplicate/implausibility review, and future drift
+  gates, with prediction authorization fixed false even when design targets pass;
+- public prediction-readiness schema v1 plus repeated-row, missing-metric, one-bundle
+  bridge, profile-confounding, pack, threshold, CLI, and cross-adapter controls;
 
 - shared-independent-bundle head-to-head comparison for two exact serving
   configurations across accuracy, completion, latency, and throughput;

@@ -183,6 +183,26 @@ identical evidence produces byte-identical output. Standalone database integrity
 semantic checks run before analysis. The response exposes neither pairing bundle IDs
 nor contributor history.
 
+## Predictive-service readiness audit
+
+```bash
+llm-hardtest results readiness \
+  --database results/community.sqlite3 \
+  --round 1 --pack sha256:<full-pack-fingerprint> \
+  --objective accuracy --objective latency --target-bundles 10 --json
+```
+
+The database adapter reuses the same collapsed bundle/configuration observations as
+paired comparison. It counts each bundle once per objective, requires five independent
+bundles on both sides of a paired edge, and requires five bundles per environment for
+an exact model-profile portability bridge. Canonical files and a verified SQLite
+snapshot return identical JSON. The response exposes configuration and environment
+coordinates but no bundle IDs or contributor history.
+
+This audit is a data-design check, not a fitted predictor. Even when observable targets
+pass, temporal validation, human abuse/implausibility review, and future drift
+monitoring remain external required gates and authorization stays false.
+
 ## Plan evidence acquisition
 
 The verified database can also answer which exact configurations need more independent

@@ -4,13 +4,14 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-**Current release: 2.23.0** — adds cluster-paired head-to-head comparison for two exact
-serving configurations tested inside the same independent bundles. Accuracy,
-completion, latency, and throughput effects use deterministic paired-bundle bootstrap
-intervals, two-sided sign-flip tests, and Holm family-wise correction. Canonical JSON
-and verified SQLite produce identical privacy-preserving results; repeated runs cannot
-inflate the paired sample. Canonical Round 1–4 questions, grading contracts, public
-submission schema, and database schema are unchanged.
+**Current release: 2.24.0** — adds an executable predictive-serving readiness audit.
+It measures independent objective coverage, exact-configuration diversity, paired
+overlap, declared serving-environment diversity, and exact model-profile repetition
+across environments. Even when those operator targets pass, the tool refuses to
+authorize prediction until temporal holdout, abuse/implausibility review, and drift
+monitoring exist. Canonical JSON and verified SQLite produce identical, provenance-free
+results. Canonical Round 1–4 questions, grading contracts, public submission schema,
+and database schema are unchanged.
 
 LLM Hardtest Report is a local-first command-line benchmark for comparing language
 models as reasoners, coding workers, and safe handoff agents. Point it at one or more
@@ -364,6 +365,35 @@ bootstrap supplies the 95% effect interval, a two-sided sign-flip test supplies 
 raw p-value, and Holm correction controls the selected-objective family. Directional
 claims require both an interval excluding zero and adjusted p below 0.05. No universal
 practical-effect threshold is imposed, so operational relevance remains explicit.
+
+## Audit readiness before predictive serving
+
+Do not turn five-bundle descriptive candidates into a prediction service. Audit the
+data design first:
+
+```bash
+llm-hardtest results readiness \
+  --database results/community.sqlite3 \
+  --round 1 \
+  --pack sha256:<full-pack-fingerprint> \
+  --objective accuracy \
+  --objective latency \
+  --target-bundles 10
+```
+
+The audit counts independent bundles per exact configuration and objective, paired
+configuration edges with at least five shared bundles, distinct declared serving
+environments, and exact model profiles repeated with five bundles in at least two
+environments. A model profile includes model name, transport, generation settings,
+revision, format, quantization, and parameter count, so a renamed or requantized model
+cannot act as a portability bridge.
+
+`DESIGN_TARGET_MET_VALIDATION_REQUIRED` is deliberately not permission to deploy a
+predictor. The v1 contract always returns `predictive_service_authorized: false` until
+pre-registered temporal validation, maintainer abuse/implausibility review, and future
+pack/server drift monitoring are available. Threshold flags are acquisition-planning
+targets, not universal scientific guarantees. See
+[`results/prediction-readiness-schema-v1.json`](results/prediction-readiness-schema-v1.json).
 
 ## Plan the next independent submissions
 

@@ -225,6 +225,36 @@ but never the bundle IDs that formed a pair or contributor/tool history. Left/ri
 swaps reproduce the same p-values and exactly negated effects and intervals. Statistical
 direction is not a universal practical-effect claim or an untested-setting prediction.
 
+## Predictive-service readiness audit
+
+`results readiness` converts the promotion gates into a deterministic audit without
+fitting a model or predicting an unobserved setup:
+
+```bash
+llm-hardtest results readiness results/submissions \
+  --round 1 --pack sha256:<full-pack-fingerprint> \
+  --objective accuracy --objective latency --target-bundles 10
+
+llm-hardtest results readiness --database results/community.sqlite3 \
+  --round 1 --pack sha256:<full-pack-fingerprint> \
+  --objective accuracy --objective latency --target-bundles 10 --json
+```
+
+Observable gates cover independent per-objective coverage, exact-configuration
+diversity, five-bundle paired edges, declared serving-environment diversity, and exact
+model profiles repeated with at least five independent bundles in two environments.
+The profile key includes model name, transport, generation parameters, revision,
+format, quantization, and parameter count. Repeated rows, one-bundle metadata variants,
+or differently quantized models cannot create a bridge.
+
+The response follows `results/prediction-readiness-schema-v1.json`, omits bundle and
+contributor identity, and is identical for canonical JSON and verified SQLite. Its
+`predictive_service_authorized` field is always false: a temporal holdout cannot be
+derived because public schema v2 intentionally has no collection timestamp, structural
+validation is not maintainer abuse/implausibility review, and one pack snapshot cannot
+establish future server/pack drift stability. Passing operator targets therefore yields
+`DESIGN_TARGET_MET_VALIDATION_REQUIRED`, never a deployment authorization.
+
 ## Evidence collection plan
 
 Use `results plan` to turn sparse observed configurations into a concrete, bounded

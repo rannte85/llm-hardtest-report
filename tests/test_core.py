@@ -40,7 +40,8 @@ from llm_hardtest.community_results import (
 from llm_hardtest.community_database import (
     SCHEMA_SQL, _content_fingerprint, aggregate_database, build_database,
     catalog_database, compare_database, load_database, normalize_submissions,
-    paired_database_observations, plan_database, recommend_database,
+    paired_database_observations, plan_database, readiness_database,
+    recommend_database,
 )
 from llm_hardtest.serving_catalog import (
     build_catalog, catalog_submissions, render_catalog,
@@ -51,6 +52,9 @@ from llm_hardtest.collection_plan import (
 from llm_hardtest.paired_comparison import (
     _bundle_observations, _sign_flip_test, compare_paired_observations,
     compare_submissions, render_paired_comparison,
+)
+from llm_hardtest.prediction_readiness import (
+    audit_prediction_readiness, audit_submissions, render_prediction_readiness,
 )
 from llm_hardtest.calibration import (
     _configuration_comparisons, _configuration_item_coverage,
@@ -2336,6 +2340,29 @@ class PublicResultTests(unittest.TestCase):
             validate_public_result(payload)
         return submissions
 
+    def _readiness_submissions(self, count_per_environment=10):
+        from llm_hardtest.public_results import _bundle_id
+        first = self._full_coordinate_submissions(count_per_environment)
+        for index, payload in enumerate(first):
+            third = json.loads(json.dumps(payload["models"][0]))
+            third["public_name"] = "org/balanced"
+            third["public_metadata"]["memory_gb"] = 16
+            third["public_metadata"]["parameter_count_b"] = 8
+            payload["models"].append(third)
+            payload["tool"]["version"] = f"readiness-darwin-{index}"
+            body = {key: value for key, value in payload.items() if key != "bundle_id"}
+            payload["bundle_id"] = _bundle_id(body)
+            validate_public_result(payload)
+        second = json.loads(json.dumps(first))
+        for index, payload in enumerate(second):
+            payload["environment"]["os"] = "Linux"
+            payload["environment"]["architecture"] = "x86_64"
+            payload["tool"]["version"] = f"readiness-linux-{index}"
+            body = {key: value for key, value in payload.items() if key != "bundle_id"}
+            payload["bundle_id"] = _bundle_id(body)
+            validate_public_result(payload)
+        return first + second
+
     def test_public_export_is_allowlist_only_and_deterministic(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "run"
@@ -3823,6 +3850,198 @@ class PublicResultTests(unittest.TestCase):
                          set(objective_schema["properties"]))
         self.assertEqual(set(result["objectives_result"][0]),
                          set(objective_schema["required"]))
+
+    def test_prediction_readiness_meets_design_but_never_authorizes_service(self):
+        result = audit_submissions(
+            self._readiness_submissions(), round_number=1,
+            objectives=["accuracy", "latency", "throughput"])
+        self.assertEqual(result["status"],
+                         "DESIGN_TARGET_MET_VALIDATION_REQUIRED")
+        self.assertFalse(result["predictive_service_authorized"])
+        self.assertEqual(result["summary"], {
+            "observed_configurations": 6,
+            "configurations_meeting_objective_targets": 6,
+            "distinct_models": 3,
+            "distinct_serving_environments": 6,
+            "observed_paired_edges": 6,
+            "eligible_paired_edges": 6,
+            "model_profiles_repeated_across_environments": 3,
+        })
+        self.assertTrue(all(row["status"] == "PASS"
+                            for row in result["gates"][:5]))
+        self.assertEqual(
+            [row["status"] for row in result["gates"][5:]],
+            ["UNAVAILABLE", "REQUIRED", "REQUIRED"])
+        self.assertEqual(
+            result["remaining_external_gates"],
+            [row["name"] for row in result["gates"][5:]])
+        serialized = json.dumps(result)
+        self.assertNotIn("bundle_id", serialized)
+        self.assertNotIn("readiness-darwin", serialized)
+        rendered = render_prediction_readiness(result)
+        self.assertIn("Predictive service authorized: **false**", rendered)
+        self.assertIn("does not authorize a predictive service", rendered)
+
+    def test_prediction_readiness_collapses_repeats_and_keeps_metric_gaps(self):
+        from llm_hardtest.public_results import _bundle_id
+        submissions = self._readiness_submissions()
+        for payload in submissions:
+            balanced = next(model for model in payload["models"]
+                            if model["public_name"] == "org/balanced")
+            for item in balanced["rounds"]["1"]["items"]:
+                item["wall_seconds"] = None
+                item["tokens"] = None
+            payload["models"] += json.loads(json.dumps(payload["models"] * 20))
+            body = {key: value for key, value in payload.items() if key != "bundle_id"}
+            payload["bundle_id"] = _bundle_id(body)
+            validate_public_result(payload)
+        result = audit_submissions(
+            submissions, round_number=1, objectives=["accuracy", "latency"],
+            minimum_configurations=6)
+        self.assertEqual(result["status"], "EVIDENCE_GAPS")
+        self.assertEqual(result["summary"]["observed_configurations"], 6)
+        self.assertEqual(
+            result["summary"]["configurations_meeting_objective_targets"], 4)
+        balanced_rows = [row for row in result["configurations"]
+                         if row["model"] == "org/balanced"]
+        self.assertEqual(len(balanced_rows), 2)
+        self.assertTrue(all(row["observed_independent_bundles"] == {
+            "accuracy": 10, "latency": 0} for row in balanced_rows))
+        self.assertTrue(all(row["bundle_deficits"] == {
+            "accuracy": 0, "latency": 10} for row in balanced_rows))
+
+        one_bundle = self._recommendation_submissions(1)
+        second_environment = json.loads(json.dumps(one_bundle[0]["models"][0]))
+        second_environment["public_metadata"]["memory_gb"] = 12
+        one_bundle[0]["models"].append(second_environment)
+        body = {key: value for key, value in one_bundle[0].items()
+                if key != "bundle_id"}
+        one_bundle[0]["bundle_id"] = _bundle_id(body)
+        validate_public_result(one_bundle[0])
+        sparse_bridge = audit_submissions(one_bundle, round_number=1)
+        self.assertEqual(
+            sparse_bridge["summary"][
+                "model_profiles_repeated_across_environments"], 0)
+        self.assertFalse(sparse_bridge["environment_bridges"])
+
+        profile_split = self._readiness_submissions(5)
+        for payload in profile_split:
+            if payload["environment"]["os"] != "Linux":
+                continue
+            balanced = next(model for model in payload["models"]
+                            if model["public_name"] == "org/balanced")
+            balanced["public_metadata"]["quantization"] = "Q8_0"
+            body = {key: value for key, value in payload.items()
+                    if key != "bundle_id"}
+            payload["bundle_id"] = _bundle_id(body)
+            validate_public_result(payload)
+        split_result = audit_submissions(
+            profile_split, round_number=1, target_bundles=5)
+        self.assertEqual(
+            split_result["summary"][
+                "model_profiles_repeated_across_environments"], 2)
+        self.assertNotIn(
+            "org/balanced",
+            {row["model"] for row in split_result["environment_bridges"]})
+
+    def test_prediction_readiness_json_database_and_cli_are_identical(self):
+        submissions = self._readiness_submissions(5)
+        arguments = {
+            "round_number": 1,
+            "objectives": ["accuracy", "completion", "latency", "throughput"],
+            "target_bundles": 5,
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp) / "submissions"
+            directory.mkdir()
+            for payload in submissions:
+                digest = payload["bundle_id"].removeprefix("sha256:")
+                (directory / f"{digest}.json").write_text(
+                    submission_document(payload), encoding="utf-8")
+            database = Path(tmp) / "community.sqlite3"
+            build_database(directory, database)
+            source = audit_submissions(submissions, **arguments)
+            materialized = readiness_database(database, **arguments)
+            source_stdout = io.StringIO()
+            database_stdout = io.StringIO()
+            cli_arguments = [
+                "--round", "1", "--target-bundles", "5",
+                "--objective", "accuracy", "--objective", "completion",
+                "--objective", "latency", "--objective", "throughput", "--json",
+            ]
+            with patch("sys.stdout", source_stdout):
+                self.assertEqual(main([
+                    "results", "readiness", str(directory), *cli_arguments]), 0)
+            with patch("sys.stdout", database_stdout):
+                self.assertEqual(main([
+                    "results", "readiness", "--database", str(database),
+                    *cli_arguments]), 0)
+            with patch("sys.stderr", io.StringIO()):
+                self.assertEqual(main([
+                    "results", "readiness", str(directory), "--database",
+                    str(database), *cli_arguments]), 2)
+            occupied = Path(tmp) / "occupied.json"
+            occupied.write_text("preserve", encoding="utf-8")
+            with patch("sys.stderr", io.StringIO()):
+                self.assertEqual(main([
+                    "results", "readiness", str(directory), *cli_arguments,
+                    "--output", str(occupied)]), 2)
+            self.assertEqual(occupied.read_text(encoding="utf-8"), "preserve")
+        self.assertEqual(materialized, source)
+        self.assertEqual(database_stdout.getvalue(), source_stdout.getvalue())
+
+    def test_prediction_readiness_states_and_validation(self):
+        submissions = self._recommendation_submissions(1)
+        empty = audit_prediction_readiness([], round_number=1)
+        self.assertEqual(empty["status"], "NO_OBSERVATIONS")
+        self.assertFalse(empty["predictive_service_authorized"])
+        mixed = json.loads(json.dumps(self._recommendation_submissions(2)))
+        from llm_hardtest.public_results import _bundle_id
+        mixed[1]["benchmark"]["packs"]["1"] = "sha256:" + "b" * 64
+        body = {key: value for key, value in mixed[1].items() if key != "bundle_id"}
+        mixed[1]["bundle_id"] = _bundle_id(body)
+        validate_public_result(mixed[1])
+        self.assertEqual(audit_submissions(
+            mixed, round_number=1)["status"], "PACK_REQUIRED")
+        with self.assertRaisesRegex(ValueError, "must be a list"):
+            audit_submissions(
+                submissions, round_number=1, objectives="accuracy")
+        with self.assertRaisesRegex(ValueError, "unique values"):
+            audit_submissions(
+                submissions, round_number=1,
+                objectives=["accuracy", "accuracy"])
+        for key, value, message in (
+                ("target_bundles", 4, "target bundles"),
+                ("minimum_configurations", 1, "minimum configurations"),
+                ("minimum_environments", True, "minimum environments"),
+                ("minimum_paired_edges", 0, "minimum paired edges"),
+                ("minimum_environment_bridges", 0,
+                 "minimum environment bridges")):
+            with self.subTest(key=key), self.assertRaisesRegex(ValueError, message):
+                audit_submissions(
+                    submissions, round_number=1, **{key: value})
+        with self.assertRaisesRegex(ValueError, "round must"):
+            audit_submissions(submissions, round_number=5)
+        with self.assertRaisesRegex(ValueError, "exact sha256"):
+            audit_submissions(submissions, round_number=1, pack="latest")
+
+    def test_published_prediction_readiness_schema_matches_runtime_contract(self):
+        schema = json.loads((
+            repo_root() / "results/prediction-readiness-schema-v1.json").read_text(
+                encoding="utf-8"))
+        result = audit_submissions(
+            self._readiness_submissions(5), round_number=1, target_bundles=5,
+            objectives=["accuracy", "latency"])
+        self.assertEqual(set(result), set(schema["properties"]))
+        self.assertEqual(set(result), set(schema["required"]))
+        for name, definition in (
+                ("configuration", result["configurations"][0]),
+                ("pairedEdge", result["paired_edges"][0]),
+                ("servingEnvironment", result["serving_environments"][0]),
+                ("environmentBridge", result["environment_bridges"][0]),
+                ("gate", result["gates"][0])):
+            self.assertEqual(set(definition), set(schema["$defs"][name]["properties"]))
+            self.assertEqual(set(definition), set(schema["$defs"][name]["required"]))
 
     def test_unobserved_bundles_do_not_unlock_a_baseline(self):
         with tempfile.TemporaryDirectory() as tmp:

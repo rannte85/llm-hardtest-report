@@ -28,11 +28,14 @@ from .community_results import (
 )
 from .community_database import (
     build_database, catalog_database, compare_database, plan_database,
-    recommend_database,
+    readiness_database, recommend_database,
 )
 from .serving_catalog import catalog_submissions, render_catalog
 from .collection_plan import plan_submissions, render_collection_plan
 from .paired_comparison import compare_submissions, render_paired_comparison
+from .prediction_readiness import (
+    audit_submissions, render_prediction_readiness,
+)
 from .calibration import write_analysis
 from .round5 import run_pilot
 from .pilot_analysis import write_pilot_analysis
@@ -483,6 +486,35 @@ def main(argv=None) -> int:
         "--json", action="store_true", help="emit machine-readable JSON")
     p_results_compare.add_argument(
         "--output", help="write the paired comparison instead of stdout")
+    p_results_readiness = results_commands.add_parser(
+        "readiness", help="audit evidence design before predictive service fitting")
+    p_results_readiness.add_argument(
+        "directory", nargs="?",
+        help="public submission directory (default: results/submissions)")
+    p_results_readiness.add_argument(
+        "--database", help="query a normalized SQLite database instead of JSON")
+    p_results_readiness.add_argument("--round", type=int, required=True)
+    p_results_readiness.add_argument(
+        "--pack", help="exact sha256 pack fingerprint; required when multiple exist")
+    p_results_readiness.add_argument(
+        "--objective", action="append",
+        choices=("accuracy", "completion", "latency", "throughput"),
+        help="evidence objective; repeat for multiple axes (default: accuracy)")
+    p_results_readiness.add_argument(
+        "--target-bundles", type=int, default=10,
+        help="independent bundles per configuration/objective (default: 10)")
+    p_results_readiness.add_argument(
+        "--minimum-configurations", type=int, default=3)
+    p_results_readiness.add_argument(
+        "--minimum-environments", type=int, default=2)
+    p_results_readiness.add_argument(
+        "--minimum-paired-edges", type=int, default=1)
+    p_results_readiness.add_argument(
+        "--minimum-environment-bridges", type=int, default=1)
+    p_results_readiness.add_argument(
+        "--json", action="store_true", help="emit machine-readable JSON")
+    p_results_readiness.add_argument(
+        "--output", help="write the readiness audit instead of stdout")
     p_results_pilots = results_commands.add_parser(
         "pilots", help="validate or aggregate voluntary Round 5 pilot summaries")
     pilot_result_commands = p_results_pilots.add_subparsers(
@@ -766,6 +798,41 @@ def main(argv=None) -> int:
                     output.parent.mkdir(parents=True, exist_ok=True)
                     output.write_text(document, encoding="utf-8")
                     print(f"Paired comparison: {output}")
+                else:
+                    print(document, end="")
+                return 0
+            if args.results_command == "readiness":
+                if args.database and args.directory is not None:
+                    raise ValueError(
+                        "readiness accepts either a submission directory or --database")
+                readiness_arguments = {
+                    "round_number": args.round,
+                    "pack": args.pack,
+                    "objectives": args.objective,
+                    "target_bundles": args.target_bundles,
+                    "minimum_configurations": args.minimum_configurations,
+                    "minimum_environments": args.minimum_environments,
+                    "minimum_paired_edges": args.minimum_paired_edges,
+                    "minimum_environment_bridges": args.minimum_environment_bridges,
+                }
+                if args.database:
+                    result = readiness_database(
+                        Path(args.database), **readiness_arguments)
+                else:
+                    submissions = load_submission_directory(directory)
+                    result = audit_submissions(
+                        submissions, **readiness_arguments)
+                document = (json.dumps(result, indent=2, sort_keys=True,
+                                       ensure_ascii=False) + "\n"
+                            if args.json else render_prediction_readiness(result))
+                if args.output:
+                    output = Path(args.output)
+                    if output.exists() or output.is_symlink():
+                        raise ValueError(
+                            f"refusing to overwrite existing readiness audit: {output}")
+                    output.parent.mkdir(parents=True, exist_ok=True)
+                    output.write_text(document, encoding="utf-8")
+                    print(f"Readiness audit: {output}")
                 else:
                     print(document, end="")
                 return 0

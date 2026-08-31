@@ -657,3 +657,40 @@ Acceptance checks:
   comparisons and reject ambiguous sources, invalid IDs, same-side IDs, and pack drift.
 - The public schema matches every runtime field, no output includes bundle identity,
   and installed-package CI exercises an empty verified database.
+
+## Phase 24 — Predictive-service readiness boundary
+
+Goal: make the gap between descriptive evidence and a deployable serving predictor
+executable, so sparse or confounded public data cannot silently authorize model fitting.
+
+Deliverables:
+
+1. Audit independent bundle coverage separately for every selected objective and exact
+   configuration against an explicit 5–1000 operator target.
+2. Measure exact-configuration diversity, declared serving-environment diversity, and
+   configuration-pair overlap with five shared bundles on every selected objective.
+3. Define an exact model profile from model name, transport, generation settings,
+   revision, format, quantization, and parameter count; count an environment bridge
+   only when that profile has five independent bundles in at least two environments.
+4. Publish deterministic JSON/SQLite adapters, CLI, Markdown report, and schema with
+   explicit empty, pack-ambiguous, evidence-gap, and design-target-met states.
+5. Keep prediction authorization false and name temporal holdout, maintainer
+   abuse/implausibility review, and future pack/server drift monitoring as external
+   gates that the current public schema cannot prove.
+
+Acceptance checks:
+
+- Three profiles observed in ten Darwin and ten Linux bundles produce six exact
+  configurations, six eligible within-environment paired edges, and three qualified
+  environment bridges, but still do not authorize a predictive service.
+- Missing timing on one profile reduces only its latency coverage; duplicating each
+  model row twenty times cannot change any independent count.
+- One bundle containing two runtime metadata variants cannot create an environment
+  bridge, and five differently quantized observations do not bridge an otherwise
+  identical public model name.
+- Canonical JSON and verified SQLite, including CLI paths, produce byte-identical
+  audits for all four objectives and reject simultaneous sources.
+- Multiple packs require one exact fingerprint; invalid objective lists and every
+  threshold boundary fail cleanly without output mutation.
+- Runtime fields exactly match the public schema, outputs contain no bundle/contributor
+  identity, and source plus installed-package CI exercise an empty database audit.

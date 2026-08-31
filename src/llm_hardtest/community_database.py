@@ -18,6 +18,7 @@ from .community_results import (
 from .serving_catalog import build_catalog
 from .collection_plan import build_collection_plan
 from .paired_comparison import compare_paired_observations
+from .prediction_readiness import audit_prediction_readiness
 from .public_results import (
     FINGERPRINT, MODEL_PARAMETER_FIELDS, PUBLIC_ITEM_STATUSES,
     PUBLIC_METADATA_FIELDS, PUBLIC_METADATA_NUMERIC_FIELDS, _public_text,
@@ -737,6 +738,12 @@ def plan_database(path: Path, **kwargs) -> dict:
 def compare_database(path: Path, **kwargs) -> dict:
     """Run a paired comparison directly from a verified SQLite snapshot."""
     return compare_paired_observations(
+        paired_database_observations(load_database(path)), **kwargs)
+
+
+def readiness_database(path: Path, **kwargs) -> dict:
+    """Audit predictive-service evidence design from a verified SQLite snapshot."""
+    return audit_prediction_readiness(
         paired_database_observations(load_database(path)), **kwargs)
 
 

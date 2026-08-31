@@ -15,6 +15,8 @@ project does not automatically collect telemetry or local campaign data.
   acquisition-plan response.
 - `paired-comparison-schema-v1.json` documents cluster-paired head-to-head comparison
   of two exact observed serving configurations.
+- `prediction-readiness-schema-v1.json` documents the non-authorizing evidence-design
+  audit required before any predictive serving model is fitted.
 - `database-schema-v2.sql` documents the current normalized SQLite observation schema.
 - `database-schema-v1.sql` documents the v2.18 generated-database format; rebuild it
   with the current CLI before querying.
@@ -43,6 +45,9 @@ llm-hardtest results compare --round 1 \
   --left-configuration 0123456789 --right-configuration abcdef0123 --json
 llm-hardtest results compare --database results/community.sqlite3 --round 1 \
   --left-configuration 0123456789 --right-configuration abcdef0123 --json
+llm-hardtest results readiness --round 1 --objective accuracy --json
+llm-hardtest results readiness --database results/community.sqlite3 \
+  --round 1 --objective accuracy --json
 llm-hardtest results pilots validate
 llm-hardtest results pilots build
 llm-hardtest results pilots build --check
@@ -84,3 +89,10 @@ Repeated runs collapse within each bundle before paired effects, bootstrap inter
 and sign-flip tests are calculated. Holm correction covers every tested objective;
 directional results require the interval and adjusted p-value to agree. The result
 contains configuration identities and counts but no contributing bundle IDs.
+
+`results readiness` evaluates independent objective coverage, configuration and
+serving-environment diversity, paired overlap, and exact model-profile repetition
+across environments. Repeated rows cannot inflate any count; every environment bridge
+requires five independent bundles. Passing its operator targets still leaves temporal
+holdout, abuse/implausibility review, and drift monitoring unresolved, so schema v1
+always returns `predictive_service_authorized: false` and never predicts a missing row.

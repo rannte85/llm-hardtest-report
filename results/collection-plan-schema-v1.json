@@ -1,0 +1,159 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rannte85/llm-hardtest-report/blob/main/results/collection-plan-schema-v1.json",
+  "title": "LLM Hardtest independent bundle collection plan v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "kind", "round", "pack", "available_packs", "constraints",
+    "objectives", "minimum_recommendation_bundles", "target_independent_bundles",
+    "status", "reason", "summary", "configurations"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "kind": {"const": "independent_bundle_collection_plan"},
+    "round": {"type": "integer", "minimum": 1, "maximum": 4},
+    "pack": {"oneOf": [{"$ref": "#/$defs/pack"}, {"type": "null"}]},
+    "available_packs": {
+      "type": "array", "uniqueItems": true,
+      "items": {"$ref": "#/$defs/pack"}
+    },
+    "constraints": {"$ref": "#/$defs/constraints"},
+    "objectives": {
+      "type": "array", "minItems": 1, "uniqueItems": true,
+      "items": {"$ref": "#/$defs/objective"}
+    },
+    "minimum_recommendation_bundles": {"const": 5},
+    "target_independent_bundles": {"type": "integer", "minimum": 5, "maximum": 1000},
+    "status": {
+      "enum": ["PACK_REQUIRED", "NO_OBSERVATIONS", "NO_MATCH", "COLLECTION_NEEDED", "TARGET_MET"]
+    },
+    "reason": {"type": "string", "minLength": 1, "maxLength": 240},
+    "summary": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "matched_configurations", "ready_configurations",
+        "configurations_needing_collection", "minimum_additional_complete_bundles"
+      ],
+      "properties": {
+        "matched_configurations": {"type": "integer", "minimum": 0},
+        "ready_configurations": {"type": "integer", "minimum": 0},
+        "configurations_needing_collection": {"type": "integer", "minimum": 0},
+        "minimum_additional_complete_bundles": {"type": "integer", "minimum": 0}
+      }
+    },
+    "configurations": {
+      "type": "array", "items": {"$ref": "#/$defs/configurationPlan"}
+    }
+  },
+  "$defs": {
+    "safeText": {"type": "string", "minLength": 1, "maxLength": 160},
+    "pack": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "objective": {"enum": ["accuracy", "completion", "latency", "throughput"]},
+    "objectiveCounts": {
+      "type": "object", "minProperties": 1, "additionalProperties": false,
+      "properties": {
+        "accuracy": {"type": "integer", "minimum": 0},
+        "completion": {"type": "integer", "minimum": 0},
+        "latency": {"type": "integer", "minimum": 0},
+        "throughput": {"type": "integer", "minimum": 0}
+      }
+    },
+    "constraints": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "configuration": {"type": "string", "pattern": "^[0-9a-f]{10}$"},
+        "model": {"$ref": "#/$defs/safeText"},
+        "os": {"$ref": "#/$defs/safeText"},
+        "architecture": {"$ref": "#/$defs/safeText"},
+        "python": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+$"},
+        "transport": {"enum": ["openai_compat", "codex_cli"]},
+        "reasoning_effort": {"$ref": "#/$defs/safeText"},
+        "context_window": {"type": "number"},
+        "max_tokens": {"type": "number"},
+        "temperature": {"type": "number"},
+        "top_p": {"type": "number"},
+        "top_k": {"type": "number"},
+        "min_p": {"type": "number"},
+        "model_revision": {"$ref": "#/$defs/safeText"},
+        "quantization": {"$ref": "#/$defs/safeText"},
+        "model_format": {"$ref": "#/$defs/safeText"},
+        "parameter_count_b": {"type": "number"},
+        "server": {"$ref": "#/$defs/safeText"},
+        "server_version": {"$ref": "#/$defs/safeText"},
+        "accelerator": {"$ref": "#/$defs/safeText"},
+        "accelerator_count": {"type": "number"},
+        "memory_gb": {"type": "number"},
+        "system_memory_gb": {"type": "number"},
+        "max_memory_gb": {"type": "number", "exclusiveMinimum": 0},
+        "max_system_memory_gb": {"type": "number", "exclusiveMinimum": 0},
+        "max_parameter_count_b": {"type": "number", "exclusiveMinimum": 0}
+      }
+    },
+    "environment": {
+      "type": "object", "additionalProperties": false,
+      "required": ["os", "architecture", "python"],
+      "properties": {
+        "os": {"enum": ["Linux", "Darwin", "Windows", "Other"]},
+        "architecture": {"type": "string", "minLength": 1, "maxLength": 32},
+        "python": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+$"}
+      }
+    },
+    "parameters": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "reasoning_effort": {"type": "string", "minLength": 1, "maxLength": 32},
+        "context_window": {"type": "number"},
+        "max_tokens": {"type": "number"},
+        "temperature": {"type": "number"},
+        "top_p": {"type": "number"},
+        "top_k": {"type": "number"},
+        "min_p": {"type": "number"}
+      }
+    },
+    "publicMetadata": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "model_revision": {"$ref": "#/$defs/safeText"},
+        "quantization": {"$ref": "#/$defs/safeText"},
+        "model_format": {"$ref": "#/$defs/safeText"},
+        "parameter_count_b": {"type": "number", "exclusiveMinimum": 0},
+        "server": {"$ref": "#/$defs/safeText"},
+        "server_version": {"$ref": "#/$defs/safeText"},
+        "accelerator": {"$ref": "#/$defs/safeText"},
+        "accelerator_count": {"type": "number", "exclusiveMinimum": 0},
+        "memory_gb": {"type": "number", "exclusiveMinimum": 0},
+        "system_memory_gb": {"type": "number", "exclusiveMinimum": 0}
+      }
+    },
+    "configurationPlan": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "configuration", "model", "environment", "transport", "parameters",
+        "public_metadata", "observed_independent_bundles", "bundle_deficits",
+        "accuracy_prerequisite", "minimum_additional_complete_bundles", "ready"
+      ],
+      "properties": {
+        "configuration": {"type": "string", "pattern": "^[0-9a-f]{10}$"},
+        "model": {"$ref": "#/$defs/safeText"},
+        "environment": {"$ref": "#/$defs/environment"},
+        "transport": {"enum": ["openai_compat", "codex_cli"]},
+        "parameters": {"$ref": "#/$defs/parameters"},
+        "public_metadata": {"$ref": "#/$defs/publicMetadata"},
+        "observed_independent_bundles": {"$ref": "#/$defs/objectiveCounts"},
+        "bundle_deficits": {"$ref": "#/$defs/objectiveCounts"},
+        "accuracy_prerequisite": {
+          "type": "object", "additionalProperties": false,
+          "required": ["observed_independent_bundles", "minimum_required_bundles", "deficit"],
+          "properties": {
+            "observed_independent_bundles": {"type": "integer", "minimum": 0},
+            "minimum_required_bundles": {"const": 5},
+            "deficit": {"type": "integer", "minimum": 0, "maximum": 5}
+          }
+        },
+        "minimum_additional_complete_bundles": {"type": "integer", "minimum": 0},
+        "ready": {"type": "boolean"}
+      }
+    }
+  }
+}

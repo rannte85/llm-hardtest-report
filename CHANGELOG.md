@@ -5,6 +5,23 @@ out separately from harness features.
 
 ## Unreleased
 
+## 2.22.0 — 2026-09-01
+
+- Added `results plan` to calculate exact per-objective independent-bundle deficits
+  for every matching observed configuration and a user-selected target of 5–1000.
+- Reused the full recommendation query contract, including exact pack selection, all
+  23 identity coordinates, three capacity ceilings, and case/numeric matching rules.
+- Added separate accuracy, completion, latency, and throughput observation counts so
+  partial performance data cannot be treated as a complete contribution.
+- Added an explicit five-scored-bundle accuracy prerequisite so completion-only data
+  cannot incorrectly produce a target-met collection plan.
+- Added identical canonical-JSON and verified-SQLite planning paths, human Markdown,
+  machine-readable output, and `collection-plan-schema-v1.json`.
+- Added sparse, target-met, partial-metric, high-target, multi-pack, privacy, invalid-
+  target, conflicting-source, schema, CLI, and cross-adapter controls.
+- Kept canonical benchmark content, graders, public result schema v2, SQLite schema v2,
+  catalog schema v2, and recommendation schema v2 unchanged.
+
 ## 2.21.0 — 2026-09-01
 
 - Made every allowlisted configuration-identity coordinate discoverable and exactly

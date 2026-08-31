@@ -161,3 +161,24 @@ coordinate. Text comparisons are case-insensitive except the lowercase stable
 configuration ID; numeric settings compare by value, so SQLite's `8`/`8.0` affinity is
 not a false mismatch. Capacity ceilings remain distinct from exact memory and model-size
 filters. Missing coordinates never match.
+
+## Plan evidence acquisition
+
+The verified database can also answer which exact configurations need more independent
+complete bundles before a selected evidence target is met:
+
+```bash
+llm-hardtest results plan \
+  --database results/community.sqlite3 \
+  --round 1 --pack sha256:<exact-pack-fingerprint> \
+  --objective accuracy --objective throughput \
+  --target-bundles 10 --json
+```
+
+The same command against canonical JSON produces an identical response. It counts
+accuracy, completion, latency, and throughput independently, because item timing or
+token data may be absent even when a score exists. Per configuration, the largest
+selected-objective deficit is the minimum number of additional complete bundles; the
+summary adds those lower bounds. The planner reads the already-verified snapshot,
+and separately enforces the recommender's five-scored-bundle accuracy prerequisite.
+It emits no bundle IDs and does not alter either the database or source submissions.

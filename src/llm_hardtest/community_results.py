@@ -192,6 +192,8 @@ def aggregate_submissions(submissions: list[dict]) -> list[dict]:
             **{key: value for key, value in totals.items() if not key.startswith("_")},
             "observed_submissions": len(rates),
             "bundle_pass_rate_interval95": _cluster_interval(rates),
+            "bundle_completion_rate_observed_submissions": len(
+                totals.get("_bundle_completion_rates", [])),
             "bundle_completion_rate_interval95": _cluster_interval(
                 totals.get("_bundle_completion_rates", [])),
             "bundle_item_wall_p50_seconds": _percentile(

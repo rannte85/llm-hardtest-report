@@ -4,12 +4,12 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-**Current release: 2.21.0** — connects every allowlisted configuration coordinate to
-both discovery and recommendation filters. Users and future APIs can select a stable
-configuration ID or any exact model, environment/Python, generation, revision, server,
-quantization, accelerator, and memory coordinate while retaining separate capacity
-ceilings. Catalog and recommendation schemas advance to v2; canonical JSON and verified
-SQLite remain identical and omit bundle/contributor identity. Canonical Round 1–4
+**Current release: 2.22.0** — adds a deterministic evidence-collection planner. For
+each exact observed model/environment/serving configuration it reports independent
+bundle counts and deficits for accuracy, completion, latency, and throughput, then
+computes the minimum number of complete new bundles needed for a chosen target. The
+planner accepts every serving constraint and produces identical results from canonical
+JSON or verified SQLite without exposing contributor identity. Canonical Round 1–4
 questions, grading contracts, public submission schema, and database schema are unchanged.
 
 LLM Hardtest Report is a local-first command-line benchmark for comparing language
@@ -337,6 +337,34 @@ This command produces descriptive candidates, not hardware-fit or out-of-sample
 predictions. A reported memory value describes the tested environment; it does not
 prove the model needs that amount or will run on a different device. See the
 [community data model](docs/COMMUNITY_DATA_MODEL.md) for promotion gates.
+
+## Plan the next independent submissions
+
+Measure the evidence gap before asking contributors to rerun every configuration:
+
+```bash
+llm-hardtest results plan \
+  --database results/community.sqlite3 \
+  --round 1 \
+  --pack sha256:<full-pack-fingerprint> \
+  --server "Example Server" \
+  --max-memory-gb 24 \
+  --objective accuracy \
+  --objective latency \
+  --target-bundles 10
+```
+
+The result follows
+[`results/collection-plan-schema-v1.json`](results/collection-plan-schema-v1.json).
+Each objective has its own observed count and deficit because a bundle can contain
+scores without latency or token measurements. The reported total is a lower bound:
+it assumes each new independent bundle contains every selected metric for one exact
+configuration. Repeated runs in one bundle never reduce the deficit more than once.
+The plan also shows the recommender's five-scored-bundle accuracy prerequisite even
+when only completion, latency, or throughput is selected.
+`PACK_REQUIRED`, `NO_OBSERVATIONS`, `NO_MATCH`, `COLLECTION_NEEDED`, and `TARGET_MET`
+are distinct machine-readable states. The command is read-only unless `--output` is
+provided and never predicts an unobserved setup.
 
 ## Live terminal dashboard
 

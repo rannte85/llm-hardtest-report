@@ -191,6 +191,39 @@ filters cover every allowlisted configuration coordinate; `max-memory-gb`,
 `max-system-memory-gb`, and `max-parameter-count-b` remain ceiling filters rather than
 exact settings.
 
+## Evidence collection plan
+
+Use `results plan` to turn sparse observed configurations into a concrete, bounded
+request for additional independent contributions:
+
+```bash
+llm-hardtest results plan results/submissions \
+  --round 1 --pack sha256:<full-pack-fingerprint> \
+  --objective accuracy --objective latency \
+  --target-bundles 10 --json
+
+llm-hardtest results plan --database results/community.sqlite3 \
+  --round 1 --pack sha256:<full-pack-fingerprint> \
+  --objective accuracy --objective latency \
+  --target-bundles 10 --json
+```
+
+Both sources return the same `results/collection-plan-schema-v1.json` response. For
+each exact matching configuration, the plan keeps accuracy, completion, latency, and
+throughput bundle counts separate and subtracts them from the selected target. Its
+minimum-additional total is the maximum objective deficit per configuration, summed
+across configurations. This is a lower bound assuming that every new bundle contains
+all selected measurements. Partial bundles reduce only the deficits they observe.
+Because every descriptive recommendation requires a scored accuracy baseline, the
+plan separately reports the five-bundle accuracy prerequisite even when accuracy is
+not among the selected target objectives.
+
+The planner uses the accepted bundle—not attempts, model rows, or runs—as the
+independent unit. It supports all recommendation constraints, does not reveal bundle
+or contributor IDs, makes no network request, and never asks for data about an
+unobserved configuration. Pack ambiguity, empty datasets, exact-filter misses, needed
+collection, and completed targets have distinct statuses.
+
 ## Round 5 public pilot summaries
 
 Round 5 submissions use `results/pilot-schema-v1.json`, live under `results/pilots/`,

@@ -16,6 +16,7 @@ from .community_results import (
     load_submission_directory,
 )
 from .serving_catalog import build_catalog
+from .collection_plan import build_collection_plan
 from .public_results import (
     FINGERPRINT, MODEL_PARAMETER_FIELDS, PUBLIC_ITEM_STATUSES,
     PUBLIC_METADATA_FIELDS, PUBLIC_METADATA_NUMERIC_FIELDS, _public_text,
@@ -627,6 +628,8 @@ def aggregate_database(rows: dict[str, list[tuple]]) -> list[dict]:
                if not key.startswith("_")},
             "observed_submissions": len(rates),
             "bundle_pass_rate_interval95": _cluster_interval(rates),
+            "bundle_completion_rate_observed_submissions": len(
+                totals["_bundle_completion_rates"]),
             "bundle_completion_rate_interval95": _cluster_interval(
                 totals["_bundle_completion_rates"]),
             "bundle_item_wall_p50_seconds": _percentile(
@@ -660,6 +663,11 @@ def catalog_database(path: Path, *, round_number: int | None = None,
     """Build the serving-space catalog directly from a verified SQLite snapshot."""
     return build_catalog(
         aggregate_database(load_database(path)), round_number=round_number, pack=pack)
+
+
+def plan_database(path: Path, **kwargs) -> dict:
+    """Build an acquisition plan directly from a verified SQLite snapshot."""
+    return build_collection_plan(aggregate_database(load_database(path)), **kwargs)
 
 
 def build_database(directory: Path, output: Path, *, check: bool = False) -> dict:

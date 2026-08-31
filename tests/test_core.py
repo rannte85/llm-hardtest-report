@@ -39,10 +39,14 @@ from llm_hardtest.community_results import (
 )
 from llm_hardtest.community_database import (
     SCHEMA_SQL, _content_fingerprint, aggregate_database, build_database,
-    catalog_database, load_database, normalize_submissions, recommend_database,
+    catalog_database, load_database, normalize_submissions, plan_database,
+    recommend_database,
 )
 from llm_hardtest.serving_catalog import (
     build_catalog, catalog_submissions, render_catalog,
+)
+from llm_hardtest.collection_plan import (
+    build_collection_plan, plan_submissions, render_collection_plan,
 )
 from llm_hardtest.calibration import (
     _configuration_comparisons, _configuration_item_coverage,
@@ -3359,6 +3363,175 @@ class PublicResultTests(unittest.TestCase):
         result = json.loads(stdout.getvalue())
         self.assertEqual(result["status"], "DESCRIPTIVE_CANDIDATES")
         self.assertEqual(result["candidates"][0]["model"], "org/accurate")
+
+    def test_collection_plan_counts_independent_objective_deficits(self):
+        result = plan_submissions(
+            self._recommendation_submissions(1), round_number=1,
+            objectives=["accuracy", "completion", "latency", "throughput"])
+        self.assertEqual(result["schema_version"], 1)
+        self.assertEqual(result["status"], "COLLECTION_NEEDED")
+        self.assertEqual(result["summary"], {
+            "matched_configurations": 2,
+            "ready_configurations": 0,
+            "configurations_needing_collection": 2,
+            "minimum_additional_complete_bundles": 8,
+        })
+        for row in result["configurations"]:
+            self.assertEqual(row["observed_independent_bundles"], {
+                "accuracy": 1, "completion": 1, "latency": 1, "throughput": 1})
+            self.assertEqual(row["bundle_deficits"], {
+                "accuracy": 4, "completion": 4, "latency": 4, "throughput": 4})
+            self.assertEqual(row["accuracy_prerequisite"], {
+                "observed_independent_bundles": 1,
+                "minimum_required_bundles": 5, "deficit": 4})
+            self.assertEqual(row["minimum_additional_complete_bundles"], 4)
+            self.assertFalse(row["ready"])
+        document = render_collection_plan(result)
+        self.assertIn("lower bound", document)
+        self.assertIn("Repeated runs inside one bundle do not increase", document)
+        self.assertNotIn("bundle_id", json.dumps(result))
+        self.assertNotIn("recommendation-control", json.dumps(result))
+
+        hostile = json.loads(json.dumps(result))
+        hostile["configurations"][0]["model"] = "org/model|injected\nrow"
+        hostile_document = render_collection_plan(hostile)
+        self.assertIn("org/model\\|injected row", hostile_document)
+
+    def test_collection_plan_handles_partial_metrics_and_higher_targets(self):
+        submissions = self._recommendation_submissions()
+        from llm_hardtest.public_results import _bundle_id
+        for model in submissions[-1]["models"]:
+            for item in model["rounds"]["1"]["items"]:
+                item["wall_seconds"] = None
+                item["tokens"] = None
+        body = {key: value for key, value in submissions[-1].items()
+                if key != "bundle_id"}
+        submissions[-1]["bundle_id"] = _bundle_id(body)
+        validate_public_result(submissions[-1])
+        result = plan_submissions(
+            submissions, round_number=1,
+            objectives=["accuracy", "latency", "throughput"])
+        self.assertEqual(result["status"], "COLLECTION_NEEDED")
+        self.assertEqual(result["summary"]["minimum_additional_complete_bundles"], 2)
+        for row in result["configurations"]:
+            self.assertEqual(row["observed_independent_bundles"], {
+                "accuracy": 5, "latency": 4, "throughput": 4})
+            self.assertEqual(row["bundle_deficits"], {
+                "accuracy": 0, "latency": 1, "throughput": 1})
+        higher = plan_submissions(
+            submissions, round_number=1, objectives=["accuracy"], target_bundles=8)
+        self.assertEqual(higher["summary"]["minimum_additional_complete_bundles"], 6)
+
+    def test_collection_plan_never_ignores_accuracy_prerequisite(self):
+        submissions = self._recommendation_submissions()
+        from llm_hardtest.public_results import _bundle_id
+        for payload in submissions:
+            for model in payload["models"]:
+                result = model["rounds"]["1"]
+                result.update({"passed": 0, "total": 0, "incomplete": 10,
+                               "items": [{**item, "status": "INCOMPLETE"}
+                                         for item in result["items"]]})
+            body = {key: value for key, value in payload.items()
+                    if key != "bundle_id"}
+            payload["bundle_id"] = _bundle_id(body)
+            validate_public_result(payload)
+        plan = plan_submissions(
+            submissions, round_number=1, objectives=["completion"])
+        self.assertEqual(plan["status"], "COLLECTION_NEEDED")
+        for row in plan["configurations"]:
+            self.assertEqual(row["observed_independent_bundles"], {"completion": 5})
+            self.assertEqual(row["bundle_deficits"], {"completion": 0})
+            self.assertEqual(row["accuracy_prerequisite"]["deficit"], 5)
+            self.assertEqual(row["minimum_additional_complete_bundles"], 5)
+
+    def test_collection_plan_target_met_pack_and_validation_states(self):
+        submissions = self._recommendation_submissions()
+        ready = plan_submissions(
+            submissions, round_number=1,
+            objectives=["accuracy", "completion", "latency", "throughput"])
+        self.assertEqual(ready["status"], "TARGET_MET")
+        self.assertEqual(ready["summary"]["ready_configurations"], 2)
+        no_match = plan_submissions(
+            submissions, round_number=1, constraints={"server": "not-observed"})
+        self.assertEqual(no_match["status"], "NO_MATCH")
+        empty = build_collection_plan([], round_number=1)
+        self.assertEqual(empty["status"], "NO_OBSERVATIONS")
+        with self.assertRaisesRegex(ValueError, "integer from 5 to 1000"):
+            plan_submissions(submissions, round_number=1, target_bundles=4)
+        with self.assertRaisesRegex(ValueError, "integer from 5 to 1000"):
+            plan_submissions(submissions, round_number=1, target_bundles=True)
+
+        mixed = json.loads(json.dumps(submissions))
+        from llm_hardtest.public_results import _bundle_id
+        for index, payload in enumerate(mixed):
+            if index % 2:
+                payload["benchmark"]["packs"]["1"] = "sha256:" + "b" * 64
+                body = {key: value for key, value in payload.items()
+                        if key != "bundle_id"}
+                payload["bundle_id"] = _bundle_id(body)
+                validate_public_result(payload)
+        ambiguous = plan_submissions(mixed, round_number=1)
+        self.assertEqual(ambiguous["status"], "PACK_REQUIRED")
+        self.assertEqual(len(ambiguous["available_packs"]), 2)
+
+    def test_collection_plan_json_database_and_cli_are_identical(self):
+        submissions = self._full_coordinate_submissions(3)
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp) / "submissions"
+            directory.mkdir()
+            for payload in submissions:
+                digest = payload["bundle_id"].removeprefix("sha256:")
+                (directory / f"{digest}.json").write_text(
+                    submission_document(payload), encoding="utf-8")
+            database = Path(tmp) / "community.sqlite3"
+            build_database(directory, database)
+            direct = plan_submissions(
+                submissions, round_number=1,
+                constraints={"server": "example server", "context_window": 8192},
+                objectives=["accuracy", "latency"], target_bundles=7)
+            from_database = plan_database(
+                database, round_number=1,
+                constraints={"server": "example server", "context_window": 8192},
+                objectives=["accuracy", "latency"], target_bundles=7)
+            source_stdout = io.StringIO()
+            database_stdout = io.StringIO()
+            arguments = ["--round", "1", "--server", "EXAMPLE SERVER",
+                         "--context-window", "8192", "--objective", "accuracy",
+                         "--objective", "latency", "--target-bundles", "7", "--json"]
+            with patch("sys.stdout", source_stdout):
+                self.assertEqual(main(["results", "plan", str(directory), *arguments]), 0)
+            with patch("sys.stdout", database_stdout):
+                self.assertEqual(main([
+                    "results", "plan", "--database", str(database), *arguments]), 0)
+            with patch("sys.stderr", io.StringIO()):
+                self.assertEqual(main([
+                    "results", "plan", str(directory), "--database", str(database),
+                    *arguments]), 2)
+        self.assertEqual(direct, from_database)
+        self.assertEqual(source_stdout.getvalue(), database_stdout.getvalue())
+        self.assertEqual(json.loads(source_stdout.getvalue())["summary"],
+                         direct["summary"])
+
+    def test_published_collection_plan_schema_matches_runtime_contract(self):
+        schema = json.loads((
+            repo_root() / "results/collection-plan-schema-v1.json").read_text(
+                encoding="utf-8"))
+        result = plan_submissions(
+            self._full_coordinate_submissions(1), round_number=1,
+            objectives=["accuracy", "completion", "latency", "throughput"])
+        self.assertEqual(set(result), set(schema["properties"]))
+        self.assertEqual(set(result), set(schema["required"]))
+        configuration_schema = schema["$defs"]["configurationPlan"]
+        self.assertEqual(set(result["configurations"][0]),
+                         set(configuration_schema["properties"]))
+        self.assertEqual(set(result["configurations"][0]),
+                         set(configuration_schema["required"]))
+        constraint_properties = schema["$defs"]["constraints"]["properties"]
+        from llm_hardtest.community_results import RECOMMENDATION_CONSTRAINTS
+        self.assertEqual(set(constraint_properties), RECOMMENDATION_CONSTRAINTS)
+        objectives = set(schema["$defs"]["objective"]["enum"])
+        self.assertEqual(set(result["configurations"][0][
+            "observed_independent_bundles"]), objectives)
 
     def test_unobserved_bundles_do_not_unlock_a_baseline(self):
         with tempfile.TemporaryDirectory() as tmp:

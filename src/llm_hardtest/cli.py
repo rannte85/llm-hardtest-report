@@ -26,8 +26,11 @@ from .community_results import (
     build_index, build_pilot_index, load_pilot_submission_directory,
     load_submission_directory, recommend_configurations, render_recommendation,
 )
-from .community_database import build_database, catalog_database, recommend_database
+from .community_database import (
+    build_database, catalog_database, plan_database, recommend_database,
+)
 from .serving_catalog import catalog_submissions, render_catalog
+from .collection_plan import plan_submissions, render_collection_plan
 from .calibration import write_analysis
 from .round5 import run_pilot
 from .pilot_analysis import write_pilot_analysis
@@ -249,6 +252,65 @@ def selftest() -> int:
     return 0
 
 
+def _add_serving_constraints(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--configuration")
+    parser.add_argument("--model")
+    parser.add_argument("--os")
+    parser.add_argument("--architecture")
+    parser.add_argument("--python-version", dest="python_version")
+    parser.add_argument("--transport", choices=("openai_compat", "codex_cli"))
+    parser.add_argument("--reasoning-effort")
+    for name in ("context-window", "max-tokens", "temperature", "top-p", "top-k",
+                 "min-p"):
+        parser.add_argument("--" + name, type=float)
+    parser.add_argument("--model-revision")
+    parser.add_argument("--quantization")
+    parser.add_argument("--model-format")
+    parser.add_argument("--parameter-count-b", type=float)
+    parser.add_argument("--server")
+    parser.add_argument("--server-version")
+    parser.add_argument("--accelerator")
+    parser.add_argument("--accelerator-count", type=float)
+    parser.add_argument("--memory-gb", type=float)
+    parser.add_argument("--system-memory-gb", type=float)
+    parser.add_argument("--max-memory-gb", type=float)
+    parser.add_argument("--max-system-memory-gb", type=float)
+    parser.add_argument("--max-parameter-count-b", type=float)
+
+
+def _serving_constraints(args: argparse.Namespace) -> dict:
+    return {
+        key: value for key, value in {
+            "configuration": args.configuration,
+            "model": args.model,
+            "os": args.os,
+            "architecture": args.architecture,
+            "python": args.python_version,
+            "transport": args.transport,
+            "reasoning_effort": args.reasoning_effort,
+            "context_window": args.context_window,
+            "max_tokens": args.max_tokens,
+            "temperature": args.temperature,
+            "top_p": args.top_p,
+            "top_k": args.top_k,
+            "min_p": args.min_p,
+            "model_revision": args.model_revision,
+            "quantization": args.quantization,
+            "model_format": args.model_format,
+            "parameter_count_b": args.parameter_count_b,
+            "server": args.server,
+            "server_version": args.server_version,
+            "accelerator": args.accelerator,
+            "accelerator_count": args.accelerator_count,
+            "memory_gb": args.memory_gb,
+            "system_memory_gb": args.system_memory_gb,
+            "max_memory_gb": args.max_memory_gb,
+            "max_system_memory_gb": args.max_system_memory_gb,
+            "max_parameter_count_b": args.max_parameter_count_b,
+        }.items() if value is not None
+    }
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(
         prog=Path(sys.argv[0]).name,
@@ -372,37 +434,33 @@ def main(argv=None) -> int:
         choices=("accuracy", "completion", "latency", "throughput"),
         help="Pareto objective; repeat for multiple axes (default: accuracy)")
     p_results_recommend.add_argument("--accuracy-floor", type=float)
-    p_results_recommend.add_argument("--configuration")
-    p_results_recommend.add_argument("--model")
-    p_results_recommend.add_argument("--os")
-    p_results_recommend.add_argument("--architecture")
-    p_results_recommend.add_argument("--python-version", dest="python_version")
-    p_results_recommend.add_argument(
-        "--transport", choices=("openai_compat", "codex_cli"))
-    p_results_recommend.add_argument("--reasoning-effort")
-    p_results_recommend.add_argument("--context-window", type=float)
-    p_results_recommend.add_argument("--max-tokens", type=float)
-    p_results_recommend.add_argument("--temperature", type=float)
-    p_results_recommend.add_argument("--top-p", type=float)
-    p_results_recommend.add_argument("--top-k", type=float)
-    p_results_recommend.add_argument("--min-p", type=float)
-    p_results_recommend.add_argument("--model-revision")
-    p_results_recommend.add_argument("--quantization")
-    p_results_recommend.add_argument("--model-format")
-    p_results_recommend.add_argument("--parameter-count-b", type=float)
-    p_results_recommend.add_argument("--server")
-    p_results_recommend.add_argument("--server-version")
-    p_results_recommend.add_argument("--accelerator")
-    p_results_recommend.add_argument("--accelerator-count", type=float)
-    p_results_recommend.add_argument("--memory-gb", type=float)
-    p_results_recommend.add_argument("--system-memory-gb", type=float)
-    p_results_recommend.add_argument("--max-memory-gb", type=float)
-    p_results_recommend.add_argument("--max-system-memory-gb", type=float)
-    p_results_recommend.add_argument("--max-parameter-count-b", type=float)
+    _add_serving_constraints(p_results_recommend)
     p_results_recommend.add_argument(
         "--json", action="store_true", help="emit machine-readable JSON")
     p_results_recommend.add_argument(
         "--output", help="write the report to this path instead of stdout")
+    p_results_plan = results_commands.add_parser(
+        "plan", help="plan independent bundles needed for serving evidence")
+    p_results_plan.add_argument(
+        "directory", nargs="?",
+        help="public submission directory (default: results/submissions)")
+    p_results_plan.add_argument(
+        "--database", help="query a normalized SQLite database instead of JSON")
+    p_results_plan.add_argument("--round", type=int, required=True)
+    p_results_plan.add_argument(
+        "--pack", help="exact sha256 pack fingerprint; required when multiple exist")
+    p_results_plan.add_argument(
+        "--objective", action="append",
+        choices=("accuracy", "completion", "latency", "throughput"),
+        help="evidence objective; repeat for multiple axes (default: accuracy)")
+    p_results_plan.add_argument(
+        "--target-bundles", type=int, default=5,
+        help="independent complete bundles wanted per configuration/objective (default: 5)")
+    _add_serving_constraints(p_results_plan)
+    p_results_plan.add_argument(
+        "--json", action="store_true", help="emit machine-readable JSON")
+    p_results_plan.add_argument(
+        "--output", help="write the collection plan instead of stdout")
     p_results_pilots = results_commands.add_parser(
         "pilots", help="validate or aggregate voluntary Round 5 pilot summaries")
     pilot_result_commands = p_results_pilots.add_subparsers(
@@ -599,40 +657,10 @@ def main(argv=None) -> int:
                 if args.database and args.directory is not None:
                     raise ValueError(
                         "recommend accepts either a submission directory or --database")
-                constraints = {
-                    key: value for key, value in {
-                        "configuration": args.configuration,
-                        "model": args.model,
-                        "os": args.os,
-                        "architecture": args.architecture,
-                        "python": args.python_version,
-                        "transport": args.transport,
-                        "reasoning_effort": args.reasoning_effort,
-                        "context_window": args.context_window,
-                        "max_tokens": args.max_tokens,
-                        "temperature": args.temperature,
-                        "top_p": args.top_p,
-                        "top_k": args.top_k,
-                        "min_p": args.min_p,
-                        "model_revision": args.model_revision,
-                        "quantization": args.quantization,
-                        "model_format": args.model_format,
-                        "parameter_count_b": args.parameter_count_b,
-                        "server": args.server,
-                        "server_version": args.server_version,
-                        "accelerator": args.accelerator,
-                        "accelerator_count": args.accelerator_count,
-                        "memory_gb": args.memory_gb,
-                        "system_memory_gb": args.system_memory_gb,
-                        "max_memory_gb": args.max_memory_gb,
-                        "max_system_memory_gb": args.max_system_memory_gb,
-                        "max_parameter_count_b": args.max_parameter_count_b,
-                    }.items() if value is not None
-                }
                 recommendation_arguments = {
                     "round_number": args.round,
                     "pack": args.pack,
-                    "constraints": constraints,
+                    "constraints": _serving_constraints(args),
                     "objectives": args.objective,
                     "accuracy_floor": args.accuracy_floor,
                 }
@@ -654,6 +682,36 @@ def main(argv=None) -> int:
                     output.parent.mkdir(parents=True, exist_ok=True)
                     output.write_text(document, encoding="utf-8")
                     print(f"Recommendation: {output}")
+                else:
+                    print(document, end="")
+                return 0
+            if args.results_command == "plan":
+                if args.database and args.directory is not None:
+                    raise ValueError(
+                        "plan accepts either a submission directory or --database")
+                plan_arguments = {
+                    "round_number": args.round,
+                    "pack": args.pack,
+                    "constraints": _serving_constraints(args),
+                    "objectives": args.objective,
+                    "target_bundles": args.target_bundles,
+                }
+                if args.database:
+                    result = plan_database(Path(args.database), **plan_arguments)
+                else:
+                    submissions = load_submission_directory(directory)
+                    result = plan_submissions(submissions, **plan_arguments)
+                document = (json.dumps(result, indent=2, sort_keys=True,
+                                       ensure_ascii=False) + "\n"
+                            if args.json else render_collection_plan(result))
+                if args.output:
+                    output = Path(args.output)
+                    if output.exists() or output.is_symlink():
+                        raise ValueError(
+                            f"refusing to overwrite existing collection plan: {output}")
+                    output.parent.mkdir(parents=True, exist_ok=True)
+                    output.write_text(document, encoding="utf-8")
+                    print(f"Collection plan: {output}")
                 else:
                     print(document, end="")
                 return 0

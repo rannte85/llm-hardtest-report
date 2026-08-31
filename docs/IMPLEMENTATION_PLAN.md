@@ -586,3 +586,39 @@ Acceptance checks:
 - Runtime constraint/facet sets exactly equal the published schema-v2 property sets.
 - Historical v1 schemas remain byte-for-byte unchanged.
 - Null, NaN, malformed IDs, non-string keys, and ambiguous input sources fail cleanly.
+
+## Phase 22 — Independent evidence acquisition planning
+
+Goal: convert sparse serving observations into a reproducible collection plan without
+turning missing measurements into evidence or exposing contributor identities.
+
+Deliverables:
+
+1. Count independent bundles separately for accuracy, completion, latency, and
+   throughput for every exact observed configuration and pack.
+2. Add `results plan` over canonical submissions and verified SQLite, sharing the full
+   recommender constraint, objective, pack, and validation contract.
+3. Compute per-objective deficits against an explicit 5–1000 target and the minimum
+   additional complete bundles per configuration as the largest selected deficit,
+   while separately enforcing the five-scored-bundle accuracy prerequisite.
+4. Distinguish pack ambiguity, empty evidence, exact-filter misses, collection needed,
+   and target met with a versioned machine-readable schema and human report.
+5. Preserve the bundle as the independence unit, omit all bundle/contributor IDs, and
+   state that the total assumes complete future measurements and is only a lower bound.
+
+Acceptance checks:
+
+- One complete bundle for each of two configurations yields four-bundle deficits per
+  objective and eight minimum additional complete bundles at the default target.
+- Five scored bundles with one missing timing/token bundle retain five accuracy but
+  four latency/throughput observations and request one bundle per configuration.
+- Five completion-only bundles still request five scored bundles because the
+  recommender's accuracy prerequisite is not satisfied.
+- A five-bundle complete dataset reports `TARGET_MET`; a target of eight reports three
+  additional accuracy bundles per configuration.
+- Canonical JSON and verified SQLite produce byte-identical plans under the same exact
+  filters, objectives, and target, including through the CLI.
+- Multiple packs require an exact choice, absent constraints never match, target values
+  outside 5–1000 fail, and ambiguous sources are rejected.
+- The public schema exactly covers runtime fields, plans expose no provenance, and
+  installed-package CI exercises the empty-database path.

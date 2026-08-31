@@ -1,10 +1,21 @@
-# Release Notes — 2.21.0
+# Release Notes — 2.22.0
 
 This repository is ready to publish as `rannte85/llm-hardtest-report`. It contains no campaign
 outputs, credentials, local model files, personal filesystem paths, or generated
 Python caches.
 
 The release validation covers:
+
+- deterministic independent-bundle acquisition plans for accuracy, completion,
+  latency, and throughput, with separate observed counts and per-objective deficits;
+- configurable 5–1000 bundle targets, exact configuration filtering, explicit pack
+  selection, and a conservative minimum-additional-complete-bundles lower bound;
+- an explicit five-scored-bundle accuracy prerequisite even when only completion,
+  latency, or throughput is selected;
+- canonical JSON/verified SQLite parity, public collection-plan schema v1, read-only
+  Markdown/JSON output, and no bundle or contributor identities;
+- sparse, partial-metric, already-ready, high-target, multi-pack, invalid-target,
+  conflicting-source, privacy, schema, CLI, and installed-package controls;
 
 - exact discovery and filtering for every public configuration coordinate, including
   stable configuration ID, environment/Python, generation settings, model revision,

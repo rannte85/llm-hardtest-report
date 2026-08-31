@@ -11,6 +11,8 @@ project does not automatically collect telemetry or local campaign data.
   serving-candidate query; v1 is retained for historical clients.
 - `catalog-schema-v2.json` documents current observed-coordinate discovery; v1 is
   retained for historical clients.
+- `collection-plan-schema-v1.json` documents the independent-bundle evidence-gap and
+  acquisition-plan response.
 - `database-schema-v2.sql` documents the current normalized SQLite observation schema.
 - `database-schema-v1.sql` documents the v2.18 generated-database format; rebuild it
   with the current CLI before querying.
@@ -33,6 +35,8 @@ llm-hardtest results database --output results/community.sqlite3
 llm-hardtest results database --output results/community.sqlite3 --check
 llm-hardtest results recommend --round 1 --json
 llm-hardtest results recommend --database results/community.sqlite3 --round 1 --json
+llm-hardtest results plan --round 1 --json
+llm-hardtest results plan --database results/community.sqlite3 --round 1 --json
 llm-hardtest results pilots validate
 llm-hardtest results pilots build
 llm-hardtest results pilots build --check
@@ -62,3 +66,9 @@ the canonical repository sources remain the reviewed JSON submissions.
 same bundle-clustered aggregates and candidate result as the JSON path. It emits no
 bundle IDs or contributor history. Supplying both a directory and `--database` fails
 instead of silently selecting one source.
+
+`results plan` uses the same query and independence rules to show how many complete
+new bundles are needed per exact configuration and selected objective. Accuracy,
+completion, latency, and throughput counts remain separate; the summed plan is a lower
+bound only when each new bundle contains every selected measurement. JSON and database
+inputs produce the same response, and no contributor or bundle identity is emitted.

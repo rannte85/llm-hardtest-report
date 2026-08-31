@@ -150,3 +150,13 @@ revisions, and exact hardware/capacity values. Text values compare case-insensit
 the lowercase configuration ID and numeric values compare exactly. The original three
 capacity ceilings remain separate filters. Both adapters still share the same final
 filtering implementation and withhold sparse evidence.
+
+Version 2.22 adds the evidence-acquisition step before predictive promotion. The
+collection planner accepts the same exact configuration and capacity constraints as
+the recommender, keeps observed counts separate for accuracy, completion, latency, and
+throughput, and reports each deficit against a target of 5–1000 independent bundles.
+The per-configuration maximum deficit is a lower bound on complete new bundles when
+each contribution contains all selected measurements. Plans from canonical JSON and a
+verified SQLite snapshot are identical. A separate accuracy prerequisite prevents a
+set of completion-only bundles from appearing recommendation-ready. Plans reveal no
+contributor history and never invent configurations that have not been observed.

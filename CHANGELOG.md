@@ -3,6 +3,16 @@
 All notable changes are documented here. Benchmark-scoring compatibility is called
 out separately from harness features.
 
+## 2.0.0 — 2026-08-31
+
+- Unified the repository, benchmark, reports, Python package, and command under the
+  LLM Hardtest name.
+- Renamed the public Python import package to `llm_hardtest` and removed the legacy
+  compatibility launcher and installed command.
+- Renamed the default API-key environment variable to `LLM_HARDTEST_API_KEY` and the
+  default campaign to `llm-hardtest`. Existing configuration files must update the
+  environment-variable name explicitly.
+
 ## 1.1.0 — 2026-08-31
 
 - Added a dependency-free live terminal dashboard with campaign progress, current
@@ -26,7 +36,7 @@ out separately from harness features.
 
 ## 1.0.0 — 2026-08-30
 
-- Published Pattern0 rounds 1–4 as LLM Hardtest Report.
+- Published rounds 1–4 as LLM Hardtest Report.
 - Added interactive and JSON-configured multi-model campaign execution.
 - Added independent repetitions, resumability, raw artifact retention, and English reports.
 - Added local-model smoke configuration, backend setup, integrity guidance, and a

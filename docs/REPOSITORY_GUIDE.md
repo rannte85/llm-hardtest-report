@@ -5,13 +5,12 @@
 ```text
 .
 ├── llm-hardtest                # checkout-local launcher
-├── pattern0-bench              # compatibility launcher
 ├── pyproject.toml              # package metadata and installed commands
 ├── setup.py / MANIFEST.in      # wheel and source-data bundling
 ├── configs/                    # safe example configurations
 ├── docs/                       # user, scoring, integrity, and developer guides
 ├── rounds/                     # benchmark data, tasks, runners, and graders
-├── src/pattern0_bench/         # installable harness source
+├── src/llm_hardtest/           # installable harness source
 └── tests/                      # harness unit tests
 ```
 

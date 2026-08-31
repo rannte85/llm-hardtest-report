@@ -39,7 +39,7 @@ even when the code version would otherwise be a patch.
 1. Confirm `git status` is clean and inspect tracked files for secrets or local paths.
 2. Run all local checks and confirm CI passes.
 3. Update `CHANGELOG.md` and release notes with scoring compatibility information.
-4. Confirm versions in `pyproject.toml` and `src/pattern0_bench/__init__.py`.
+4. Confirm versions in `pyproject.toml` and `src/llm_hardtest/__init__.py`.
 5. Validate example JSON and run a dry campaign configuration.
 6. Create an annotated tag such as `v1.0.0` from the reviewed commit.
 7. Publish only artifacts containing no credentials or private model content.

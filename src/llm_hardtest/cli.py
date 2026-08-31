@@ -130,7 +130,7 @@ def init_config(path: Path) -> None:
             transport, base_url, api_key_env = "codex_cli", None, None
         else:
             base_url = _ask("OpenAI-compatible /v1 base URL", SERVER_PRESETS[preset])
-            api_key_env = _ask("API-key environment variable", "PATTERN0_API_KEY")
+            api_key_env = _ask("API-key environment variable", "LLM_HARDTEST_API_KEY")
             try:
                 available = discover_models(base_url, api_key_env)
                 print("Available models: " + (", ".join(available) or "(none)"))
@@ -157,7 +157,7 @@ def init_config(path: Path) -> None:
         else:
             model["codex_provider"] = "openai"
         models.append(model)
-    config = {"name": _ask("Campaign name", "pattern0"), "repetitions": repetitions,
+    config = {"name": _ask("Campaign name", "llm-hardtest"), "repetitions": repetitions,
               "rounds": rounds, "timeout_seconds": int(_ask("Timeout per model call", "3600")),
               "round4_tasks": ["q26_hidden_tests", "q27_race", "q28_false_hypothesis",
                                "q29_multiturn", "q30v2_policy_conflict", "q31_approval_followup"],
@@ -204,7 +204,7 @@ def selftest() -> int:
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(
         prog=Path(sys.argv[0]).name,
-        description="Run LLM Hardtest Report (Pattern0 rounds 1–4) and generate a report",
+        description="Run LLM Hardtest rounds 1–4 and generate a report",
     )
     sub = parser.add_subparsers(dest="command", required=True)
     p_init = sub.add_parser("init", help="interactively create a campaign config")

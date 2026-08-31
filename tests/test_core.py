@@ -11,15 +11,15 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from unittest.mock import patch
 from pathlib import Path
 
-from pattern0_bench.backends import Backend, BackendError, CodexBackend, OpenAICompatBackend
-from pattern0_bench.cli import discover_models, doctor_config
-from pattern0_bench.common import answer_matches, answer_text, save_json
-from pattern0_bench.orchestrator import _campaign_units, run as run_campaign, validate_config
-from pattern0_bench.progress import TerminalDashboard, _duration
-from pattern0_bench.report import collect, render
-from pattern0_bench.round12 import run as run_round12
-from pattern0_bench.round3 import _fields, _grade
-from pattern0_bench.round4 import run as run_round4
+from llm_hardtest.backends import Backend, BackendError, CodexBackend, OpenAICompatBackend
+from llm_hardtest.cli import discover_models, doctor_config
+from llm_hardtest.common import answer_matches, answer_text, save_json
+from llm_hardtest.orchestrator import _campaign_units, run as run_campaign, validate_config
+from llm_hardtest.progress import TerminalDashboard, _duration
+from llm_hardtest.report import collect, render
+from llm_hardtest.round12 import run as run_round12
+from llm_hardtest.round3 import _fields, _grade
+from llm_hardtest.round4 import run as run_round4
 
 
 class AnswerTests(unittest.TestCase):
@@ -225,7 +225,7 @@ class RoundFourProgressTests(unittest.TestCase):
         events = []
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp) / "model/round4"
-            with patch("pattern0_bench.round4.importlib.import_module",
+            with patch("llm_hardtest.round4.importlib.import_module",
                        side_effect=[FakeRunner(), FakeGrader()]):
                 status = run_round4(
                     {"key": "m", "model": "m", "codex_provider": "custom"},
@@ -409,7 +409,7 @@ class ConfigurationTests(unittest.TestCase):
             save_json(run_dir / "m/round1/attempt-1/result.json", {
                 "score": 0, "total": 0, "infrastructure_errors": 1,
             })
-            with patch("pattern0_bench.orchestrator.round12.run") as rerun:
+            with patch("llm_hardtest.orchestrator.round12.run") as rerun:
                 run_campaign(config, Path(tmp), resume=run_dir)
             rerun.assert_called_once()
 

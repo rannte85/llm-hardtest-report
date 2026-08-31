@@ -1,10 +1,10 @@
 cff-version: 1.2.0
 message: "If you use this benchmark, cite the repository version and commit."
-title: "LLM Hardtest Report: Pattern0 Agent Benchmark"
+title: "LLM Hardtest Report"
 type: software
 authors:
   - name: "LLM Hardtest Report Contributors"
-version: 1.1.0
+version: 2.0.0
 date-released: 2026-08-31
 url: "https://github.com/rannte85/llm-hardtest-report"
 repository-code: "https://github.com/rannte85/llm-hardtest-report"

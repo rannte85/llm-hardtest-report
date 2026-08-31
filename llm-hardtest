@@ -7,6 +7,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT / "src"))
 
-from pattern0_bench.cli import main
+from llm_hardtest.cli import main
 
 raise SystemExit(main())

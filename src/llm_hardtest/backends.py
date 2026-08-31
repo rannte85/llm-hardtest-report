@@ -97,16 +97,16 @@ class CodexBackend(Backend):
             return env
         home = self.state_dir / "codex-homes" / self.model["key"]
         home.mkdir(parents=True, exist_ok=True)
-        provider = "pattern0_compat"
+        provider = "llm_hardtest_compat"
         base = self.model.get("base_url", "http://127.0.0.1:8000/v1")
-        key_env = self.model.get("api_key_env", "PATTERN0_API_KEY")
+        key_env = self.model.get("api_key_env", "LLM_HARDTEST_API_KEY")
         config = (
             f'model_provider = "{provider}"\n'
             f'model = {json.dumps(self.model["model"])}\n'
             f'model_context_window = {int(self.model.get("context_window", 131072))}\n'
             'approval_policy = "never"\n\n'
             f'[model_providers.{provider}]\n'
-            'name = "Pattern0 OpenAI-compatible"\n'
+            'name = "LLM Hardtest OpenAI-compatible"\n'
             f'base_url = {json.dumps(base)}\n'
             f'env_key = {json.dumps(key_env)}\n'
             'wire_api = "responses"\n')

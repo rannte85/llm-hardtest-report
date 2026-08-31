@@ -39,7 +39,7 @@ It requires the OpenAI chat-completions response shape. The benchmark forwards
   "model": "server-model-id",
   "transport": "openai_compat",
   "base_url": "http://127.0.0.1:8000/v1",
-  "api_key_env": "PATTERN0_API_KEY",
+  "api_key_env": "LLM_HARDTEST_API_KEY",
   "max_tokens": 16000,
   "temperature": 0
 }
@@ -63,7 +63,7 @@ required by Round 4. Two provider modes are available.
   "transport": "codex_cli",
   "codex_provider": "custom",
   "base_url": "http://127.0.0.1:8000/v1",
-  "api_key_env": "PATTERN0_API_KEY",
+  "api_key_env": "LLM_HARDTEST_API_KEY",
   "reasoning_effort": "medium",
   "context_window": 131072,
   "max_tokens": 16000
@@ -97,7 +97,7 @@ controlled by that provider, not by this repository.
 `api_key_env` names an environment variable; it is not the key itself. Example:
 
 ```bash
-export PATTERN0_API_KEY='replace-with-real-key-only-if-required'
+export LLM_HARDTEST_API_KEY='replace-with-real-key-only-if-required'
 ```
 
 Local servers that ignore authentication can use `local-dummy`. Never commit a real

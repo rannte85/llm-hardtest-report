@@ -87,7 +87,7 @@ def collect(run_dir: Path) -> dict:
 
 def render(summary: dict) -> str:
     lines = [
-        "# Pattern0 Agent Benchmark — Comprehensive Report", "",
+        "# LLM Hardtest — Comprehensive Report", "",
         f'**Run:** `{summary["run_id"]}`  ',
         f'**Generated:** {summary["generated_at"]}  ',
         "**Interpretation rule:** product correctness, release readiness, handoff utility, "

@@ -1,5 +1,5 @@
 {
-  "name": "pattern0-example",
+  "name": "llm-hardtest-example",
   "repetitions": 5,
   "rounds": [1, 2, 3, 4],
   "timeout_seconds": 3600,
@@ -19,7 +19,7 @@
       "transport": "openai_compat",
       "rounds": [1, 2, 3],
       "base_url": "http://127.0.0.1:8000/v1",
-      "api_key_env": "PATTERN0_API_KEY",
+      "api_key_env": "LLM_HARDTEST_API_KEY",
       "context_window": 131072,
       "max_tokens": 16000
     },
@@ -31,7 +31,7 @@
       "rounds": [4],
       "codex_provider": "custom",
       "base_url": "http://127.0.0.1:8000/v1",
-      "api_key_env": "PATTERN0_API_KEY",
+      "api_key_env": "LLM_HARDTEST_API_KEY",
       "reasoning_effort": "medium",
       "context_window": 131072,
       "max_tokens": 16000

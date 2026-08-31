@@ -11,7 +11,7 @@ class build_py(_build_py):
     def run(self):
         super().run()
         source = Path(__file__).parent / "rounds"
-        target = Path(self.build_lib) / "pattern0_bench" / "rounds"
+        target = Path(self.build_lib) / "llm_hardtest" / "rounds"
         shutil.copytree(
             source, target, dirs_exist_ok=True,
             ignore=shutil.ignore_patterns(

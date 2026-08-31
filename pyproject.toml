@@ -4,17 +4,16 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "llm-hardtest-report"
-version = "1.1.0"
+version = "2.0.0"
 description = "Run reproducible reasoning and coding-agent tests against local LLMs"
 readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "MIT"}
-authors = [{name = "Pattern0 Benchmark Contributors"}]
+authors = [{name = "LLM Hardtest Contributors"}]
 dependencies = []
 
 [project.scripts]
-llm-hardtest = "pattern0_bench.cli:main"
-pattern0-bench = "pattern0_bench.cli:main"
+llm-hardtest = "llm_hardtest.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/rannte85/llm-hardtest-report"

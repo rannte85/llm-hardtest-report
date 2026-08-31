@@ -1,4 +1,4 @@
-# Release Notes — 1.1.0
+# Release Notes — 2.0.0
 
 This repository is ready to publish as `rannte85/llm-hardtest-report`. It contains no campaign
 outputs, credentials, local model files, personal filesystem paths, or generated
@@ -6,6 +6,8 @@ Python caches.
 
 The release validation covers:
 
+- consistent `llm-hardtest` command, `llm_hardtest` package, report, and configuration
+  naming, with no legacy compatibility alias in the published wheel;
 - parsing every JSON asset;
 - 20 Round 1 questions, 20 Round 2 questions, five Round 3 tasks, and six canonical
   Round 4 repository tasks;
@@ -22,5 +24,5 @@ The release validation covers:
 - interactive terminal dashboard behavior, plain-log fallback, resume accounting, and
   Round 1–4 progress-event regression coverage.
 
-The package deliberately does not include historical Pattern0 campaign results. A new
+The package deliberately does not include historical campaign results. A new
 campaign writes its report and all evidence into the selected `runs/` directory.

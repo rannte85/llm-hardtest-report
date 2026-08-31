@@ -49,7 +49,7 @@ import v4_grade as G  # noqa: E402
 
 DEFAULT_SCRATCH = os.environ.get(
     "V4_SCRATCH",
-    os.path.join(tempfile.gettempdir(), "pattern0-benchmark-v4work"))
+    os.path.join(tempfile.gettempdir(), "llm-hardtest-v4work"))
 OUT_ROOT = os.path.join(HERE, "out")
 CODEX_HOME_LOCAL = os.path.join(HERE, ".codex_omlx")
 

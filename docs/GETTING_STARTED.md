@@ -34,7 +34,7 @@ Copy `configs/smoke.json`, replace the model identifier, and set the matching ke
 
 ```bash
 cp configs/smoke.json benchmark.json
-export PATTERN0_API_KEY=local-dummy
+export LLM_HARDTEST_API_KEY=local-dummy
 ./llm-hardtest validate --config benchmark.json
 ./llm-hardtest doctor --config benchmark.json
 ./llm-hardtest run --config benchmark.json

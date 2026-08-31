@@ -4,17 +4,17 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-**Current release: 1.1.0** — adds the live terminal progress dashboard described
-below without changing benchmark questions or scoring.
+**Current release: 2.0.0** — unifies the repository, command, Python package, reports,
+and configuration under the LLM Hardtest name. This is a naming-only breaking release;
+benchmark questions and scoring are unchanged.
 
 LLM Hardtest Report is a local-first command-line benchmark for comparing language
 models as reasoners, coding workers, and safe handoff agents. Point it at one or more
 OpenAI-compatible endpoints, run independent attempts, resume interrupted campaigns,
 and keep the raw evidence behind every generated report.
 
-The bundled evaluation suite is called **Pattern0**. The repository and installable
-tool are named **LLM Hardtest Report**; `pattern0-bench` remains as a compatibility
-command.
+The repository, installable tool, Python package, reports, and bundled evaluation
+rounds all use the **LLM Hardtest** name.
 
 > [!IMPORTANT]
 > This is an evaluation harness, not a security sandbox. Round 4 executes model-driven
@@ -83,7 +83,7 @@ llm-hardtest init --output benchmark.json
 For a server that does not require authentication, use a non-secret placeholder:
 
 ```bash
-export PATTERN0_API_KEY=local-dummy
+export LLM_HARDTEST_API_KEY=local-dummy
 llm-hardtest validate --config benchmark.json
 llm-hardtest doctor --config benchmark.json
 llm-hardtest run --config benchmark.json
@@ -95,9 +95,9 @@ accidentally committed.
 
 ## Live terminal dashboard
 
-Version 1.1.0 shows a live text dashboard automatically when `run` is attached to an
-interactive terminal. It refreshes once per second even while a model is generating a
-long answer:
+The CLI shows a live text dashboard automatically when `run` is attached to an
+interactive terminal. It refreshes once per second even while a model is generating
+a long answer:
 
 ```text
 LLM Hardtest | my-local-models
@@ -155,7 +155,7 @@ Use Rounds 1–3 with any server that exposes `/v1/chat/completions`:
       "transport": "openai_compat",
       "rounds": [1, 2, 3],
       "base_url": "http://127.0.0.1:8000/v1",
-      "api_key_env": "PATTERN0_API_KEY",
+      "api_key_env": "LLM_HARDTEST_API_KEY",
       "max_tokens": 16000,
       "temperature": 0
     }

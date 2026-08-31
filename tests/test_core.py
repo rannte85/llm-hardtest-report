@@ -2344,6 +2344,8 @@ class PublicResultTests(unittest.TestCase):
         from llm_hardtest.public_results import _bundle_id
         first = self._full_coordinate_submissions(count_per_environment)
         for index, payload in enumerate(first):
+            payload["environment"]["os"] = "Darwin"
+            payload["environment"]["architecture"] = "arm64"
             third = json.loads(json.dumps(payload["models"][0]))
             third["public_name"] = "org/balanced"
             third["public_metadata"]["memory_gb"] = 16

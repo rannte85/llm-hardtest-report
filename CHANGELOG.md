@@ -5,6 +5,10 @@ out separately from harness features.
 
 ## Unreleased
 
+- Added local cross-run calibration reports with pack-separated item difficulty,
+  corrected discrimination, ceiling/floor warnings, between-model separation, and
+  within-model repeat instability.
+
 ## 2.2.0 — 2026-08-31
 
 - Added explicit, allowlist-only public result exports with deterministic bundle IDs,

@@ -20,6 +20,7 @@ from .packs import validate_pack
 from .public_results import export_public_bundle
 from .github_submit import DEFAULT_REPOSITORY, open_submission_pr, preview_submission
 from .community_results import build_index, load_submission_directory
+from .calibration import write_analysis
 
 
 def _ask(prompt: str, default: str | None = None) -> str:
@@ -243,6 +244,10 @@ def main(argv=None) -> int:
     )
     p_report = sub.add_parser("report", help="regenerate a completed campaign report")
     p_report.add_argument("run_dir")
+    p_analyze = sub.add_parser(
+        "analyze", help="measure item discrimination and repeat stability across runs")
+    p_analyze.add_argument("run_dirs", nargs="+")
+    p_analyze.add_argument("--output", default="HARDTEST_ANALYSIS.md")
     p_inspect = sub.add_parser("inspect", help="show unresolved campaign items")
     p_inspect.add_argument("run_dir")
     p_inspect.add_argument("--json", action="store_true", help="emit machine-readable JSON")
@@ -304,6 +309,13 @@ def main(argv=None) -> int:
             return 0
         if args.command == "report":
             md, js = generate(Path(args.run_dir)); print(md); print(js); return 0
+        if args.command == "analyze":
+            md, js, analysis = write_analysis(
+                [Path(value) for value in args.run_dirs], Path(args.output))
+            print(f"Analysis: {md}")
+            print(f"Machine-readable analysis: {js}")
+            print(f"Comparable pack groups: {len(analysis['groups'])}")
+            return 0
         if args.command == "inspect":
             summary = inspect_run(Path(args.run_dir))
             print(json.dumps(summary, indent=2) if args.json else render_inspection(summary))

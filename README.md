@@ -119,6 +119,23 @@ llm-hardtest replay runs/my-local-models-20260831-090000 --dry-run
 Manual-review items are not model failures and are skipped by default. Add
 `--include-review` only when a fresh response is intentionally required.
 
+## Discrimination and stability analysis
+
+After accumulating repeated runs from several model configurations, analyze which
+items actually separate them and whether repeat noise overwhelms that separation:
+
+```bash
+llm-hardtest analyze runs/campaign-a runs/campaign-b --output calibration.md
+```
+
+The Markdown and JSON reports separate benchmark pack fingerprints, rank items by
+corrected item-total correlation, flag ceiling/floor/negative-signal items, and compare
+between-configuration disagreement with within-configuration repeat disagreement. `INCOMPLETE`,
+`REVIEW`, and `INVALID` remain separate and never become wrong answers. The analysis
+copies no prompts, raw responses, model identifiers, local paths, or credentials.
+See [Calibration and Discrimination Analysis](docs/CALIBRATION.md) for formulas,
+sample limitations, and a recommended study design.
+
 ## Voluntary public results
 
 The tool collects no telemetry. Users may explicitly create a sanitized result bundle,
@@ -301,6 +318,7 @@ broad filesystem access may read the benchmark source. See
 - [Backend setup](docs/BACKENDS.md)
 - [Configuration reference](docs/CONFIGURATION.md)
 - [Scoring and interpretation](docs/SCORING.md)
+- [Calibration and discrimination analysis](docs/CALIBRATION.md)
 - [Benchmark integrity](docs/BENCHMARK_INTEGRITY.md)
 - [Repository and source guide](docs/REPOSITORY_GUIDE.md)
 - [Development and release guide](docs/DEVELOPMENT.md)

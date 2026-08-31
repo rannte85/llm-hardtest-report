@@ -15,7 +15,7 @@ from pathlib import Path
 
 from llm_hardtest.backends import Backend, BackendError, CodexBackend, OpenAICompatBackend
 from llm_hardtest.cli import discover_models, doctor_config, main
-from llm_hardtest.common import answer_matches, answer_text, save_json
+from llm_hardtest.common import answer_matches, answer_text, load_json, save_json
 from llm_hardtest.orchestrator import _campaign_units, run as run_campaign, validate_config
 from llm_hardtest.progress import TerminalDashboard, _duration
 from llm_hardtest.report import collect, generate, render
@@ -34,6 +34,7 @@ from llm_hardtest.github_submit import (
 from llm_hardtest.community_results import (
     aggregate_submissions, build_index, load_submission_directory, render_index,
 )
+from llm_hardtest.calibration import analyze_runs, render_analysis, write_analysis
 from llm_hardtest.round12 import run as run_round12
 from llm_hardtest.round3 import _fields, _grade
 from llm_hardtest.round4 import run as run_round4
@@ -686,6 +687,151 @@ class PackTests(unittest.TestCase):
         metadata = [validate_pack(root / "rounds" / f"round{number}")
                     for number in (1, 2, 3, 4, 5)]
         self.assertEqual([item["unit_count"] for item in metadata], [20, 20, 5, 6, 1])
+
+
+class CalibrationTests(unittest.TestCase):
+    PACK_A = "sha256:" + "a" * 64
+    PACK_B = "sha256:" + "b" * 64
+
+    def _calibration_run(self, root: Path, pack: str = PACK_A,
+                         model_count: int = 6) -> Path:
+        models = [{
+            "key": f"m{index}", "label": f"Private {index}",
+            "model": f"private/model-{index}", "transport": "openai_compat",
+            "base_url": f"http://127.0.0.1:{8000 + index}/v1",
+        } for index in range(model_count)]
+        save_json(root / "config.json", {
+            "name": "private-calibration", "repetitions": 1,
+            "rounds": [1], "models": models,
+        })
+        save_json(root / "summary.json", {"packs": {"1": pack}})
+        for index, model in enumerate(models):
+            rows = [
+                {"id": 1, "correct": index >= 3},
+                {"id": 2, "correct": index >= 2},
+                {"id": 3, "correct": index >= 4},
+                {"id": 4, "correct": index < 3},
+                {"id": 5, "correct": True},
+                {"id": 6, "correct": False, "finish_reason": "length"},
+            ]
+            save_json(root / model["key"] / "round1/attempt-1/result.json", {
+                "attempt": 1, "results": rows,
+            })
+        return root
+
+    def test_calibration_flags_ceiling_negative_and_incomplete_items(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run = self._calibration_run(Path(tmp) / "run")
+            analysis = analyze_runs([run])
+        self.assertEqual(len(analysis["groups"]), 1)
+        group = analysis["groups"][0]
+        self.assertEqual(group["respondents"], 6)
+        self.assertEqual(group["model_configurations"], 6)
+        self.assertEqual(group["pairwise"]["between_configuration_pairs"], 15)
+        items = {item["item"]: item for item in group["items"]}
+        self.assertEqual(items["q4"]["classification"], "NEGATIVE")
+        self.assertEqual(items["q5"]["classification"], "CEILING")
+        self.assertEqual(items["q6"]["classification"], "INSUFFICIENT")
+        self.assertEqual(items["q6"]["incomplete"], 6)
+
+    def test_calibration_separates_pack_fingerprints(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            first = self._calibration_run(root / "first", self.PACK_A, 1)
+            second = self._calibration_run(root / "second", self.PACK_B, 1)
+            analysis = analyze_runs([first, second])
+        self.assertEqual(len(analysis["groups"]), 2)
+        self.assertEqual({group["pack"] for group in analysis["groups"]},
+                         {self.PACK_A, self.PACK_B})
+
+    def test_calibration_outputs_do_not_copy_private_identifiers(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            run = self._calibration_run(root / "run")
+            markdown, machine, analysis = write_analysis(
+                [run], root / "calibration.md")
+            text = markdown.read_text(encoding="utf-8")
+            raw = machine.read_text(encoding="utf-8")
+        self.assertEqual(json.loads(raw), analysis)
+        for private in ("private/model", "Private 0", "127.0.0.1", str(run)):
+            self.assertNotIn(private, text)
+            self.assertNotIn(private, raw)
+        self.assertIn("Corrected discrimination", text)
+
+    def test_calibration_rejects_missing_or_invalid_pack_identity(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run = self._calibration_run(Path(tmp) / "run")
+            save_json(run / "summary.json", {"packs": {"1": "not-a-fingerprint"}})
+            with self.assertRaisesRegex(ValueError, "invalid pack"):
+                analyze_runs([run])
+
+    def test_calibration_requires_item_level_evidence(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "run"
+            save_json(root / "config.json", {"models": []})
+            save_json(root / "summary.json", {"packs": {"1": self.PACK_A}})
+            with self.assertRaisesRegex(ValueError, "no item-level"):
+                analyze_runs([root])
+
+    def test_calibration_rejects_duplicate_run_paths(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run = self._calibration_run(Path(tmp) / "run")
+            with self.assertRaisesRegex(ValueError, "more than once"):
+                analyze_runs([run, run / "."])
+
+    def test_calibration_rejects_evidence_symlink_escape(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            parent = Path(tmp)
+            run = self._calibration_run(parent / "run", model_count=1)
+            result = run / "m0/round1/attempt-1/result.json"
+            outside = parent / "outside.json"
+            result.rename(outside)
+            result.symlink_to(outside)
+            with self.assertRaisesRegex(ValueError, "escapes"):
+                analyze_runs([run])
+
+    def test_calibration_measures_same_configuration_repeat_instability(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            first = self._calibration_run(root / "first", model_count=1)
+            second = self._calibration_run(root / "second", model_count=1)
+            result = load_json(second / "m0/round1/attempt-1/result.json")
+            result["results"][0]["correct"] = not result["results"][0]["correct"]
+            save_json(second / "m0/round1/attempt-1/result.json", result)
+            group = analyze_runs([first, second])["groups"][0]
+        pairwise = group["pairwise"]
+        self.assertEqual(group["model_configurations"], 1)
+        self.assertEqual(pairwise["within_configuration_pairs"], 1)
+        self.assertEqual(pairwise["between_configuration_pairs"], 0)
+        self.assertEqual(pairwise["within_configuration_disagreement"], 0.2)
+
+    def test_calibration_collects_round_four_release_outcomes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "run"
+            models = [{"key": "a", "model": "model-a", "transport": "codex_cli"},
+                      {"key": "b", "model": "model-b", "transport": "codex_cli"}]
+            save_json(root / "config.json", {"rounds": [4], "models": models})
+            save_json(root / "summary.json", {"packs": {"4": self.PACK_A}})
+            for index, model in enumerate(models):
+                save_json(root / model["key"] / "round4/run.json", {
+                    "grades": [
+                        {"task": "q26", "run_meta": {"attempt": 1},
+                         "flags": {"attempt_pass": index == 0}},
+                        {"task": "q27", "run_meta": {"attempt": 1},
+                         "flags": {"attempt_pass": True}},
+                    ], "errors": [],
+                })
+            group = analyze_runs([root])["groups"][0]
+        self.assertEqual(group["round"], 4)
+        self.assertEqual(group["pairwise"]["between_configuration_pairs"], 1)
+        items = {item["item"]: item for item in group["items"]}
+        self.assertEqual((items["q26"]["pass"], items["q26"]["fail"]), (1, 1))
+
+    def test_analysis_output_requires_markdown_extension(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run = self._calibration_run(Path(tmp) / "run", model_count=1)
+            with self.assertRaisesRegex(ValueError, r"\.md"):
+                write_analysis([run], Path(tmp) / "analysis.json")
 
 
 class PublicResultTests(unittest.TestCase):

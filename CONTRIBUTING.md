@@ -75,3 +75,11 @@ is expected before merge.
 
 By contributing, you agree that your contribution is licensed under this repository's
 MIT License and that you have the right to submit it.
+
+## Public result submissions
+
+Benchmark results are accepted only through the explicit opt-in workflow documented in
+`docs/PUBLIC_RESULTS.md`. Preview the complete payload before opening a pull request.
+Do not attach raw run directories, responses, transcripts, prompts, diffs, credentials,
+endpoint URLs, private model names, personal paths, or proprietary data. Maintainers
+may reject a structurally valid result when its provenance or privacy is unclear.

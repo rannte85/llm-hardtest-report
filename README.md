@@ -119,6 +119,13 @@ llm-hardtest replay runs/my-local-models-20260831-090000 --dry-run
 Manual-review items are not model failures and are skipped by default. Add
 `--include-review` only when a fresh response is intentionally required.
 
+## Voluntary public results
+
+The tool collects no telemetry. Users may explicitly create a sanitized result bundle,
+preview the exact public JSON, and submit it through a GitHub pull request. Raw model
+outputs, endpoint URLs, credentials, local paths, run IDs, and timestamps are excluded.
+See [Voluntary Public Results](docs/PUBLIC_RESULTS.md) for the consent and privacy model.
+
 ## Live terminal dashboard
 
 The CLI shows a live text dashboard automatically when `run` is attached to an

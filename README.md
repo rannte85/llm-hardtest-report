@@ -4,6 +4,9 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
+**Current release: 1.1.0** — adds the live terminal progress dashboard described
+below without changing benchmark questions or scoring.
+
 LLM Hardtest Report is a local-first command-line benchmark for comparing language
 models as reasoners, coding workers, and safe handoff agents. Point it at one or more
 OpenAI-compatible endpoints, run independent attempts, resume interrupted campaigns,
@@ -26,6 +29,7 @@ command.
 - Separate correctness, release readiness, safe handoff quality, false-green claims,
   and speed instead of hiding them in one score.
 - Repeat every task from a clean state and resume without rerunning finished attempts.
+- Follow long local-model runs through a dependency-free live terminal dashboard.
 - Retain prompts, responses, transcripts, diffs, tests, grades, and a Markdown report.
 - Run the harness itself with no third-party Python dependency.
 
@@ -85,10 +89,35 @@ llm-hardtest doctor --config benchmark.json
 llm-hardtest run --config benchmark.json
 ```
 
-Interactive terminals show a live text dashboard with overall progress, the current
-model/round/question or task, elapsed time, ETA, result counters, resumed work, and the
-output directory. No extra terminal package is required. Redirected output and CI use
-stable line-oriented logs automatically:
+The default output is `runs/<campaign>-<timestamp>/REPORT.md`. The whole `runs/`
+directory is ignored by Git so model outputs and large working copies are not
+accidentally committed.
+
+## Live terminal dashboard
+
+Version 1.1.0 shows a live text dashboard automatically when `run` is attached to an
+interactive terminal. It refreshes once per second even while a model is generating a
+long answer:
+
+```text
+LLM Hardtest | my-local-models
+[############-------------------] 16/40 ( 40.0%)
+Elapsed 18:42 | ETA 28:03
+model-a-q4 | Round 1 | attempt 1/2 | q17
+PASS 13 | FAIL 2 | REVIEW 0 | INVALID 1 | RESUMED 0
+q16: PASS in 71.8s
+Output: runs/my-local-models-20260831-090000
+```
+
+The display tracks:
+
+- overall completed questions or Round 4 task attempts;
+- the current model, round, repetition, and question/task;
+- PASS, FAIL, manual REVIEW, and infrastructure-invalid counts;
+- work loaded from a completed attempt as `RESUMED`;
+- elapsed time, estimated remaining time, and the output directory.
+
+No terminal UI dependency is required. Select the behavior explicitly when needed:
 
 ```bash
 llm-hardtest run --config benchmark.json --progress auto       # default
@@ -96,12 +125,17 @@ llm-hardtest run --config benchmark.json --progress dashboard  # force live disp
 llm-hardtest run --config benchmark.json --progress plain      # one event per line
 ```
 
-During Round 4 dashboard runs, verbose agent-harness output is retained in
-`<run>/<model>/round4/harness.log` instead of disrupting the live display.
+| Mode | Behavior |
+|---|---|
+| `auto` | Dashboard on a capable TTY; plain logs for pipes, files, CI, or `TERM=dumb`. |
+| `dashboard` | Forces the ANSI-updated dashboard, including in a captured terminal. |
+| `plain` | Emits one stable line per completed item for logging and automation. |
 
-The default output is `runs/<campaign>-<timestamp>/REPORT.md`. The whole `runs/`
-directory is ignored by Git so model outputs and large working copies are not
-accidentally committed.
+ETA remains `--:--` until at least one item completes. On resume, finished work advances
+the overall bar and is counted under `RESUMED`; it is not invented as a new PASS or
+FAIL. Infrastructure-invalid attempts remain retryable. During Round 4 dashboard runs,
+verbose agent-harness output is retained in
+`<run>/<model>/round4/harness.log` instead of disrupting the display.
 
 ## A minimal local-model configuration
 
@@ -169,13 +203,13 @@ Resume a campaign using the exact same configuration:
 ```bash
 llm-hardtest run \
   --config benchmark.json \
-  --resume runs/my-local-models-20260830-120000
+  --resume runs/my-local-models-20260831-090000
 ```
 
 Regenerate summaries without calling a model:
 
 ```bash
-llm-hardtest report runs/my-local-models-20260830-120000
+llm-hardtest report runs/my-local-models-20260831-090000
 ```
 
 Each completed campaign contains:
@@ -186,6 +220,8 @@ runs/<run-id>/
 ├── REPORT.md         # human-readable comparison
 ├── summary.json      # machine-readable summary
 ├── <model>/          # results grouped by model and round
+│   └── round4/
+│       └── harness.log  # verbose Round 4 output when dashboard mode is active
 └── _state/           # isolated backend state and transcripts
 ```
 

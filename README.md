@@ -143,6 +143,20 @@ copies no prompts, raw responses, model identifiers, local paths, or credentials
 See [Calibration and Discrimination Analysis](docs/CALIBRATION.md) for formulas,
 sample limitations, and a recommended study design.
 
+Round 5 research evidence has its own multi-axis analysis because one long-horizon
+task cannot support item-total statistics:
+
+```bash
+llm-hardtest pilot analyze runs/pilot-a runs/pilot-b --output round5-analysis.md
+```
+
+It compares repeated outcome distance within one configuration against distance
+between configurations across transport completion, authority safety, hypothesis
+revision, public and held-back tests, release readiness, report accuracy, and tool
+protocol compliance. Model labels remain anonymous unless
+`--include-model-labels` is explicitly supplied. See
+[Round 5 Cross-Pilot Analysis](docs/PILOT_ANALYSIS.md).
+
 ## Voluntary public results
 
 The tool collects no telemetry. Users may explicitly create a sanitized result bundle,
@@ -326,6 +340,7 @@ broad filesystem access may read the benchmark source. See
 - [Configuration reference](docs/CONFIGURATION.md)
 - [Scoring and interpretation](docs/SCORING.md)
 - [Calibration and discrimination analysis](docs/CALIBRATION.md)
+- [Round 5 cross-pilot analysis](docs/PILOT_ANALYSIS.md)
 - [Benchmark integrity](docs/BENCHMARK_INTEGRITY.md)
 - [Repository and source guide](docs/REPOSITORY_GUIDE.md)
 - [Development and release guide](docs/DEVELOPMENT.md)

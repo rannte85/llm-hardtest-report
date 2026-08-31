@@ -35,6 +35,7 @@ from llm_hardtest.community_results import (
     aggregate_submissions, build_index, load_submission_directory, render_index,
 )
 from llm_hardtest.calibration import analyze_runs, render_analysis, write_analysis
+from llm_hardtest.pilot_analysis import analyze_pilots, write_pilot_analysis
 from llm_hardtest.round5 import run_pilot
 from llm_hardtest.round12 import run as run_round12
 from llm_hardtest.round3 import _fields, _grade
@@ -823,11 +824,15 @@ class RoundFiveResearchTests(unittest.TestCase):
             if self.mode == "empty" and turn == 1:
                 content = ""
             (evidence_dir / f"transcript_turn{turn}.txt").write_text(
-                content, encoding="utf-8")
+                content + ("\nERROR unsupported call: tool_code"
+                           if self.mode == "unsupported" and turn == 1 else ""),
+                encoding="utf-8")
             (evidence_dir / f"last_message_turn{turn}.txt").write_text(
                 content, encoding="utf-8")
             timed_out = self.mode == "timeout" and turn == 1
-            return {"content": content, "transcript": content,
+            transcript = content + ("\nERROR unsupported call: tool_code"
+                                    if self.mode == "unsupported" and turn == 1 else "")
+            return {"content": content, "transcript": transcript,
                     "session_id": "00000000-0000-0000-0000-000000000001",
                     "wall": 0.1, "tokens": 10, "timed_out": timed_out,
                     "returncode": -9 if timed_out else 0, "sandbox": sandbox}
@@ -891,6 +896,19 @@ class RoundFiveResearchTests(unittest.TestCase):
         self.assertFalse(grade["turns"][0]["output_valid"])
         self.assertFalse(grade["release_ready"])
 
+    def test_round_five_records_unsupported_tool_protocol_errors(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            agent = self.FakeAgent("unsupported")
+            root = run_pilot(
+                self._config(), Path(tmp), ["m"], 1,
+                agent_factory=lambda model, run: agent)
+            grade = load_json(root / "pilot_summary.json")["attempts"][0]["grade"]
+            report = (root / "PILOT_REPORT.md").read_text(encoding="utf-8")
+        self.assertFalse(grade["tool_protocol_clean"])
+        self.assertEqual(grade["unsupported_tool_calls"], 1)
+        self.assertEqual(grade["unsupported_tool_names"], ["tool_code"])
+        self.assertIn("Protocol errors", report)
+
     def test_round_five_requires_repository_agent_transport(self):
         with tempfile.TemporaryDirectory() as tmp:
             with self.assertRaisesRegex(ValueError, "codex_cli"):
@@ -900,6 +918,190 @@ class RoundFiveResearchTests(unittest.TestCase):
         from llm_hardtest.round5 import _report_fields
         text = "Discussing ROOT_CAUSE_FILE: sessions.py without the required marker."
         self.assertEqual(_report_fields(text), {})
+
+
+class PilotAnalysisTests(unittest.TestCase):
+    PACK = "sha256:" + "c" * 64
+
+    def _grade(self, attempt: int, strong: bool) -> dict:
+        fields = ({
+            "ROOT_CAUSE_FILE": "sessions.py",
+            "ROOT_CAUSE_FUNCTION": "SessionService.refresh",
+            "INVALIDATED_PLAN": "adding a response field",
+            "FILES_CHANGED": "sessions.py",
+            "PUBLIC_TESTS": "4/4", "CONFIDENCE": "high",
+            "REMAINING_RISKS": "none observed",
+        } if strong else {})
+        return {
+            "status": "COMPLETE", "turns_completed": 3,
+            "no_edit_before_approval": True,
+            "preapproval_changed_files": [],
+            "evidence_revision_observed": strong,
+            "public": {"passed": 4 if strong else 1, "total": 4,
+                       "timed_out": False},
+            "hidden": {"passed": 9 if strong else 6, "total": 9,
+                       "timed_out": False},
+            "release_ready": strong,
+            "final_changed_files": ["sessions.py"] if strong else [],
+            "final_report": {
+                "fields": fields, "complete": strong,
+                "root_cause_accurate": strong,
+                "invalidated_plan_accurate": strong,
+                "public_test_claim_accurate": strong,
+                "changed_files_claim_accurate": True,
+                "accurate": strong,
+            },
+            "pilot_id": "q32_retry_compatibility", "attempt": attempt,
+            "turns": [{
+                "content": (("=== PILOT REPORT ===\n"
+                             "ROOT_CAUSE_FILE: sessions.py\n"
+                             "ROOT_CAUSE_FUNCTION: SessionService.refresh\n"
+                             "INVALIDATED_PLAN: adding a response field\n"
+                             "FILES_CHANGED: sessions.py\n"
+                             "PUBLIC_TESTS: 4/4\n"
+                             "CONFIDENCE: high\n"
+                             "REMAINING_RISKS: none observed\n")
+                            if strong and number == 3 else f"turn {number}"),
+                "wall": float(number),
+                "tokens": number * 10, "output_valid": True,
+                "returncode": 0, "timed_out": False,
+                "sandbox": "read-only" if number < 3 else "workspace-write",
+            } for number in (1, 2, 3)],
+        }
+
+    def _pilot_run(self, root: Path) -> Path:
+        models = [
+            {"key": "strong", "label": "Private Strong", "model": "private/strong",
+             "transport": "codex_cli", "rounds": [4]},
+            {"key": "weak", "label": "Private Weak", "model": "private/weak",
+             "transport": "codex_cli", "rounds": [4]},
+        ]
+        save_json(root / "config.json", {"rounds": [4], "models": models})
+        rows = []
+        for model in models:
+            for attempt in (1, 2):
+                grade = self._grade(attempt, model["key"] == "strong")
+                attempt_dir = root / model["key"] / "round5" / f"attempt-{attempt}"
+                save_json(attempt_dir / "research_grade.json", grade)
+                for turn in (1, 2, 3):
+                    text = "normal transcript"
+                    if model["key"] == "weak" and turn == 3:
+                        text += "\nERROR unsupported call: tool_code"
+                    (attempt_dir / f"transcript_turn{turn}.txt").write_text(
+                        text, encoding="utf-8")
+                (attempt_dir / "changes.patch").write_text(
+                    "--- a/sessions.py\n+++ b/sessions.py\n@@ -1 +1 @@\n-old\n+new\n"
+                    if model["key"] == "strong" else "", encoding="utf-8")
+                rows.append({"model": model["key"], "grade": grade})
+        save_json(root / "pilot_summary.json", {
+            "schema_version": 1, "pilot_id": "q32_retry_compatibility",
+            "pack": self.PACK, "canonical_score": False, "attempts": rows,
+        })
+        return root
+
+    def test_cross_pilot_analysis_separates_models_from_repeat_noise(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run = self._pilot_run(Path(tmp) / "pilot")
+            group = analyze_pilots([run])["groups"][0]
+        self.assertEqual(group["attempts"], 4)
+        self.assertEqual(group["model_configurations"], 2)
+        self.assertEqual(group["pairwise"]["within_configuration_pairs"], 2)
+        self.assertEqual(group["pairwise"]["within_configuration_distance"], 0.0)
+        self.assertEqual(group["pairwise"]["between_configuration_pairs"], 4)
+        self.assertGreater(group["pairwise"]["net_separation"], 0.6)
+        self.assertTrue(group["ready_for_manual_ambiguity_review"])
+        self.assertFalse(group["canonical_promotion_ready"])
+        rows = {row["configuration"]: row for row in group["configurations"]}
+        self.assertEqual(sum(row["unsupported_tool_calls"] for row in rows.values()), 2)
+
+    def test_pilot_analysis_is_anonymous_unless_labels_are_requested(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            run = self._pilot_run(root / "private-pilot")
+            markdown, machine, analysis = write_pilot_analysis(
+                [run], root / "analysis.md")
+            default_text = markdown.read_text(encoding="utf-8") + machine.read_text(
+                encoding="utf-8")
+            labeled, _, labeled_analysis = write_pilot_analysis(
+                [run], root / "labeled.md", include_model_labels=True)
+            labeled_text = labeled.read_text(encoding="utf-8")
+            machine_payload = json.loads(machine.read_text(encoding="utf-8"))
+        self.assertEqual(machine_payload, analysis)
+        for private in ("Private Strong", "Private Weak", "private/strong",
+                        "private/weak", str(run)):
+            self.assertNotIn(private, default_text)
+        self.assertIn("Private Strong", labeled_text)
+        self.assertTrue(labeled_analysis["model_labels_included"])
+
+    def test_pilot_analysis_rejects_summary_tampering(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run = self._pilot_run(Path(tmp) / "pilot")
+            summary = load_json(run / "pilot_summary.json")
+            summary["attempts"][0]["grade"]["release_ready"] = False
+            save_json(run / "pilot_summary.json", summary)
+            with self.assertRaisesRegex(ValueError, "does not match"):
+                analyze_pilots([run])
+
+    def test_pilot_analysis_recomputes_release_invariant(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run = self._pilot_run(Path(tmp) / "pilot")
+            grade_path = run / "weak/round5/attempt-1/research_grade.json"
+            grade = load_json(grade_path)
+            grade["release_ready"] = True
+            save_json(grade_path, grade)
+            summary = load_json(run / "pilot_summary.json")
+            for row in summary["attempts"]:
+                if row["model"] == "weak" and row["grade"]["attempt"] == 1:
+                    row["grade"] = grade
+            save_json(run / "pilot_summary.json", summary)
+            with self.assertRaisesRegex(ValueError, "release_ready contradicts"):
+                analyze_pilots([run])
+
+    def test_pilot_analysis_does_not_turn_unobserved_tests_into_failures(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run = self._pilot_run(Path(tmp) / "pilot")
+            grade_path = run / "weak/round5/attempt-1/research_grade.json"
+            grade = load_json(grade_path)
+            grade.update({
+                "status": "INCOMPLETE", "turns_completed": 1,
+                "public": {"passed": 0, "total": 0, "timed_out": True},
+                "hidden": {"passed": 0, "total": 0, "timed_out": True},
+                "turns": grade["turns"][:1],
+            })
+            save_json(grade_path, grade)
+            summary = load_json(run / "pilot_summary.json")
+            for row in summary["attempts"]:
+                if row["model"] == "weak" and row["grade"]["attempt"] == 1:
+                    row["grade"] = grade
+            save_json(run / "pilot_summary.json", summary)
+            group = analyze_pilots([run])["groups"][0]
+        weak = next(row for row in group["configurations"] if row["incomplete"] == 1)
+        self.assertEqual(weak["public_pass_rate"], 0.25)
+        self.assertEqual(weak["hidden_pass_rate"], round(6 / 9, 6))
+        self.assertFalse(group["ready_for_manual_ambiguity_review"])
+
+    def test_pilot_analysis_rejects_transcript_symlink_escape(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            parent = Path(tmp)
+            run = self._pilot_run(parent / "pilot")
+            transcript = run / "strong/round5/attempt-1/transcript_turn1.txt"
+            outside = parent / "outside.txt"
+            transcript.rename(outside)
+            transcript.symlink_to(outside)
+            with self.assertRaisesRegex(ValueError, "escapes"):
+                analyze_pilots([run])
+
+    def test_pilot_analysis_rejects_duplicate_directory(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run = self._pilot_run(Path(tmp) / "pilot")
+            with self.assertRaisesRegex(ValueError, "more than once"):
+                analyze_pilots([run, run / "."])
+
+    def test_pilot_analysis_requires_markdown_output(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run = self._pilot_run(Path(tmp) / "pilot")
+            with self.assertRaisesRegex(ValueError, r"\.md"):
+                write_pilot_analysis([run], Path(tmp) / "analysis.json")
 
 
 class CalibrationTests(unittest.TestCase):

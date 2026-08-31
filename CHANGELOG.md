@@ -5,6 +5,14 @@ out separately from harness features.
 
 ## Unreleased
 
+- Added anonymous-by-default Round 5 cross-pilot analysis with eight-axis outcome
+  distance, within-configuration instability, between-configuration separation,
+  empirical review gates, Markdown/JSON output, and explicit non-canonical limits.
+- Added independent pilot evidence validation for summary/raw-grade agreement,
+  transport and sandbox metadata, release-readiness invariants, evidence path safety,
+  and bounded transcript rescanning for unsupported tool calls.
+- Added unsupported tool-call evidence to new single-pilot grades and reports.
+
 ## 2.4.0 — 2026-08-31
 
 - Added a non-canonical three-turn Round 5 research runner with persistent Codex

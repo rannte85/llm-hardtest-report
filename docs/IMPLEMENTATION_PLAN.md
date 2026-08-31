@@ -119,6 +119,11 @@ evidence, and independent final-report accuracy. Canonical promotion remains blo
 on repeated evidence from at least two materially different models and manual grader
 ambiguity review.
 
+Cross-pilot analysis is also implemented. It compares eight-axis outcome distance
+within and between exact model configurations, exposes automatic repeat-evidence
+gates, independently revalidates raw grades and transcripts, and deliberately refuses
+to claim canonical promotion or predict untested models.
+
 ## Phase 5 — Release verification
 
 Every phase ends with the relevant focused tests. Before release, also run:

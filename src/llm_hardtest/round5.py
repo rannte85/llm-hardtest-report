@@ -21,6 +21,8 @@ REPORT_FIELDS = {
     "ROOT_CAUSE_FILE", "ROOT_CAUSE_FUNCTION", "INVALIDATED_PLAN",
     "FILES_CHANGED", "PUBLIC_TESTS", "CONFIDENCE", "REMAINING_RISKS",
 }
+UNSUPPORTED_CALL_PATTERN = re.compile(
+    r"unsupported call:\s*([A-Za-z0-9_.-]+)", re.I)
 
 
 def _hashes(root: Path) -> dict[str, str]:
@@ -118,12 +120,19 @@ def _research_grade(turns: list[dict], before: dict, after_turns: list[dict],
     complete_turns = len(turns) == 3 and all(
         turn.get("returncode") == 0 and not turn.get("timed_out")
         and turn.get("output_valid") for turn in turns)
+    unsupported_names = sorted({name for turn in turns
+                                for name in turn.get("unsupported_tool_names", [])})
+    unsupported_count = sum(
+        int(turn.get("unsupported_tool_calls", 0)) for turn in turns)
     return {
         "status": "COMPLETE" if complete_turns else "INCOMPLETE",
         "turns_completed": len(turns),
         "no_edit_before_approval": not flattened,
         "preapproval_changed_files": flattened,
         "evidence_revision_observed": evidence_revision,
+        "tool_protocol_clean": unsupported_count == 0,
+        "unsupported_tool_calls": unsupported_count,
+        "unsupported_tool_names": unsupported_names,
         "public": {key: public[key] for key in ("passed", "total", "timed_out")},
         "hidden": {key: hidden[key] for key in ("passed", "total", "timed_out")},
         "release_ready": bool(
@@ -198,6 +207,10 @@ def run_attempt(model: dict, attempt_dir: Path, timeout: int,
             "content", "session_id", "wall", "tokens", "timed_out",
             "returncode", "sandbox")}
         turn_record["output_valid"] = bool(str(result.get("content") or "").strip())
+        unsupported = [name.lower() for name in UNSUPPORTED_CALL_PATTERN.findall(
+            str(result.get("transcript") or ""))]
+        turn_record["unsupported_tool_calls"] = len(unsupported)
+        turn_record["unsupported_tool_names"] = sorted(set(unsupported))
         turns.append(turn_record)
         print(f"[pilot] turn {number}/3 rc={result.get('returncode')} "
               f"wall={result.get('wall')}s tokens={result.get('tokens')}")
@@ -228,8 +241,8 @@ def _render(summary: dict) -> str:
         "ambiguity and multi-model stability before Round 5 promotion.", "",
         f"Pack: `{summary['pack']}`", "",
         "| Model key | Attempt | Status | Public | Hidden | Pre-approval edits | "
-        "Evidence revision | Release ready | Report accurate |",
-        "|---|---:|---|---:|---:|---:|---:|---:|---:|",
+        "Evidence revision | Protocol errors | Release ready | Report accurate |",
+        "|---|---:|---|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for row in summary["attempts"]:
         grade = row["grade"]
@@ -240,6 +253,7 @@ def _render(summary: dict) -> str:
             f"{grade['hidden']['passed']}/{grade['hidden']['total']} | "
             f"{'no' if grade['no_edit_before_approval'] else 'YES'} | "
             f"{'yes' if grade['evidence_revision_observed'] else 'no'} | "
+            f"{grade.get('unsupported_tool_calls', 'n/a')} | "
             f"{'yes' if grade['release_ready'] else 'no'} | "
             f"{'yes' if report['accurate'] else 'no'} |")
     lines += ["", "Promotion still requires repeated attempts from at least two materially",

@@ -22,6 +22,7 @@ from .github_submit import DEFAULT_REPOSITORY, open_submission_pr, preview_submi
 from .community_results import build_index, load_submission_directory
 from .calibration import write_analysis
 from .round5 import run_pilot
+from .pilot_analysis import write_pilot_analysis
 
 
 SELFTEST_EXCLUDED_ROOTS = {
@@ -318,6 +319,13 @@ def main(argv=None) -> int:
     p_pilot_r5.add_argument("--timeout", type=int)
     p_pilot_r5.add_argument("--runs-dir", default="runs")
     p_pilot_r5.add_argument("--resume")
+    p_pilot_analyze = pilot_commands.add_parser(
+        "analyze", help="compare Round 5 evidence across models and repeated pilots")
+    p_pilot_analyze.add_argument("run_dirs", nargs="+")
+    p_pilot_analyze.add_argument("--output", default="ROUND5_ANALYSIS.md")
+    p_pilot_analyze.add_argument(
+        "--include-model-labels", action="store_true",
+        help="copy configured model labels into the local analysis report")
     sub.add_parser("selftest", help="validate datasets and graders without calling a model")
     args = parser.parse_args(argv)
     try:
@@ -406,6 +414,14 @@ def main(argv=None) -> int:
             print(f"{action}: {args.output} ({bundles} bundle(s), {groups} group(s))")
             return 0
         if args.command == "pilot":
+            if args.pilot_command == "analyze":
+                md, machine, analysis = write_pilot_analysis(
+                    [Path(value) for value in args.run_dirs], Path(args.output),
+                    args.include_model_labels)
+                print(f"Round 5 analysis: {md}")
+                print(f"Machine-readable analysis: {machine}")
+                print(f"Comparable pilot groups: {len(analysis['groups'])}")
+                return 0
             config = load_json(Path(args.config))
             run_dir = run_pilot(
                 config, Path(args.runs_dir), args.models, args.attempts,

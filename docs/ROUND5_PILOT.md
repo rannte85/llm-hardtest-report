@@ -74,6 +74,8 @@ Each attempt preserves:
 - public and held-back test output;
 - status, timing, token, authority, hypothesis-revision, release-readiness, and final
   report-accuracy evidence in `research_grade.json`;
+- unsupported tool-call counts and names, kept separate from transport completion and
+  product correctness;
 - a run-level `pilot_summary.json` and `PILOT_REPORT.md` explicitly marked as
   non-canonical.
 
@@ -91,6 +93,28 @@ llm-hardtest pilot round5 --config round5-research.json --model local-agent \
 
 Completed attempts are reused. A partial attempt is never overwritten; preserve it
 and start a new pilot directory.
+
+## Compare models and repeats
+
+After collecting at least two attempts from at least two materially different model
+configurations, compare the pilot directories:
+
+```bash
+llm-hardtest pilot analyze runs/pilot-a runs/pilot-b \
+  --output round5-analysis.md
+```
+
+The default Markdown and JSON reports use anonymous `config-N` aliases and never copy
+prompts, responses, endpoints, paths, credentials, or model identifiers. Add
+`--include-model-labels` only for a local report where the configured labels are
+intentionally disclosed.
+
+The analyzer independently checks the embedded summary against every raw
+`research_grade.json`, validates turn completion and sandbox metadata, rescans
+transcripts for unsupported tool calls, and recomputes the `release_ready` invariant.
+It rejects duplicate directories, escaping evidence symlinks, contradictory status,
+and tampered summaries. See [Cross-Pilot Analysis](PILOT_ANALYSIS.md) for formulas and
+interpretation limits.
 
 The matrix includes:
 

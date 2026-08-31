@@ -4,10 +4,10 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-**Current release: 2.3.0** — measures item discrimination, ceiling/floor effects,
-configuration separation, and repeat instability across local runs. It also includes
-privacy-safe voluntary result sharing, explicit incomplete-generation scoring,
-focused replay, reusable benchmark packs, and an adversarial Round 5 research pilot.
+**Current release: 2.4.0** — adds controlled, persistent-session Round 5 research
+evidence collection with authority boundaries, hidden grading, and factual handoff
+checks. It also includes calibration analysis, privacy-safe voluntary result sharing,
+explicit incomplete-generation scoring, focused replay, and reusable benchmark packs.
 Canonical Round 1–4 questions and grading contracts are unchanged.
 
 LLM Hardtest Report is a local-first command-line benchmark for comparing language
@@ -50,6 +50,10 @@ is deliberately excluded from canonical campaign scores until multi-model stabil
 and grader-ambiguity reviews are complete. A separate `pilot round5` command collects
 the required three-turn research evidence without presenting it as a leaderboard
 score. See [Round 5 Pilot](docs/ROUND5_PILOT.md).
+
+In pilot reports, `COMPLETE` means that all three agent turns produced usable final
+messages without a transport failure. It does **not** mean the task passed; use the
+public/hidden results, report accuracy, and `release_ready` together.
 
 Q30v1 is intentionally excluded because its original grading contract conflicted
 with visible repository authority. Q30v2 accepts either a safe blocked handoff or a

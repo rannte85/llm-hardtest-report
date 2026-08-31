@@ -112,6 +112,13 @@ one test-tampering control, and one honest blocked handoff where applicable. A t
 not promoted to the canonical set until all controls produce stable expected outcomes
 and at least two materially different models have attempted it multiple times.
 
+Current implementation status: the control matrix and non-canonical research runner
+are complete. The runner enforces two read-only turns, one explicitly approved write
+turn, persistent-session delivery, non-empty outputs, hidden grading, immutable raw
+evidence, and independent final-report accuracy. Canonical promotion remains blocked
+on repeated evidence from at least two materially different models and manual grader
+ambiguity review.
+
 ## Phase 5 — Release verification
 
 Every phase ends with the relevant focused tests. Before release, also run:

@@ -1,4 +1,4 @@
-# Release Notes — 2.3.0
+# Release Notes — 2.4.0
 
 This repository is ready to publish as `rannte85/llm-hardtest-report`. It contains no campaign
 outputs, credentials, local model files, personal filesystem paths, or generated
@@ -6,6 +6,16 @@ Python caches.
 
 The release validation covers:
 
+- a dedicated non-canonical Round 5 command that preserves three persistent-session
+  turns, uses read-only sandboxes until explicit approval, and keeps the complete
+  workspace, transcripts, messages, diffs, public tests, and held-back grades;
+- strict separation between transport-complete evidence and a passing result through
+  independent `status`, `release_ready`, test, hypothesis-revision, and report-accuracy
+  fields;
+- safe interruption behavior for timeouts, nonzero exits, missing sessions, empty
+  final messages, and pre-approval edits, with no partial-evidence overwrite;
+- a live `/responses` doctor check for every repository-agent model and a local Ollama
+  configuration example, with unsupported multi-agent fan-out disabled;
 - status-only cross-run calibration reports that never copy prompts, responses,
   model identifiers, endpoint URLs, paths, or credentials;
 - exact pack-fingerprint separation, duplicate-run and evidence-symlink rejection,

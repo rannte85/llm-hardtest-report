@@ -63,7 +63,9 @@ proof that repository-agent rounds can run.
 The first two turns run in a read-only sandbox. Turn 3 resumes the same Codex session
 with workspace-write authority only after the authored approval message. The harness
 stops if either read-only turn changes a file, if the agent times out, exits nonzero,
-or cannot provide a session ID. It never silently starts a replacement conversation.
+cannot provide a non-empty final message, or cannot provide a session ID. It never
+silently starts a replacement conversation. Multi-agent fan-out is disabled so a
+single local model is not graded on unavailable delegation workers.
 
 Each attempt preserves:
 
@@ -74,6 +76,11 @@ Each attempt preserves:
   report-accuracy evidence in `research_grade.json`;
 - a run-level `pilot_summary.json` and `PILOT_REPORT.md` explicitly marked as
   non-canonical.
+
+`status: COMPLETE` only means the three-turn transport/evidence sequence completed.
+It is not a pass result. A promotable attempt additionally needs all public and
+held-back checks, no pre-approval edits, and therefore `release_ready: true`; final
+report accuracy is shown independently.
 
 Resume only completed attempts:
 

@@ -5,12 +5,18 @@ out separately from harness features.
 
 ## Unreleased
 
+## 2.4.0 — 2026-08-31
+
 - Added a non-canonical three-turn Round 5 research runner with persistent Codex
   sessions, read-only pre-approval enforcement, full local evidence preservation,
   held-back grading, final-report accuracy checks, safe resume behavior, and explicit
   separation from leaderboard scores.
 - Fixed `doctor` so every custom `codex_cli` or repository-agent configuration makes
   a real Codex `/responses` probe instead of accepting `/models` discovery alone.
+- Fixed relative evidence/state paths, rejected empty agent messages as incomplete,
+  and disabled unsupported multi-agent fan-out in the controlled local-model runner.
+- Fixed `selftest` source-language scanning so ignored run evidence, build output, and
+  isolated environments cannot make a healthy checkout fail after local use.
 
 ## 2.3.0 — 2026-08-31
 

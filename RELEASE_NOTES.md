@@ -1,4 +1,4 @@
-# Release Notes — 2.0.0
+# Release Notes — 2.1.0
 
 This repository is ready to publish as `rannte85/llm-hardtest-report`. It contains no campaign
 outputs, credentials, local model files, personal filesystem paths, or generated
@@ -6,6 +6,11 @@ Python caches.
 
 The release validation covers:
 
+- explicit incomplete-generation scoring, legacy-result compatibility, failure
+  inspection, and focused replay into a new evidence directory;
+- reusable manifests and stable content fingerprints for all bundled benchmark packs;
+- an executable Round 5 pilot whose correct control passes 9/9 held-back checks while
+  four public-green partial or tampered controls each fail their distinct contract;
 - consistent `llm-hardtest` command, `llm_hardtest` package, report, and configuration
   naming, with no legacy compatibility alias in the published wheel;
 - parsing every JSON asset;

@@ -97,6 +97,12 @@ increase the independent-bundle count or narrow a robust-discrimination interval
 index shows raw and bundle-clustered corrected discrimination separately when those
 weightings disagree.
 
+The community index also derives a discriminative item panel from already-confirmed
+pair directions. It greedily covers directions while penalizing robust positive or
+opposing item dependencies. The operation does not expose bundle IDs, change accepted
+submissions, or mutate benchmark content. Without sufficient independent bundles it
+emits `INSUFFICIENT` rather than proposing a panel.
+
 See [Community Data Model](COMMUNITY_DATA_MODEL.md) for the normalization and staged
 path from descriptive observations to an environment-aware serving recommendation.
 

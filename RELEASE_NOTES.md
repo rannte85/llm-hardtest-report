@@ -1,10 +1,26 @@
-# Release Notes — 2.13.0
+# Release Notes — 2.14.0
 
 This repository is ready to publish as `rannte85/llm-hardtest-report`. It contains no campaign
 outputs, credentials, local model files, personal filesystem paths, or generated
 Python caches.
 
 The release validation covers:
+
+- analysis schema v7 with a discriminative item panel built only from already-confirmed
+  pair-specific configuration directions;
+- deterministic greedy directional set cover that maximizes new coverage before
+  dependency cost, simultaneous margin, absolute effect, and stable item-ID ties;
+- robust positive and opposing item relationships used as penalties rather than
+  automatic item deletion rules;
+- preservation of both directions when one configuration pair has confirmed specialist
+  strengths on different items;
+- a per-round/pack `--panel-max-items` budget with explicit partial status and complete
+  uncovered-direction retention;
+- local and community Markdown panel summaries plus a complete JSON selection trace;
+- adversarial controls for multi-pair compression, opposing specialties, robust
+  dependency avoidance, budget shortfall, deterministic output, sparse community
+  evidence, and ten identical directional items collapsing to one;
+- unchanged public result schema v2 and canonical Round 1–4 grading contracts;
 
 - a read-only `results recommend` command that queries only validated repository
   observations from one exact benchmark pack;

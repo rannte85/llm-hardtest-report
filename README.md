@@ -4,11 +4,11 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-**Current release: 2.13.0** — adds a constraint-aware, evidence-gated serving-candidate
-query. Validated community observations can now be filtered by exact pack, environment,
-runtime, quantization, and declared capacity, then compared on conservative accuracy,
-completion, latency, and throughput axes. The command returns a Pareto set or explicitly
-withholds a result; it never predicts an untested configuration. Canonical Round 1–4
+**Current release: 2.14.0** — adds discriminative item panels. After pair-specific
+simultaneous inference finds reliable specialist items, the analyzer now selects a
+compact set that covers every confirmed configuration direction while penalizing
+robustly redundant or opposing outcome patterns. A per-pack item budget exposes every
+uncovered direction instead of claiming complete coverage. Canonical Round 1–4
 questions, grading contracts, and public submission schema are unchanged.
 
 LLM Hardtest Report is a local-first command-line benchmark for comparing language
@@ -134,6 +134,8 @@ items actually separate them and whether repeat noise overwhelms that separation
 
 ```bash
 llm-hardtest analyze runs/campaign-a runs/campaign-b --output calibration.md
+llm-hardtest analyze runs/campaign-a runs/campaign-b \
+  --panel-max-items 8 --output bounded-calibration.md
 ```
 
 The Markdown and JSON reports separate benchmark pack fingerprints, rank items by
@@ -158,6 +160,12 @@ items. It reports a directional item only when at least five independent units e
 per side, the family-wise simultaneous interval stays beyond zero, and the observed
 effect is at least ten percentage points. All eligible results remain in JSON while
 Markdown limits decisive details to 20 rows.
+The discriminative panel then treats each confirmed winner/loser direction as a
+coverage target. It greedily prefers items that cover more targets, conflict with
+fewer robust dependency signals, and have stronger simultaneous margins. Opposite
+specialties for the same configuration pair remain separate targets. The JSON retains
+the complete selection trace; a bounded panel is marked `PARTIAL` and lists every
+uncovered direction.
 `INCOMPLETE`, `REVIEW`, and `INVALID` remain
 separate and never become wrong answers. The analysis copies no prompts, raw responses,
 model identifiers, local paths, or credentials.

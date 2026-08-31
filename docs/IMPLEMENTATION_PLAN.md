@@ -360,3 +360,31 @@ Acceptance checks:
 - Multiple pack fingerprints require an exact pack selection.
 - Missing hardware metadata fails a hardware constraint and query output copies no
   bundle IDs or contributor/tool-version history.
+
+## Phase 14 — Discriminative item panels
+
+Goal: convert statistically confirmed pair-specific item evidence into a compact,
+reusable panel without discarding opposite specialties or treating empirical
+correlation as automatic deletion authority.
+
+Deliverables:
+
+1. Treat every confirmed configuration winner/loser direction as an explicit coverage
+   target, preserving both directions when specialist items disagree by capability.
+2. Select a deterministic greedy set that first maximizes uncovered directional
+   coverage and then penalizes robust positive or opposing item dependencies.
+3. Use simultaneous interval margin, absolute effect, and stable item ID only as
+   deterministic tie-breakers after coverage and dependency cost.
+4. Support a per-round/pack item budget and expose all uncovered directions when the
+   result is partial.
+5. Add panels to local analysis-schema-v7 JSON/Markdown and the community index while
+   keeping every source comparison and relationship available for audit.
+
+Acceptance checks:
+
+- One item covering two confirmed pair directions replaces two single-purpose items.
+- Opposite confirmed specialties for the same configuration pair are both retained.
+- A non-dependent alternative wins a coverage tie against a robustly dependent item.
+- A one-item budget over two unique targets is `PARTIAL` and names the missing target.
+- Ten identical directional items collapse to one while their robust dependencies
+  remain counted, and insufficient community bundles cannot create a panel.

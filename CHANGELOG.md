@@ -5,6 +5,24 @@ out separately from harness features.
 
 ## Unreleased
 
+## 2.14.0 — 2026-09-01
+
+- Added analysis-schema-v7 discriminative item panels over confirmed pair-specific
+  configuration directions.
+- Added deterministic greedy directional set cover that prioritizes new coverage,
+  penalizes robust positive and opposing dependencies, and uses simultaneous margin
+  plus absolute effect for stable tie-breaking.
+- Preserved opposite specialist directions for the same configuration pair instead of
+  collapsing them into a universal model ordering.
+- Added `analyze --panel-max-items` with explicit `PARTIAL` status and uncovered target
+  retention when a per-pack budget cannot cover all confirmed directions.
+- Added panel sections to local and community Markdown while retaining the complete
+  machine-readable selection trace and all source evidence.
+- Added adversarial controls for multi-pair compression, opposite specialties,
+  dependency avoidance, budget shortfall, deterministic selection, and a ten-item
+  duplicate panel collapsing to one item.
+- Kept public result schema v2 and canonical Round 1–4 content and grading unchanged.
+
 ## 2.13.0 — 2026-09-01
 
 - Added `results recommend`, a read-only exact-pack query over validated public

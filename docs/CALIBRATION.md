@@ -155,6 +155,41 @@ an untested configuration. Bonferroni plus maximum-error resampling is deliberat
 conservative because false specialist discoveries are more damaging than withholding
 a plausible but uncertain item.
 
+## Discriminative item panel
+
+Pair-specific evidence may leave many items that reproduce the same confirmed model
+direction. Analysis schema v7 adds a compact review panel over those results:
+
+```bash
+llm-hardtest analyze runs/campaign-a runs/campaign-b \
+  --panel-max-items 8 --output calibration.md
+```
+
+The target universe contains one entry for each confirmed direction, such as `C1>C2`.
+If one configuration pair has reliable specialist items in both directions, `C1>C2`
+and `C2>C1` are separate targets and both must be covered. This preserves
+multidimensional strengths instead of forcing one global ordering.
+
+Selection is deterministic greedy directional set cover. At each step it prefers:
+
+1. the item covering the most still-uncovered directions;
+2. the item with the fewest robust dependency conflicts with earlier selections;
+3. the lower total robust dependency degree among panel candidates;
+4. the stronger minimum simultaneous margin and absolute effect; then
+5. the stable item ID as a final tie-breaker.
+
+Both `ROBUST_REDUNDANCY_CANDIDATE` and `ROBUST_OPPOSING_CANDIDATE` relationships are
+dependency penalties. They do not prohibit selection: an empirically dependent item
+is retained when it uniquely covers a confirmed direction. A limit applies separately
+to each round/pack group. If the budget ends first, the panel is `PARTIAL` and records
+every uncovered direction in JSON and Markdown. With no decisive item it reports
+`NO_DECISIVE_ITEMS`; with too little pair evidence it reports `INSUFFICIENT`.
+
+This is a transparent heuristic, not proof of a globally minimum test, a replacement
+for task-content review, or authorization to mutate a benchmark pack automatically.
+Its selected item IDs can be copied into advanced `item_filters` for a focused follow-up
+campaign, but canonical reports should continue to identify that focused selection.
+
 ## Configuration separation and repeat stability
 
 For every respondent pair sharing at least two scored items, the analyzer measures

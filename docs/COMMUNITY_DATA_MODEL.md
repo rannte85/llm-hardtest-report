@@ -48,6 +48,11 @@ Pair-specific item coverage uses the same bundle records, computes configuration
 pass-rate effects only after five observed bundles per side, and applies simultaneous
 item-family intervals plus a configuration-pair Bonferroni allocation. These rows are
 evidence about exact submitted configurations, not recommendations by themselves.
+The community discriminative panel operates only on those already-decisive rows. It
+covers each observed configuration direction with a compact item set and uses robust
+bundle-clustered dependency signals as tie-breaking penalties. Repeated rows in one
+bundle therefore cannot create either a directional target or a dependency shortcut.
+The panel is a review aid, not an automatic benchmark rewrite.
 
 ## What can be recommended
 

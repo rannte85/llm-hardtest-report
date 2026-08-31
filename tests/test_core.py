@@ -38,6 +38,7 @@ from llm_hardtest.community_results import (
 )
 from llm_hardtest.calibration import (
     _configuration_comparisons, _configuration_item_coverage,
+    _discriminative_item_panel,
     _item_metrics, _item_relationships,
     _item_repeat_separation,
     analyze_runs, render_analysis, write_analysis,
@@ -1612,6 +1613,119 @@ class CalibrationTests(unittest.TestCase):
         self.assertEqual(pair["interval"]["method"],
                          "shared_cluster_max_error_bootstrap")
 
+    def test_discriminative_panel_covers_pair_directions_compactly(self):
+        coverage = {
+            "eligible_configuration_pairs": 2,
+            "comparisons": [
+                {"left": "C1", "right": "C2", "items": [
+                    {"item": "multi", "classification": "LEFT_HIGHER",
+                     "pass_rate_difference": 0.8,
+                     "simultaneous_interval": {"low": 0.4, "high": 1.0}},
+                    {"item": "only12", "classification": "LEFT_HIGHER",
+                     "pass_rate_difference": 0.7,
+                     "simultaneous_interval": {"low": 0.3, "high": 1.0}},
+                ]},
+                {"left": "C1", "right": "C3", "items": [
+                    {"item": "multi", "classification": "LEFT_HIGHER",
+                     "pass_rate_difference": 0.6,
+                     "simultaneous_interval": {"low": 0.2, "high": 0.9}},
+                    {"item": "only13", "classification": "LEFT_HIGHER",
+                     "pass_rate_difference": 0.5,
+                     "simultaneous_interval": {"low": 0.15, "high": 0.8}},
+                ]},
+            ],
+        }
+        first = _discriminative_item_panel(coverage, [])
+        second = _discriminative_item_panel(coverage, [])
+        self.assertEqual(first, second)
+        self.assertEqual(first["status"], "COMPLETE")
+        self.assertEqual(first["directional_targets"], 2)
+        self.assertEqual([row["item"] for row in first["selected_items"]],
+                         ["multi"])
+        self.assertEqual(first["selected_items"][0]["minimum_simultaneous_margin"],
+                         0.2)
+
+    def test_discriminative_panel_preserves_opposite_specialties(self):
+        coverage = {
+            "eligible_configuration_pairs": 1,
+            "comparisons": [{"left": "C1", "right": "C2", "items": [
+                {"item": "left_skill", "classification": "LEFT_HIGHER",
+                 "pass_rate_difference": 0.8,
+                 "simultaneous_interval": {"low": 0.4, "high": 1.0}},
+                {"item": "right_skill", "classification": "RIGHT_HIGHER",
+                 "pass_rate_difference": -0.7,
+                 "simultaneous_interval": {"low": -1.0, "high": -0.3}},
+            ]}],
+        }
+        panel = _discriminative_item_panel(coverage, [])
+        self.assertEqual(panel["directional_targets"], 2)
+        self.assertEqual(panel["covered_directional_targets"], 2)
+        self.assertEqual({row["item"] for row in panel["selected_items"]},
+                         {"left_skill", "right_skill"})
+        self.assertEqual({target for row in panel["selected_items"]
+                          for target in row["new_directional_targets"]},
+                         {"C1>C2", "C2>C1"})
+
+    def test_discriminative_panel_penalizes_robust_dependencies(self):
+        def item(name):
+            return {"item": name, "classification": "LEFT_HIGHER",
+                    "pass_rate_difference": 0.6,
+                    "simultaneous_interval": {"low": 0.2, "high": 0.9}}
+        coverage = {
+            "eligible_configuration_pairs": 2,
+            "comparisons": [
+                {"left": "C1", "right": "C2",
+                 "items": [item("a_anchor"), item("b_alternative")]},
+                {"left": "C1", "right": "C3",
+                 "items": [item("c_dependent"), item("d_distinct")]},
+            ],
+        }
+        relationships = [
+            {"left": left, "right": "c_dependent",
+             "robust_classification": "ROBUST_REDUNDANCY_CANDIDATE"}
+            for left in ("a_anchor", "b_alternative")
+        ]
+        panel = _discriminative_item_panel(coverage, relationships)
+        self.assertEqual([row["item"] for row in panel["selected_items"]],
+                         ["d_distinct", "a_anchor"])
+        self.assertEqual(panel["robust_dependency_pairs_considered"], 2)
+        self.assertEqual(panel["selected_items"][0]["robust_dependency_degree"], 0)
+        self.assertEqual(panel["selected_items"][1]["robust_dependency_degree"], 1)
+        self.assertTrue(all(not row["robustly_dependent_with_selected"]
+                            for row in panel["selected_items"]))
+
+    def test_discriminative_panel_exposes_budget_shortfall_and_no_signal(self):
+        coverage = {
+            "eligible_configuration_pairs": 2,
+            "comparisons": [
+                {"left": "C1", "right": "C2", "items": [{
+                    "item": "q1", "classification": "LEFT_HIGHER",
+                    "pass_rate_difference": 0.7,
+                    "simultaneous_interval": {"low": 0.3, "high": 1.0}}]},
+                {"left": "C1", "right": "C3", "items": [{
+                    "item": "q2", "classification": "LEFT_HIGHER",
+                    "pass_rate_difference": 0.7,
+                    "simultaneous_interval": {"low": 0.3, "high": 1.0}}]},
+            ],
+        }
+        partial = _discriminative_item_panel(coverage, [], max_items=1)
+        self.assertEqual(partial["status"], "PARTIAL")
+        self.assertEqual(partial["covered_directional_targets"], 1)
+        self.assertEqual(len(partial["uncovered_directional_targets"]), 1)
+        with self.assertRaisesRegex(ValueError, "positive integer"):
+            _discriminative_item_panel(coverage, [], max_items=0)
+        no_signal = _discriminative_item_panel({
+            "eligible_configuration_pairs": 1,
+            "comparisons": [{"left": "C1", "right": "C2", "items": [{
+                "item": "q", "classification": "UNCERTAIN",
+                "pass_rate_difference": 0,
+                "simultaneous_interval": {"low": -0.2, "high": 0.2}}]}],
+        }, [])
+        self.assertEqual(no_signal["status"], "NO_DECISIVE_ITEMS")
+        insufficient = _discriminative_item_panel({
+            "eligible_configuration_pairs": 0, "comparisons": []}, [])
+        self.assertEqual(insufficient["status"], "INSUFFICIENT")
+
     def test_calibration_proves_directional_configuration_separation(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -1639,7 +1753,7 @@ class CalibrationTests(unittest.TestCase):
             analysis = analyze_runs(runs)
             rendered = render_analysis(analysis)
 
-        self.assertEqual(analysis["schema_version"], 6)
+        self.assertEqual(analysis["schema_version"], 7)
         group = analysis["groups"][0]
         self.assertEqual(
             [(row["configuration"], row["sources"], row["respondents"])
@@ -1660,7 +1774,14 @@ class CalibrationTests(unittest.TestCase):
         self.assertEqual(comparison["mean_pass_rate_difference"], 1.0)
         self.assertEqual(comparison["difference_interval95"]["low"], 1.0)
         self.assertEqual(comparison["sign_test_p_holm"], 0.001953)
+        panel = group["discriminative_item_panel"]
+        self.assertEqual(panel["status"], "COMPLETE")
+        self.assertEqual(panel["candidate_items"], 10)
+        self.assertEqual(panel["directional_targets"], 1)
+        self.assertEqual([row["item"] for row in panel["selected_items"]], ["q1"])
+        self.assertEqual(panel["robust_dependency_pairs_considered"], 45)
         self.assertIn("Decisive after Holm correction: **1/1**", rendered)
+        self.assertIn("Discriminative item panel", rendered)
         for private in ("Secret Strong", "private/a", "secret-a"):
             self.assertNotIn(private, rendered)
 
@@ -1810,6 +1931,8 @@ class CalibrationTests(unittest.TestCase):
             run = self._calibration_run(Path(tmp) / "run", model_count=1)
             with self.assertRaisesRegex(ValueError, r"\.md"):
                 write_analysis([run], Path(tmp) / "analysis.json")
+            with self.assertRaisesRegex(ValueError, "panel max items"):
+                analyze_runs([run], panel_max_items=0)
 
 
 class PublicResultTests(unittest.TestCase):
@@ -2374,11 +2497,14 @@ class PublicResultTests(unittest.TestCase):
                           for row in repeat_separation}, {"INSUFFICIENT"})
         coverage = diagnostics[0]["configuration_item_coverage"]
         self.assertEqual(coverage["eligible_configuration_pairs"], 0)
+        self.assertEqual(diagnostics[0]["discriminative_item_panel"]["status"],
+                         "INSUFFICIENT")
         document = render_index([payload])
         self.assertIn("Community Item Diagnostics", document)
         self.assertIn("Community item dependency candidates", document)
         self.assertIn("Community repeat-adjusted item separation", document)
         self.assertIn("Community pair-specific item coverage", document)
+        self.assertIn("Community discriminative item panel", document)
         self.assertIn("Corrected discrimination", document)
         self.assertIn("Independent bundles", document)
         self.assertIn("Robust", document)

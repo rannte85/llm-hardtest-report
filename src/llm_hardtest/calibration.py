@@ -833,6 +833,105 @@ def _configuration_item_coverage(matrix: dict, models: dict, aliases: dict,
     }
 
 
+def _discriminative_item_panel(coverage: dict, relationships: list[dict],
+                               max_items: int | None = None) -> dict:
+    """Greedily cover confirmed pair directions while penalizing dependent items."""
+    if max_items is not None and (
+            isinstance(max_items, bool) or not isinstance(max_items, int)
+            or max_items < 1):
+        raise ValueError("panel max items must be a positive integer")
+    targets_by_item = defaultdict(set)
+    margins_by_item = defaultdict(list)
+    effects_by_item = defaultdict(list)
+    for pair in coverage.get("comparisons", []):
+        left, right = pair["left"], pair["right"]
+        for row in pair.get("items", []):
+            classification = row.get("classification")
+            interval = row.get("simultaneous_interval")
+            if (classification not in {"LEFT_HIGHER", "RIGHT_HIGHER"}
+                    or not isinstance(interval, dict)):
+                continue
+            if classification == "LEFT_HIGHER":
+                target = f"{left}>{right}"
+                margin = interval["low"]
+            else:
+                target = f"{right}>{left}"
+                margin = -interval["high"]
+            targets_by_item[row["item"]].add(target)
+            margins_by_item[row["item"]].append(float(margin))
+            effects_by_item[row["item"]].append(
+                abs(float(row["pass_rate_difference"])))
+
+    dependency = defaultdict(set)
+    dependency_rows = 0
+    for row in relationships:
+        if row.get("robust_classification") not in {
+                "ROBUST_REDUNDANCY_CANDIDATE",
+                "ROBUST_OPPOSING_CANDIDATE"}:
+            continue
+        left, right = row.get("left"), row.get("right")
+        if left in targets_by_item and right in targets_by_item:
+            dependency[left].add(right)
+            dependency[right].add(left)
+            dependency_rows += 1
+
+    all_targets = set().union(*targets_by_item.values()) if targets_by_item else set()
+    uncovered = set(all_targets)
+    remaining = set(targets_by_item)
+    selected = []
+    while uncovered and remaining and (
+            max_items is None or len(selected) < max_items):
+        ranked = []
+        selected_names = {row["item"] for row in selected}
+        for item in remaining:
+            new_targets = targets_by_item[item] & uncovered
+            if not new_targets:
+                continue
+            dependent_with = sorted(dependency[item] & selected_names)
+            ranked.append((
+                -len(new_targets), len(dependent_with), len(dependency[item]),
+                -min(margins_by_item[item]), -max(effects_by_item[item]), item,
+                new_targets, dependent_with,
+            ))
+        if not ranked:
+            break
+        (_, _, dependency_degree, _, _, item,
+         new_targets, dependent_with) = min(ranked)
+        selected.append({
+            "item": item,
+            "new_directional_targets": sorted(new_targets),
+            "all_directional_targets": sorted(targets_by_item[item]),
+            "minimum_simultaneous_margin": round(min(margins_by_item[item]), 6),
+            "maximum_absolute_effect": round(max(effects_by_item[item]), 6),
+            "robust_dependency_degree": dependency_degree,
+            "robustly_dependent_with_selected": dependent_with,
+        })
+        uncovered -= new_targets
+        remaining.remove(item)
+
+    if not all_targets:
+        status = ("INSUFFICIENT" if not coverage.get("eligible_configuration_pairs")
+                  else "NO_DECISIVE_ITEMS")
+    elif uncovered:
+        status = "PARTIAL"
+    else:
+        status = "COMPLETE"
+    return {
+        "status": status,
+        "selection_method": "deterministic_greedy_directional_set_cover",
+        "max_items": max_items,
+        "candidate_items": len(targets_by_item),
+        "selected_items": selected,
+        "directional_targets": len(all_targets),
+        "covered_directional_targets": len(all_targets) - len(uncovered),
+        "uncovered_directional_targets": sorted(uncovered),
+        "robust_dependency_pairs_considered": dependency_rows,
+        "interpretation": (
+            "heuristic review panel; not a globally minimal set or an automatic "
+            "benchmark-pack mutation"),
+    }
+
+
 def _hierarchical_difference_interval(left_rows: list[dict], right_rows: list[dict],
                                       items: list[str], seed: str) -> dict | None:
     """Resample respondents and items so repeat instability enters the effect interval."""
@@ -999,12 +1098,19 @@ def _configuration_comparisons(matrix: dict, models: dict,
     return comparisons
 
 
-def analyze_runs(run_dirs: list[Path]) -> dict:
+def analyze_runs(run_dirs: list[Path], panel_max_items: int | None = None) -> dict:
+    if panel_max_items is not None and (
+            isinstance(panel_max_items, bool) or not isinstance(panel_max_items, int)
+            or panel_max_items < 1):
+        raise ValueError("panel max items must be a positive integer")
     groups = collect_observations(run_dirs)
     analyses = []
     for (round_number, pack), group in sorted(groups.items()):
         matrix = group["matrix"]
         aliases = _configuration_aliases(matrix, group["models"])
+        relationships = _item_relationships(matrix)
+        coverage = _configuration_item_coverage(
+            matrix, group["models"], aliases)
         analyses.append({
             "round": round_number,
             "pack": pack,
@@ -1016,13 +1122,14 @@ def analyze_runs(run_dirs: list[Path]) -> dict:
             "configuration_comparisons": _configuration_comparisons(
                 matrix, group["models"], aliases),
             "items": _item_metrics(matrix),
-            "item_relationships": _item_relationships(matrix),
+            "item_relationships": relationships,
             "item_repeat_separation": _item_repeat_separation(
                 matrix, group["models"]),
-            "configuration_item_coverage": _configuration_item_coverage(
-                matrix, group["models"], aliases),
+            "configuration_item_coverage": coverage,
+            "discriminative_item_panel": _discriminative_item_panel(
+                coverage, relationships, panel_max_items),
         })
-    return {"schema_version": 6, "source_runs": len(run_dirs), "groups": analyses}
+    return {"schema_version": 7, "source_runs": len(run_dirs), "groups": analyses}
 
 
 def _percent(value: float | None) -> str:
@@ -1052,6 +1159,7 @@ def render_analysis(analysis: dict) -> str:
         relationships = group["item_relationships"]
         repeat_separation = group["item_repeat_separation"]
         item_coverage = group["configuration_item_coverage"]
+        panel = group["discriminative_item_panel"]
         decisive = sum(row["classification"] in {"LEFT_HIGHER", "RIGHT_HIGHER"}
                        for row in comparisons)
         lines += [
@@ -1142,6 +1250,29 @@ def render_analysis(analysis: dict) -> str:
         if len(decisive_details) > 20:
             lines += ["", "Only the first 20 decisive splits are shown; JSON retains "
                       "all eligible item/configuration-pair results."]
+        lines += [
+            "", "### Discriminative item panel", "",
+            f"Status: **{panel['status']}** · selected items: "
+            f"**{len(panel['selected_items'])}/{panel['candidate_items']}** · "
+            f"directional targets covered: **{panel['covered_directional_targets']}/"
+            f"{panel['directional_targets']}** · robust dependency pairs considered: "
+            f"**{panel['robust_dependency_pairs_considered']}**.", "",
+            "| Item | Newly covered directions | All confirmed directions | Minimum simultaneous margin | Maximum effect | Robust dependency degree | Dependency with earlier selection |",
+            "|---|---|---|---:|---:|---:|---|",
+        ]
+        for row in panel["selected_items"]:
+            lines.append(
+                f"| {row['item']} | {', '.join(row['new_directional_targets'])} | "
+                f"{', '.join(row['all_directional_targets'])} | "
+                f"{_percent(row['minimum_simultaneous_margin'])} | "
+                f"{_percent(row['maximum_absolute_effect'])} | "
+                f"{row['robust_dependency_degree']} | "
+                f"{', '.join(row['robustly_dependent_with_selected']) or 'none'} |")
+        if not panel["selected_items"]:
+            lines.append("| none | none | none | n/a | n/a | 0 | none |")
+        if panel["uncovered_directional_targets"]:
+            lines += ["", "Uncovered directional targets: "
+                      + ", ".join(panel["uncovered_directional_targets"]) + "."]
         lines += [
             "", "### Item diagnostics", "",
             "| Item | Scored | Independent units | Pass raw | Clustered pass [95%] | Balance raw / clustered | Corrected discrimination (raw) | Clustered corrected discrimination [95%] | "
@@ -1245,6 +1376,11 @@ def render_analysis(analysis: dict) -> str:
         "  A maximum-error bootstrap makes intervals simultaneous across items in each pair;",
         "  Bonferroni allocation across eligible configuration pairs targets family-wise 95%",
         f"  coverage. Directional labels also require an absolute effect of {ITEM_PAIR_EFFECT_THRESHOLD}.",
+        "- The discriminative panel greedily covers confirmed pair directions, preferring",
+        "  fewer selected conflicts, lower total robust dependency degree, and stronger",
+        "  simultaneous margins when coverage ties. It is deterministic but not guaranteed",
+        "  globally minimal. A budget-limited",
+        "  partial panel exposes every uncovered direction and never mutates a benchmark pack.",
         f"- Pair comparisons require at least {MIN_PAIR_ITEMS} commonly scored items.",
         "- Between-configuration disagreement measures observed separation. Within-configuration",
         "  disagreement measures repeat instability. Net separation requires both.",
@@ -1262,10 +1398,11 @@ def render_analysis(analysis: dict) -> str:
     return "\n".join(lines)
 
 
-def write_analysis(run_dirs: list[Path], output: Path) -> tuple[Path, Path, dict]:
+def write_analysis(run_dirs: list[Path], output: Path,
+                   panel_max_items: int | None = None) -> tuple[Path, Path, dict]:
     if output.suffix.lower() != ".md":
         raise ValueError("analysis output must use a .md extension")
-    analysis = analyze_runs(run_dirs)
+    analysis = analyze_runs(run_dirs, panel_max_items)
     json_path = output.with_suffix(".json")
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(render_analysis(analysis), encoding="utf-8")

@@ -270,6 +270,9 @@ def main(argv=None) -> int:
         help="measure robust item discrimination, repeat stability, and configuration evidence")
     p_analyze.add_argument("run_dirs", nargs="+")
     p_analyze.add_argument("--output", default="HARDTEST_ANALYSIS.md")
+    p_analyze.add_argument(
+        "--panel-max-items", type=int,
+        help="cap the discriminative panel and report any uncovered directions")
     p_inspect = sub.add_parser("inspect", help="show unresolved campaign items")
     p_inspect.add_argument("run_dir")
     p_inspect.add_argument("--json", action="store_true", help="emit machine-readable JSON")
@@ -407,7 +410,8 @@ def main(argv=None) -> int:
             md, js = generate(Path(args.run_dir)); print(md); print(js); return 0
         if args.command == "analyze":
             md, js, analysis = write_analysis(
-                [Path(value) for value in args.run_dirs], Path(args.output))
+                [Path(value) for value in args.run_dirs], Path(args.output),
+                args.panel_max_items)
             print(f"Analysis: {md}")
             print(f"Machine-readable analysis: {js}")
             print(f"Comparable pack groups: {len(analysis['groups'])}")

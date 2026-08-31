@@ -9,8 +9,8 @@ from collections import defaultdict
 from pathlib import Path
 
 from .calibration import (
-    _configuration_item_coverage, _estimate_interval, _item_metrics, _item_relationships,
-    _item_repeat_separation, _pairwise_stability,
+    _configuration_item_coverage, _discriminative_item_panel, _estimate_interval,
+    _item_metrics, _item_relationships, _item_repeat_separation, _pairwise_stability,
 )
 from .github_submit import submission_relative_path
 from .public_pilots import load_public_pilot_bundle
@@ -503,6 +503,11 @@ def aggregate_item_diagnostics(submissions: list[dict]) -> list[dict]:
     for (round_number, pack), group in sorted(groups.items()):
         if not group["matrix"]:
             continue
+        relationships = _item_relationships(group["matrix"], group["clusters"])
+        coverage = _configuration_item_coverage(
+            group["matrix"], group["models"],
+            {identity: identity for identity in set(group["models"].values())},
+            group["clusters"])
         rows.append({
             "round": round_number,
             "pack": pack,
@@ -511,14 +516,12 @@ def aggregate_item_diagnostics(submissions: list[dict]) -> list[dict]:
             "configurations": len(set(group["models"].values())),
             "pairwise": _pairwise_stability(group["matrix"], group["models"]),
             "items": _item_metrics(group["matrix"], group["clusters"]),
-            "item_relationships": _item_relationships(
-                group["matrix"], group["clusters"]),
+            "item_relationships": relationships,
             "item_repeat_separation": _item_repeat_separation(
                 group["matrix"], group["models"], group["clusters"]),
-            "configuration_item_coverage": _configuration_item_coverage(
-                group["matrix"], group["models"],
-                {identity: identity for identity in set(group["models"].values())},
-                group["clusters"]),
+            "configuration_item_coverage": coverage,
+            "discriminative_item_panel": _discriminative_item_panel(
+                coverage, relationships),
         })
     return rows
 
@@ -676,6 +679,25 @@ def render_index(submissions: list[dict]) -> str:
                     f"{item['classification']} |")
             if not details:
                 lines.append("| none | none | 0/0 | n/a | n/a |")
+            panel = group["discriminative_item_panel"]
+            lines += [
+                "", "#### Community discriminative item panel", "",
+                f"Status: **{panel['status']}** · selected: "
+                f"**{len(panel['selected_items'])}/{panel['candidate_items']}** · "
+                f"directions covered: **{panel['covered_directional_targets']}/"
+                f"{panel['directional_targets']}**", "",
+                "| Item | Newly covered configuration directions | Minimum simultaneous margin | Robust dependency degree | Dependency with earlier selection |",
+                "|---|---|---:|---:|---|",
+            ]
+            for row in panel["selected_items"]:
+                lines.append(
+                    f"| `{_cell(row['item'])}` | "
+                    f"{', '.join(f'`{_cell(value)}`' for value in row['new_directional_targets'])} | "
+                    f"{_percent(row['minimum_simultaneous_margin'])} | "
+                    f"{row['robust_dependency_degree']} | "
+                    f"{', '.join(f'`{_cell(value)}`' for value in row['robustly_dependent_with_selected']) or 'none'} |")
+            if not panel["selected_items"]:
+                lines.append("| none | none | n/a | 0 | none |")
     lines += [
         "",
         f"Baselines appear only after at least {MIN_BASELINE_SUBMISSIONS} distinct accepted bundles",
@@ -692,7 +714,10 @@ def render_index(submissions: list[dict]) -> str:
         "observations. Pair-specific coverage uses simultaneous maximum-error intervals",
         "within each configuration pair and Bonferroni allocation across pairs; one bundle",
         "is resampled once even if it contains both configurations. Values are not predictions",
-        "for an unseen model or a different runtime configuration.",
+        "for an unseen model or a different runtime configuration. The discriminative panel",
+        "is a deterministic greedy review aid over already-decisive directions. It penalizes",
+        "robust empirical dependencies but is not a globally minimal set or an automatic pack",
+        "change.",
         "",
     ]
     return "\n".join(lines)

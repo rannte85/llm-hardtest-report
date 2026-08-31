@@ -4,7 +4,7 @@ title: "LLM Hardtest Report"
 type: software
 authors:
   - name: "LLM Hardtest Report Contributors"
-version: 2.13.0
+version: 2.14.0
 date-released: 2026-09-01
 url: "https://github.com/rannte85/llm-hardtest-report"
 repository-code: "https://github.com/rannte85/llm-hardtest-report"

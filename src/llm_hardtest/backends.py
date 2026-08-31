@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import signal
 import subprocess
 import time
 import urllib.error
@@ -168,6 +169,106 @@ class CodexBackend(Backend):
             "completion_tokens": int(tokens[-1].replace(",", "")) if tokens else None,
             "finish_reason": "stop" if proc.returncode == 0 else f"exit-{proc.returncode}",
             "transcript": transcript,
+        }
+
+    def _agent_env(self) -> dict:
+        env = self._env()
+        env["RUST_LOG"] = env.get("RUST_LOG", "error")
+        return env
+
+    def _session_id(self, transcript: str, env: dict, workdir: Path,
+                    started: float) -> str | None:
+        for pattern in (
+                r"session id:\s*([0-9a-fA-F-]{32,40})",
+                r'"session_id"\s*:\s*"([0-9a-fA-F-]{32,40})"',
+                r'"thread[_.]id"\s*:\s*"([0-9a-fA-F-]{32,40})"'):
+            match = re.search(pattern, transcript or "", re.I)
+            if match:
+                return match.group(1)
+        home = Path(env["CODEX_HOME"]) if env.get("CODEX_HOME") else Path.home() / ".codex"
+        session_root = home / "sessions"
+        if not session_root.is_dir():
+            return None
+        candidates = []
+        for path in session_root.rglob("*"):
+            if not path.is_file():
+                continue
+            match = re.search(
+                r"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-"
+                r"[0-9a-f]{4}-[0-9a-f]{12})", path.name)
+            if not match or path.stat().st_mtime < started - 2:
+                continue
+            try:
+                header = path.read_text(encoding="utf-8", errors="replace")[:200_000]
+            except OSError:
+                continue
+            if str(workdir) in header:
+                candidates.append((path.stat().st_mtime, match.group(1)))
+        return max(candidates)[1] if candidates else None
+
+    def agent_turn(self, prompt: str, workdir: Path, evidence_dir: Path,
+                   turn: int, timeout: int, sandbox: str,
+                   session_id: str | None = None) -> dict:
+        """Run or resume one persistent Codex agent turn with explicit invariants."""
+        if sandbox not in {"read-only", "workspace-write"}:
+            raise ValueError("agent sandbox must be read-only or workspace-write")
+        evidence_dir.mkdir(parents=True, exist_ok=True)
+        transcript_path = evidence_dir / f"transcript_turn{turn}.txt"
+        last_path = evidence_dir / f"last_message_turn{turn}.txt"
+        if transcript_path.exists() or last_path.exists():
+            raise ValueError(f"refusing to overwrite agent evidence for turn {turn}")
+        if session_id is None:
+            command = [
+                "codex", "exec", "-m", self.model["model"], "-C", str(workdir),
+                "-s", sandbox, "--skip-git-repo-check",
+                "-c", 'approval_policy="never"', "-o", str(last_path),
+            ]
+        else:
+            command = [
+                "codex", "exec", "resume", session_id, "-m", self.model["model"],
+                "--skip-git-repo-check", "-c", 'approval_policy="never"',
+                "-c", f'sandbox_mode="{sandbox}"', "-o", str(last_path),
+            ]
+        effort = self.model.get("reasoning_effort")
+        if effort:
+            command += ["-c", f'model_reasoning_effort="{effort}"']
+        if self.model.get("codex_provider", "custom") == "openai":
+            command.append("--ignore-user-config")
+        else:
+            command.append("--strict-config")
+        command.append(prompt)
+        env = self._agent_env()
+        started = time.time()
+        with transcript_path.open("w", encoding="utf-8", errors="replace") as stream:
+            proc = subprocess.Popen(
+                command, cwd=workdir, env=env, stdout=stream,
+                stderr=subprocess.STDOUT, text=True, start_new_session=(os.name == "posix"))
+            timed_out = False
+            try:
+                returncode = proc.wait(timeout=timeout)
+            except subprocess.TimeoutExpired:
+                timed_out = True
+                if os.name == "posix":
+                    os.killpg(proc.pid, signal.SIGKILL)
+                else:  # pragma: no cover - Windows runner behavior
+                    proc.kill()
+                returncode = proc.wait(timeout=30)
+                stream.write(f"\n[harness] TIMEOUT: killed after {timeout}s\n")
+        transcript = transcript_path.read_text(encoding="utf-8", errors="replace")
+        content = (last_path.read_text(encoding="utf-8", errors="replace")
+                   if last_path.exists() else "")
+        tokens = re.findall(r"tokens used[:\s]*\n?\s*([\d,]+)", transcript, re.I)
+        actual_session = session_id or self._session_id(
+            transcript, env, workdir, started)
+        return {
+            "content": content,
+            "transcript": transcript,
+            "session_id": actual_session,
+            "wall": round(time.time() - started, 3),
+            "tokens": int(tokens[-1].replace(",", "")) if tokens else None,
+            "timed_out": timed_out,
+            "returncode": returncode,
+            "sandbox": sandbox,
         }
 
 

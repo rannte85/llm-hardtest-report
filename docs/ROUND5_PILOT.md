@@ -1,6 +1,6 @@
-# Round 5 Pilot
+# Round 5 Research Pilot
 
-Round 5 is an executable research pilot, not yet a canonical campaign round. It tests
+Round 5 is an executable research pilot, not a canonical campaign round. It tests
 whether an agent can revise an incident hypothesis, implement retry idempotency at the
 correct durable boundaries, preserve old-client response contracts, respect protected
 operator evidence, and avoid a public-green partial fix.
@@ -17,6 +17,74 @@ python rounds/round5/verify_pilot.py
 llm-hardtest pack validate rounds/round5
 ```
 
+## Collect model research evidence
+
+Use a normal campaign configuration containing one or more `codex_cli` models. The
+configured `rounds` field remains a canonical Round 1–4 selection and is not changed
+to 5; the dedicated pilot command selects the research task explicitly.
+
+```json
+{
+  "name": "round5-local-research",
+  "repetitions": 1,
+  "rounds": [4],
+  "timeout_seconds": 3600,
+  "round4_tasks": ["q26_hidden_tests"],
+  "models": [
+    {
+      "key": "local-agent",
+      "label": "Local agent",
+      "model": "my-served-model",
+      "transport": "codex_cli",
+      "codex_provider": "custom",
+      "base_url": "http://127.0.0.1:11434/v1",
+      "api_key_env": "LLM_HARDTEST_API_KEY",
+      "context_window": 131072,
+      "rounds": [4]
+    }
+  ]
+}
+```
+
+The custom endpoint must implement the Responses API needed by Codex, not only Chat
+Completions. Check it before a long run:
+
+```bash
+llm-hardtest doctor --config round5-research.json --timeout 60
+llm-hardtest pilot round5 --config round5-research.json --model local-agent \
+  --attempts 1 --runs-dir runs
+```
+
+An Ollama example is available at `examples/round5-ollama-research.json`. Change the
+model ID and context window to match `/v1/models` and the loaded model. `doctor` makes
+a real short Codex call through `/responses`; listing a model alone is not considered
+proof that repository-agent rounds can run.
+
+The first two turns run in a read-only sandbox. Turn 3 resumes the same Codex session
+with workspace-write authority only after the authored approval message. The harness
+stops if either read-only turn changes a file, if the agent times out, exits nonzero,
+or cannot provide a session ID. It never silently starts a replacement conversation.
+
+Each attempt preserves:
+
+- all three transcripts and final messages;
+- the candidate workspace and unified diff;
+- public and held-back test output;
+- status, timing, token, authority, hypothesis-revision, release-readiness, and final
+  report-accuracy evidence in `research_grade.json`;
+- a run-level `pilot_summary.json` and `PILOT_REPORT.md` explicitly marked as
+  non-canonical.
+
+Resume only completed attempts:
+
+```bash
+llm-hardtest pilot round5 --config round5-research.json --model local-agent \
+  --attempts 3 --resume runs/<pilot-directory>
+```
+
+Completed attempts are reused. A partial attempt is never overwritten; preserve it
+and start a new pilot directory.
+
 The matrix includes:
 
 - the unfixed baseline;
@@ -28,7 +96,7 @@ The matrix includes:
 
 The last four controls intentionally pass every public test and fail one distinct
 held-back contract. This is the minimum promotion evidence, not sufficient evidence
-for a public score. Before Round 5 becomes selectable through `run`, record repeated
-attempts from at least two materially different models, inspect grader ambiguity and
-runtime variance, add final-report accuracy grading, and decide how the controller
-delivers later turns without leaking held-back authority.
+for a public score. Promotion requires repeated attempts from at least two materially
+different models, calibration analysis, and manual review of grader ambiguity and
+runtime variance. The research runner now grades final-report claims and delivers
+later turns through one persistent session without exposing held-back tests.

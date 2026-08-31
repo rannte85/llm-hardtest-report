@@ -46,8 +46,10 @@ rounds all use the **LLM Hardtest** name.
 
 An executable Round 5 research pilot is also included for evolving incident evidence,
 retry idempotency, late compatibility constraints, and public-green partial fixes. It
-is deliberately not selectable in a scored campaign until multi-model stability and
-grader-ambiguity reviews are complete. See [Round 5 Pilot](docs/ROUND5_PILOT.md).
+is deliberately excluded from canonical campaign scores until multi-model stability
+and grader-ambiguity reviews are complete. A separate `pilot round5` command collects
+the required three-turn research evidence without presenting it as a leaderboard
+score. See [Round 5 Pilot](docs/ROUND5_PILOT.md).
 
 Q30v1 is intentionally excluded because its original grading contract conflicted
 with visible repository authority. Q30v2 accepts either a safe blocked handoff or a

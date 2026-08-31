@@ -21,6 +21,7 @@ from .public_results import export_public_bundle
 from .github_submit import DEFAULT_REPOSITORY, open_submission_pr, preview_submission
 from .community_results import build_index, load_submission_directory
 from .calibration import write_analysis
+from .round5 import run_pilot
 
 
 def _ask(prompt: str, default: str | None = None) -> str:
@@ -109,12 +110,10 @@ def doctor_config(config: dict, timeout: int = 30) -> int:
                     if not result["content"].strip():
                         raise BackendError("Chat Completions returned no text")
                     print(f"PASS {key}: /chat/completions returned text")
-                else:
-                    _probe_codex(model, timeout)
-                    print(f"PASS {key}: Codex completed through /responses")
-            if 4 in selected and model.get("transport") != "codex_cli":
+            if model.get("transport") == "codex_cli" or 4 in selected:
                 _probe_codex(model, timeout)
-                print(f"PASS {key}: Codex and /responses are available for Round 4")
+                purpose = "repository-agent rounds" if 4 in selected else "configured transport"
+                print(f"PASS {key}: Codex completed through /responses for {purpose}")
         except Exception as exc:
             failures.append(f"{key}: {exc}")
     if failures:
@@ -294,6 +293,17 @@ def main(argv=None) -> int:
     p_results_build.add_argument("directory", nargs="?", default="results/submissions")
     p_results_build.add_argument("--output", default="results/INDEX.md")
     p_results_build.add_argument("--check", action="store_true")
+    p_pilot = sub.add_parser("pilot", help="run non-canonical research pilots")
+    pilot_commands = p_pilot.add_subparsers(dest="pilot_command", required=True)
+    p_pilot_r5 = pilot_commands.add_parser(
+        "round5", help="collect three-turn Round 5 research evidence")
+    p_pilot_r5.add_argument("--config", required=True)
+    p_pilot_r5.add_argument("--model", action="append", dest="models",
+                            help="configured model key; repeat to select multiple")
+    p_pilot_r5.add_argument("--attempts", type=int, default=1)
+    p_pilot_r5.add_argument("--timeout", type=int)
+    p_pilot_r5.add_argument("--runs-dir", default="runs")
+    p_pilot_r5.add_argument("--resume")
     sub.add_parser("selftest", help="validate datasets and graders without calling a model")
     args = parser.parse_args(argv)
     try:
@@ -380,6 +390,15 @@ def main(argv=None) -> int:
                 directory, Path(args.output), check=args.check)
             action = "VALID" if args.check else "BUILT"
             print(f"{action}: {args.output} ({bundles} bundle(s), {groups} group(s))")
+            return 0
+        if args.command == "pilot":
+            config = load_json(Path(args.config))
+            run_dir = run_pilot(
+                config, Path(args.runs_dir), args.models, args.attempts,
+                timeout=args.timeout,
+                resume=Path(args.resume) if args.resume else None)
+            print(f"Round 5 research evidence: {run_dir}")
+            print(f"Pilot report: {run_dir / 'PILOT_REPORT.md'}")
             return 0
         return selftest()
     except (ValueError, RuntimeError, OSError, json.JSONDecodeError,

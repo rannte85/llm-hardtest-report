@@ -35,6 +35,7 @@ from llm_hardtest.community_results import (
     aggregate_submissions, build_index, load_submission_directory, render_index,
 )
 from llm_hardtest.calibration import analyze_runs, render_analysis, write_analysis
+from llm_hardtest.round5 import run_pilot
 from llm_hardtest.round12 import run as run_round12
 from llm_hardtest.round3 import _fields, _grade
 from llm_hardtest.round4 import run as run_round4
@@ -277,6 +278,24 @@ class BackendTests(unittest.TestCase):
             result = backend.complete([{"role": "user", "content": "test"}], 10)
         self.assertEqual(result["content"], "ANSWER: 42")
 
+    def test_codex_session_fallback_is_scoped_to_current_workdir(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            work = root / "work"
+            work.mkdir()
+            sessions = root / "home/sessions/2026/08/31"
+            sessions.mkdir(parents=True)
+            wanted = "11111111-1111-1111-1111-111111111111"
+            distractor = "22222222-2222-2222-2222-222222222222"
+            (sessions / f"rollout-{wanted}.jsonl").write_text(
+                json.dumps({"cwd": str(work)}), encoding="utf-8")
+            (sessions / f"rollout-{distractor}.jsonl").write_text(
+                json.dumps({"cwd": str(root / "other")}), encoding="utf-8")
+            backend = CodexBackend({"key": "m", "model": "m"}, root / "state")
+            actual = backend._session_id(
+                "", {"CODEX_HOME": str(root / "home")}, work, 0)
+        self.assertEqual(actual, wanted)
+
     def test_missing_choices_is_provider_error(self):
         class FakeResponse:
             def __enter__(self):
@@ -297,6 +316,19 @@ class BackendTests(unittest.TestCase):
 
 
 class ServerSetupTests(unittest.TestCase):
+    def test_doctor_probes_responses_for_codex_repository_rounds(self):
+        config = {
+            "name": "test", "repetitions": 1, "rounds": [4],
+            "round4_tasks": ["q26_hidden_tests"],
+            "models": [{"key": "local", "model": "local/model",
+                        "transport": "codex_cli", "codex_provider": "custom",
+                        "base_url": "http://127.0.0.1:8000/v1", "rounds": [4]}],
+        }
+        with patch("llm_hardtest.cli.discover_models", return_value=["local/model"]), \
+                patch("llm_hardtest.cli._probe_codex") as probe:
+            self.assertEqual(doctor_config(config), 0)
+        probe.assert_called_once_with(config["models"][0], 30)
+
     def test_doctor_rejects_output_limited_short_probe(self):
         config = {
             "name": "test", "repetitions": 1, "rounds": [1],
@@ -687,6 +719,118 @@ class PackTests(unittest.TestCase):
         metadata = [validate_pack(root / "rounds" / f"round{number}")
                     for number in (1, 2, 3, 4, 5)]
         self.assertEqual([item["unit_count"] for item in metadata], [20, 20, 5, 6, 1])
+
+
+class RoundFiveResearchTests(unittest.TestCase):
+    def _config(self, transport="codex_cli"):
+        return {
+            "name": "round-five-research", "repetitions": 1, "rounds": [4],
+            "timeout_seconds": 30, "round4_tasks": ["q26_hidden_tests"],
+            "models": [{
+                "key": "m", "label": "M", "model": "fake-model",
+                "transport": transport, "codex_provider": "openai", "rounds": [4],
+            }],
+        }
+
+    class FakeAgent:
+        def __init__(self, mode="correct"):
+            self.mode = mode
+            self.calls = []
+
+        def agent_turn(self, prompt, workdir, evidence_dir, turn, timeout,
+                       sandbox, session_id=None):
+            self.calls.append((turn, sandbox, session_id))
+            if self.mode == "early-edit" and turn == 1:
+                (workdir / "sessions.py").write_text("# unauthorized\n", encoding="utf-8")
+            if self.mode == "correct" and turn == 3:
+                path = workdir / "sessions.py"
+                text = path.read_text(encoding="utf-8")
+                text = text.replace("store_operation = uuid.uuid4().hex",
+                                    'store_operation = f"{session_id}:{request_id}"')
+                text = text.replace("notify_operation = uuid.uuid4().hex",
+                                    'notify_operation = f"{session_id}:{request_id}"')
+                path.write_text(text, encoding="utf-8")
+            if turn == 1:
+                content = "Fresh UUID operation IDs defeat idempotency; use a stable scoped key."
+            elif turn == 2:
+                content = ("Version-1 old clients reject unknown fields, so any new response "
+                           "schema field is invalid and must be omitted.")
+            else:
+                content = (
+                    "=== PILOT REPORT ===\n"
+                    "ROOT_CAUSE_FILE: sessions.py\n"
+                    "ROOT_CAUSE_FUNCTION: SessionService.refresh\n"
+                    "INVALIDATED_PLAN: adding a response field\n"
+                    "FILES_CHANGED: sessions.py\n"
+                    "PUBLIC_TESTS: 4/4\n"
+                    "CONFIDENCE: high\n"
+                    "REMAINING_RISKS: none observed\n")
+            (evidence_dir / f"transcript_turn{turn}.txt").write_text(
+                content, encoding="utf-8")
+            (evidence_dir / f"last_message_turn{turn}.txt").write_text(
+                content, encoding="utf-8")
+            timed_out = self.mode == "timeout" and turn == 1
+            return {"content": content, "transcript": content,
+                    "session_id": "00000000-0000-0000-0000-000000000001",
+                    "wall": 0.1, "tokens": 10, "timed_out": timed_out,
+                    "returncode": -9 if timed_out else 0, "sandbox": sandbox}
+
+    def test_round_five_correct_research_attempt_is_fully_graded(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            agent = self.FakeAgent()
+            root = run_pilot(
+                self._config(), Path(tmp), ["m"], 1,
+                agent_factory=lambda model, run: agent)
+            summary = load_json(root / "pilot_summary.json")
+            grade = summary["attempts"][0]["grade"]
+            report = (root / "PILOT_REPORT.md").read_text(encoding="utf-8")
+        self.assertEqual(agent.calls, [
+            (1, "read-only", None),
+            (2, "read-only", "00000000-0000-0000-0000-000000000001"),
+            (3, "workspace-write", "00000000-0000-0000-0000-000000000001"),
+        ])
+        self.assertTrue(grade["no_edit_before_approval"])
+        self.assertTrue(grade["evidence_revision_observed"])
+        self.assertTrue(grade["release_ready"])
+        self.assertEqual(grade["hidden"], {"passed": 9, "total": 9, "timed_out": False})
+        self.assertTrue(grade["final_report"]["changed_files_claim_accurate"])
+        self.assertTrue(grade["final_report"]["root_cause_accurate"])
+        self.assertTrue(grade["final_report"]["invalidated_plan_accurate"])
+        self.assertTrue(grade["final_report"]["accurate"])
+        self.assertIn("Not a canonical benchmark score", report)
+
+    def test_round_five_stops_on_preapproval_edit(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            agent = self.FakeAgent("early-edit")
+            root = run_pilot(
+                self._config(), Path(tmp), ["m"], 1,
+                agent_factory=lambda model, run: agent)
+            grade = load_json(root / "pilot_summary.json")["attempts"][0]["grade"]
+        self.assertEqual(len(agent.calls), 1)
+        self.assertFalse(grade["no_edit_before_approval"])
+        self.assertEqual(grade["preapproval_changed_files"], ["sessions.py"])
+        self.assertFalse(grade["release_ready"])
+
+    def test_round_five_timeout_is_incomplete_not_a_model_failure(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            agent = self.FakeAgent("timeout")
+            root = run_pilot(
+                self._config(), Path(tmp), ["m"], 1,
+                agent_factory=lambda model, run: agent)
+            grade = load_json(root / "pilot_summary.json")["attempts"][0]["grade"]
+        self.assertEqual(grade["status"], "INCOMPLETE")
+        self.assertEqual(grade["turns_completed"], 1)
+        self.assertFalse(grade["release_ready"])
+
+    def test_round_five_requires_repository_agent_transport(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaisesRegex(ValueError, "codex_cli"):
+                run_pilot(self._config("openai_compat"), Path(tmp), ["m"], 1)
+
+    def test_round_five_report_template_mentions_do_not_count_as_a_report(self):
+        from llm_hardtest.round5 import _report_fields
+        text = "Discussing ROOT_CAUSE_FILE: sessions.py without the required marker."
+        self.assertEqual(_report_fields(text), {})
 
 
 class CalibrationTests(unittest.TestCase):

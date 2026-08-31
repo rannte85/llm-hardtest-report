@@ -1,0 +1,24 @@
+{
+  "name": "round5-ollama-research",
+  "repetitions": 1,
+  "rounds": [4],
+  "timeout_seconds": 3600,
+  "round4_tasks": [
+    "q26_hidden_tests"
+  ],
+  "models": [
+    {
+      "key": "gemma4-e4b",
+      "label": "Gemma 4 E4B via Ollama",
+      "model": "gemma4:e4b",
+      "transport": "codex_cli",
+      "codex_provider": "custom",
+      "base_url": "http://127.0.0.1:11434/v1",
+      "api_key_env": "LLM_HARDTEST_API_KEY",
+      "context_window": 131072,
+      "rounds": [
+        4
+      ]
+    }
+  ]
+}

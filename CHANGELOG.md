@@ -5,6 +5,13 @@ out separately from harness features.
 
 ## Unreleased
 
+- Added a non-canonical three-turn Round 5 research runner with persistent Codex
+  sessions, read-only pre-approval enforcement, full local evidence preservation,
+  held-back grading, final-report accuracy checks, safe resume behavior, and explicit
+  separation from leaderboard scores.
+- Fixed `doctor` so every custom `codex_cli` or repository-agent configuration makes
+  a real Codex `/responses` probe instead of accepting `/models` discovery alone.
+
 ## 2.3.0 — 2026-08-31
 
 - Added local cross-run calibration reports with pack-separated item difficulty,

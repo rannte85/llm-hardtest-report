@@ -1,23 +1,29 @@
 {
   "schema_version": 1,
   "id": "round5-pilot",
-  "title": "Evolving incident and compatibility pilot",
+  "title": "Evolving multi-incident and compatibility pilots",
   "runner_kind": "coding_agent",
   "capabilities": ["responses", "filesystem", "multi_turn"],
-  "unit_count": 1,
+  "unit_count": 2,
   "time_limit_seconds": 3600,
   "result_schema": "llm-hardtest.round5-pilot.v1",
   "assets": [
     "task.json",
     "repo/**/*",
     "hidden/**/*",
-    "verify_pilot.py"
+    "verify_pilot.py",
+    "tasks/**/*"
   ],
   "controls": [
     {
       "id": "pilot-control-matrix",
       "kind": "positive",
       "command": ["python3", "verify_pilot.py"]
+    },
+    {
+      "id": "batch-delivery-control-matrix",
+      "kind": "positive",
+      "command": ["python3", "tasks/q33_batch_delivery/verify_pilot.py"]
     }
   ]
 }

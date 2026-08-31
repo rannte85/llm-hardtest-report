@@ -4,12 +4,10 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-**Current release: 2.26.0** — separates the machine running this client from the
-machine serving the model. Public schema v3 records an explicit `same_host`, `remote`,
-or `unreported` relationship; legacy submissions remain readable but are never guessed
-to be local. Remote Codex/Luna results with undisclosed host coordinates can contribute
-observations, but cannot manufacture serving-environment diversity or portability
-evidence.
+**Current release: 2.27.0** — expands the non-canonical Round 5 suite to two selectable
+incident scenarios. The new batch-delivery pilot tests multi-coordinate idempotency,
+delimiter-collision safety, partial downstream acceptance, response compatibility,
+authority integrity, and concurrency without changing the existing q32 evidence path.
 
 LLM Hardtest Report is a local-first command-line benchmark for comparing language
 models as reasoners, coding workers, and safe handoff agents. Point it at one or more
@@ -45,12 +43,13 @@ rounds all use the **LLM Hardtest** name.
 | 3 | Structured diagnosis and multi-turn engineering | Deterministic checks for Q21–Q24; Q25 is queued for review | OpenAI-compatible chat or Codex CLI |
 | 4 | Six repository-based coding-agent tasks | Public/held-back tests, integrity gates, handoff and release signals | Codex CLI and a `/responses`-capable provider |
 
-An executable Round 5 research pilot is also included for evolving incident evidence,
-retry idempotency, late compatibility constraints, and public-green partial fixes. It
-is deliberately excluded from canonical campaign scores until multi-model stability
-and grader-ambiguity reviews are complete. A separate `pilot round5` command collects
-the required three-turn research evidence without presenting it as a leaderboard
-score. See [Round 5 Pilot](docs/ROUND5_PILOT.md).
+Two selectable Round 5 research pilots are included for evolving incident evidence,
+retry idempotency, late compatibility constraints, and public-green partial fixes.
+They are deliberately excluded from canonical campaign scores until multi-model
+stability and grader-ambiguity reviews are complete. Use `pilot round5 --pilot-id`
+with `q32_retry_compatibility` (the default) or `q33_batch_delivery` to collect
+three-turn research evidence without presenting it as a leaderboard score. See [Round
+5 Pilot](docs/ROUND5_PILOT.md).
 
 In pilot reports, `COMPLETE` means that all three agent turns produced usable final
 messages without a transport failure. It does **not** mean the task passed; use the

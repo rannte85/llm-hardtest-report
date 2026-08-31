@@ -755,3 +755,36 @@ Acceptance checks:
   JSON/verified SQLite outputs remain byte-identical.
 - Every new Draft 2020-12 schema validates both itself and a populated runtime result;
   the full source, installed-package, and repository self-tests pass.
+
+## Phase 27 — Multi-scenario Round 5 discrimination
+
+Goal: move Round 5 beyond a single incident while preserving old evidence and prove
+that a new scenario separates a plausible public-green fix from the complete fix.
+
+Deliverables:
+
+1. Add `q33_batch_delivery`, an incident involving a partial downstream acceptance,
+   retry identity across batch/request/delivery/effect coordinates, and late v1 schema
+   compatibility.
+2. Generalize live grading and offline analysis around explicit per-task contracts
+   instead of q32-specific filenames and phrases.
+3. Add `--pilot-id` with q32 as the backward-compatible default, isolate q33 evidence
+   paths, and reject resume attempts that mix scenario identities.
+4. Build public, held-back, integrity, collision, and concurrency checks plus a
+   seven-state deterministic control matrix.
+5. Run one real signed-in `gpt-5.6-luna` attempt while retaining its raw evidence only
+   in the ignored local run directory.
+
+Acceptance checks:
+
+- Both scenario control matrices pass; q32's correct control remains 4/4 public and
+  9/9 held-back, while q33's correct control reaches 4/4 and 10/10.
+- Missing batch scope, delimiter concatenation, schema breakage, test tampering, and
+  global serialization all pass q33's public suite but fail held-back evidence.
+- q32 uses its historical attempt path; q33 uses a scenario-qualified path, and both
+  are accepted by the same tamper-resistant analyzer.
+- A live Luna attempt completes all three turns with no authority or tool-protocol
+  violation and an accurate final report; its delimiter-based public-green fix scores
+  4/4 public and 9/10 held-back, demonstrating real-model discrimination.
+- Repository selftest and all 209 source tests pass without publishing raw live-model
+  transcripts, local paths, credentials, or run identifiers.

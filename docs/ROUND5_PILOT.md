@@ -1,19 +1,28 @@
 # Round 5 Research Pilot
 
-Round 5 is an executable research pilot, not a canonical campaign round. It tests
-whether an agent can revise an incident hypothesis, implement retry idempotency at the
-correct durable boundaries, preserve old-client response contracts, respect protected
-operator evidence, and avoid a public-green partial fix.
+Round 5 is a selectable set of executable research pilots, not a canonical campaign
+round. It tests whether an agent can revise an incident hypothesis, implement retry
+idempotency at the correct durable boundaries, preserve old-client response contracts,
+respect protected operator evidence, and avoid a public-green partial fix.
 
 The task unfolds in three turns: an incident investigation without edit authority, a
 late compatibility fact that invalidates schema-changing plans, and explicit approval
-for the smallest product fix. The candidate repository is under
-`rounds/round5/repo/`; held-back checks remain outside the copied repository.
+for the smallest product fix. Two scenarios are bundled:
+
+- `q32_retry_compatibility` (default): one session refresh retry with independent
+  durable side effects;
+- `q33_batch_delivery`: a partial batch delivery retry whose key must distinguish the
+  batch, request, delivery, and side effect without delimiter collisions.
+
+The q32 candidate repository is under `rounds/round5/repo/`; q33 is under
+`rounds/round5/tasks/q33_batch_delivery/repo/`. Held-back checks remain outside every
+copied candidate repository.
 
 Run the deterministic control matrix:
 
 ```bash
 python rounds/round5/verify_pilot.py
+python rounds/round5/tasks/q33_batch_delivery/verify_pilot.py
 llm-hardtest pack validate rounds/round5
 ```
 
@@ -52,8 +61,11 @@ Completions. Check it before a long run:
 ```bash
 llm-hardtest doctor --config round5-research.json --timeout 60
 llm-hardtest pilot round5 --config round5-research.json --model local-agent \
-  --attempts 1 --runs-dir runs
+  --pilot-id q33_batch_delivery --attempts 1 --runs-dir runs
 ```
+
+Omit `--pilot-id` to run the backward-compatible q32 default. Always repeat the same
+`--pilot-id` when using `--resume`; evidence from different scenarios is never mixed.
 
 An Ollama example is available at `examples/round5-ollama-research.json`. Change the
 model ID and context window to match `/v1/models` and the loaded model. `doctor` makes
@@ -88,11 +100,12 @@ Resume only completed attempts:
 
 ```bash
 llm-hardtest pilot round5 --config round5-research.json --model local-agent \
-  --attempts 3 --resume runs/<pilot-directory>
+  --pilot-id q33_batch_delivery --attempts 3 --resume runs/<pilot-directory>
 ```
 
 Completed attempts are reused. A partial attempt is never overwritten; preserve it
-and start a new pilot directory.
+and start a new pilot directory. A run created with an older pack fingerprint is also
+refused rather than relabeling old evidence as the current task pack.
 
 ## Compare models and repeats
 
@@ -116,7 +129,7 @@ It rejects duplicate directories, escaping evidence symlinks, contradictory stat
 and tampered summaries. See [Cross-Pilot Analysis](PILOT_ANALYSIS.md) for formulas and
 interpretation limits.
 
-The matrix includes:
+The q32 matrix includes:
 
 - the unfixed baseline;
 - a fully scoped idempotency fix;
@@ -125,9 +138,15 @@ The matrix includes:
 - an idempotency fix that breaks the version-1 response schema;
 - a correct product change accompanied by protected-test tampering.
 
-The last four controls intentionally pass every public test and fail one distinct
-held-back contract. This is the minimum promotion evidence, not sufficient evidence
-for a public score. Promotion requires repeated attempts from at least two materially
-different models, calibration analysis, and manual review of grader ambiguity and
-runtime variance. The research runner now grades final-report claims and delivers
-later turns through one persistent session without exposing held-back tests.
+The q33 matrix independently includes an unfixed baseline, a structured scoped-key
+fix, and five public-green false fixes: missing batch scope, delimiter collision,
+version-1 schema breakage, protected-test tampering, and global serialization. Its
+correct control passes 4/4 public and 10/10 held-back checks; each false fix fails a
+distinct held-back contract.
+
+These matrices are minimum promotion evidence, not sufficient evidence for a public
+score. Promotion requires repeated attempts from at least two materially different
+models, calibration analysis, and manual review of grader ambiguity and runtime
+variance. The research runner grades final-report claims from each scenario's explicit
+contract and delivers later turns through one persistent session without exposing
+held-back tests.

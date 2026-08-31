@@ -17,6 +17,7 @@ from .packs import validate_pack
 
 
 PILOT_ID = "q32_retry_compatibility"
+PILOT_IDS = (PILOT_ID, "q33_batch_delivery")
 REPORT_FIELDS = {
     "ROOT_CAUSE_FILE", "ROOT_CAUSE_FUNCTION", "INVALIDATED_PLAN",
     "FILES_CHANGED", "PUBLIC_TESTS", "CONFIDENCE", "REMAINING_RISKS",
@@ -24,6 +25,45 @@ REPORT_FIELDS = {
 UNSUPPORTED_CALL_PATTERN = re.compile(
     r"^.*\b(?:ERROR\s+codex_core::tools::router:\s+error=|"
     r"tool router error:\s*)unsupported call:\s*([A-Za-z0-9_.-]+)", re.I | re.M)
+
+
+def pilot_assets(pilot_id: str) -> tuple[Path, Path, dict]:
+    if pilot_id not in PILOT_IDS:
+        raise ValueError(
+            f"unsupported Round 5 pilot ID: {pilot_id!r}; choose one of {PILOT_IDS}")
+    base = repo_root() / "rounds/round5"
+    task_root = base if pilot_id == PILOT_ID else base / "tasks" / pilot_id
+    task = load_json(task_root / "task.json")
+    if task.get("id") != pilot_id:
+        raise ValueError(f"Round 5 task ID does not match its path: {task_root}")
+    grading = task.get("grading")
+    if not isinstance(grading, dict):
+        raise ValueError(f"Round 5 task has no grading contract: {pilot_id}")
+    for field in ("root_cause_files", "root_cause_functions", "turn1_patterns",
+                  "turn2_patterns"):
+        values = grading.get(field)
+        if (not isinstance(values, list) or not values
+                or any(not isinstance(value, str) or not value for value in values)):
+            raise ValueError(f"Round 5 grading field {field} is invalid: {pilot_id}")
+        if field.endswith("patterns"):
+            for pattern in values:
+                try:
+                    re.compile(pattern)
+                except re.error as exc:
+                    raise ValueError(
+                        f"Round 5 grading regex is invalid: {pilot_id}") from exc
+    invalidated = grading.get("invalidated_plan_pattern")
+    if not isinstance(invalidated, str) or not invalidated:
+        raise ValueError(
+            f"Round 5 grading field invalidated_plan_pattern is invalid: {pilot_id}")
+    try:
+        re.compile(invalidated)
+    except re.error as exc:
+        raise ValueError(f"Round 5 grading regex is invalid: {pilot_id}") from exc
+    source, hidden = task_root / "repo", task_root / "hidden/hidden_tests.py"
+    if not source.is_dir() or not hidden.is_file():
+        raise ValueError(f"Round 5 task assets are incomplete: {pilot_id}")
+    return source, hidden, task
 
 
 def _hashes(root: Path) -> dict[str, str]:
@@ -92,7 +132,8 @@ def _report_fields(text: str) -> dict[str, str]:
 
 
 def _research_grade(turns: list[dict], before: dict, after_turns: list[dict],
-                    source: Path, workspace: Path, public: dict, hidden: dict) -> dict:
+                    source: Path, workspace: Path, public: dict, hidden: dict,
+                    task: dict) -> dict:
     flattened = sorted({item for snapshot in after_turns[:2]
                         for item in _changed(before, snapshot)})
     final_changes = _changed(_hashes(source), _hashes(workspace))
@@ -105,17 +146,20 @@ def _research_grade(turns: list[dict], before: dict, after_turns: list[dict],
     claimed_files = sorted(
         value.strip() for value in fields.get("FILES_CHANGED", "").split(",")
         if value.strip() and value.strip().lower() not in {"none", "n/a"})
+    grading = task["grading"]
     evidence_revision = bool(
-        re.search(r"uuid|operation.{0,20}(?:id|key)|idempoten", turn1, re.I)
-        and re.search(r"version.?1|v1|old client", turn2, re.I)
-        and re.search(r"omit|no new|must not|invalid|schema|unknown field", turn2, re.I))
+        all(re.search(pattern, turn1, re.I)
+            for pattern in grading["turn1_patterns"])
+        and all(re.search(pattern, turn2, re.I)
+                for pattern in grading["turn2_patterns"]))
     public_accurate = public_claim == f"{public['passed']}/{public['total']}"
     files_accurate = claimed_files == final_changes
     root_cause_accurate = (
-        fields.get("ROOT_CAUSE_FILE") == "sessions.py"
-        and fields.get("ROOT_CAUSE_FUNCTION") in {"refresh", "SessionService.refresh"})
+        fields.get("ROOT_CAUSE_FILE") in grading["root_cause_files"]
+        and fields.get("ROOT_CAUSE_FUNCTION") in grading["root_cause_functions"])
     invalidated_plan_accurate = bool(re.search(
-        r"response|schema|field", fields.get("INVALIDATED_PLAN", ""), re.I))
+        grading["invalidated_plan_pattern"],
+        fields.get("INVALIDATED_PLAN", ""), re.I))
     complete_report = set(fields) == REPORT_FIELDS and fields.get("CONFIDENCE") in {
         "high", "medium", "low"} and bool(fields.get("REMAINING_RISKS"))
     complete_turns = len(turns) == 3 and all(
@@ -182,19 +226,18 @@ def _prompts(task: dict) -> list[str]:
 
 
 def run_attempt(model: dict, attempt_dir: Path, timeout: int,
-                agent=None) -> dict:
+                agent=None, pilot_id: str = PILOT_ID) -> dict:
     attempt_dir = attempt_dir.resolve()
     if attempt_dir.exists():
         raise ValueError(f"refusing to overwrite Round 5 attempt evidence: {attempt_dir}")
-    source = repo_root() / "rounds/round5/repo"
-    hidden = repo_root() / "rounds/round5/hidden/hidden_tests.py"
-    task = load_json(repo_root() / "rounds/round5/task.json")
+    source, hidden, task = pilot_assets(pilot_id)
     attempt_dir.mkdir(parents=True)
     workspace = attempt_dir / "workspace"
     shutil.copytree(source, workspace,
                     ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
     before = _hashes(workspace)
-    agent = agent or CodexBackend(model, attempt_dir.parent.parent.parent / "_state")
+    run_root = attempt_dir.parents[3 if pilot_id != PILOT_ID else 2]
+    agent = agent or CodexBackend(model, run_root / "_state")
     session_id = None
     turns, snapshots = [], []
     for number, prompt in enumerate(_prompts(task), 1):
@@ -228,8 +271,8 @@ def run_attempt(model: dict, attempt_dir: Path, timeout: int,
         hidden_result.pop("output"), encoding="utf-8")
     (attempt_dir / "changes.patch").write_text(_diff(source, workspace), encoding="utf-8")
     grade = _research_grade(
-        turns, before, snapshots, source, workspace, public, hidden_result)
-    grade.update({"pilot_id": PILOT_ID, "attempt": int(attempt_dir.name.split("-")[-1]),
+        turns, before, snapshots, source, workspace, public, hidden_result, task)
+    grade.update({"pilot_id": pilot_id, "attempt": int(attempt_dir.name.split("-")[-1]),
                   "turns": turns})
     save_json(attempt_dir / "research_grade.json", grade)
     return grade
@@ -240,6 +283,7 @@ def _render(summary: dict) -> str:
         "# Round 5 Research Pilot Report", "",
         "**Not a canonical benchmark score.** These records exist to evaluate grader",
         "ambiguity and multi-model stability before Round 5 promotion.", "",
+        f"Scenario: `{summary['pilot_id']}`", "",
         f"Pack: `{summary['pack']}`", "",
         "| Model key | Attempt | Status | Public | Hidden | Pre-approval edits | "
         "Evidence revision | Protocol errors | Release ready | Report accurate |",
@@ -264,10 +308,12 @@ def _render(summary: dict) -> str:
 
 def run_pilot(config: dict, runs_dir: Path, model_keys: list[str] | None,
               attempts: int, timeout: int | None = None,
-              resume: Path | None = None, agent_factory=None) -> Path:
+              resume: Path | None = None, agent_factory=None,
+              pilot_id: str = PILOT_ID) -> Path:
     # Validate the portable contract before host capabilities so callers receive
     # configuration errors even on machines where Codex is not installed.
     validate_config(config, check_runtime=False)
+    pilot_assets(pilot_id)
     if isinstance(attempts, bool) or attempts < 1:
         raise ValueError("pilot attempts must be at least 1")
     if timeout is not None and (isinstance(timeout, bool) or timeout < 1):
@@ -282,7 +328,7 @@ def run_pilot(config: dict, runs_dir: Path, model_keys: list[str] | None,
         validate_config(config)
     root = resume or runs_dir / (
         _safe_component(config.get("name", "campaign"), "campaign name")
-        + "-round5-pilot-" + stamp())
+        + "-round5-" + _safe_component(pilot_id, "pilot ID") + "-" + stamp())
     root = root.resolve()
     root.mkdir(parents=True, exist_ok=True)
     snapshot = root / "config.json"
@@ -291,10 +337,20 @@ def run_pilot(config: dict, runs_dir: Path, model_keys: list[str] | None,
     if not snapshot.exists():
         save_json(snapshot, config)
     pack = validate_pack(repo_root() / "rounds/round5")["fingerprint"]
+    saved_summary = root / "pilot_summary.json"
+    if saved_summary.is_file():
+        saved = load_json(saved_summary)
+        if saved.get("pilot_id") != pilot_id:
+            raise ValueError("pilot resume ID does not match saved pilot_summary.json")
+        if saved.get("pack") != pack:
+            raise ValueError("pilot resume pack does not match the current Round 5 pack")
     rows = []
     for model in chosen:
         for attempt in range(1, attempts + 1):
-            attempt_dir = root / model["key"] / "round5" / f"attempt-{attempt}"
+            attempt_dir = root / model["key"] / "round5"
+            if pilot_id != PILOT_ID:
+                attempt_dir /= pilot_id
+            attempt_dir /= f"attempt-{attempt}"
             grade_path = attempt_dir / "research_grade.json"
             if grade_path.is_file():
                 grade = load_json(grade_path)
@@ -303,9 +359,13 @@ def run_pilot(config: dict, runs_dir: Path, model_keys: list[str] | None,
                     f"partial pilot evidence exists; preserve it and start a new run: {attempt_dir}")
             else:
                 agent = agent_factory(model, root) if agent_factory else None
-                grade = run_attempt(model, attempt_dir, timeout or config["timeout_seconds"], agent)
+                grade = run_attempt(
+                    model, attempt_dir, timeout or config["timeout_seconds"],
+                    agent, pilot_id)
+            if grade.get("pilot_id") != pilot_id:
+                raise ValueError("pilot attempt ID does not match the selected pilot")
             rows.append({"model": model["key"], "grade": grade})
-    summary = {"schema_version": 1, "pilot_id": PILOT_ID, "pack": pack,
+    summary = {"schema_version": 1, "pilot_id": pilot_id, "pack": pack,
                "canonical_score": False, "attempts": rows}
     save_json(root / "pilot_summary.json", summary)
     (root / "PILOT_REPORT.md").write_text(_render(summary), encoding="utf-8")

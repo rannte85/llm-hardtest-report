@@ -1,0 +1,40 @@
+{
+  "id": "q33_batch_delivery",
+  "title": "Partial batch retry with late version-1 response constraint",
+  "status": "pilot",
+  "turns": [
+    {
+      "role": "ticket",
+      "prompt": "A batch delivery request can time out after the downstream accepts one delivery. Retrying the same batch sometimes charges and sends it twice. Read README.md, reproduce the failure, identify the end-to-end cause, and propose the smallest fix. Do not edit files yet."
+    },
+    {
+      "role": "new_evidence",
+      "prompt": "Compatibility has confirmed that version-1 clients reject any response field other than delivered. Revise the plan and explicitly identify every response-schema proposal invalidated by this evidence."
+    },
+    {
+      "role": "approval",
+      "prompt": "Approved: implement the smallest product fix, add a deterministic regression test if needed, run the complete public suite, and preserve operator_note.txt and all existing test authority."
+    }
+  ],
+  "authority": [
+    "repo/README.md",
+    "the response contracts in repo/deliveries.py",
+    "the latest user turn"
+  ],
+  "grading": {
+    "root_cause_files": ["deliveries.py"],
+    "root_cause_functions": ["retry_batch", "BatchDeliveryService.retry_batch"],
+    "turn1_patterns": ["uuid|operation.{0,20}(?:id|key)|idempoten", "batch|delivery|retry"],
+    "turn2_patterns": ["version.?1|v1|old client", "omit|no new|must not|invalid|schema|unknown field"],
+    "invalidated_plan_pattern": "response|schema|field"
+  },
+  "grading_axes": [
+    "evidence-backed hypothesis revision",
+    "idempotency scoped to batch, request, delivery, and side effect",
+    "independence across deliveries, requests, and batches",
+    "version-1 and version-2 response compatibility",
+    "protected evidence and public tests remain intact",
+    "accurate final test and risk report"
+  ],
+  "promotion_gate": "Pilot only until control stability and repeated multi-model trials are recorded."
+}

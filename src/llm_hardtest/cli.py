@@ -37,7 +37,7 @@ from .prediction_readiness import (
     audit_submissions, render_prediction_readiness,
 )
 from .calibration import write_analysis
-from .round5 import run_pilot
+from .round5 import PILOT_ID, PILOT_IDS, run_pilot
 from .pilot_analysis import write_pilot_analysis
 from .panel_config import write_panel_config
 from .public_pilots import export_public_pilot_bundle
@@ -233,12 +233,17 @@ def selftest() -> int:
                           capture_output=True, timeout=300)
     if proc.returncode:
         failures.append("round-4 selftest failed:\n" + proc.stdout[-1000:] + proc.stderr[-1000:])
-    pilot = subprocess.run(
-        [sys.executable, str(root / "rounds/round5/verify_pilot.py")],
-        cwd=root / "rounds/round5", text=True, capture_output=True, timeout=60)
-    if pilot.returncode:
-        failures.append(
-            "round-5 pilot controls failed:\n" + pilot.stdout[-1000:] + pilot.stderr[-1000:])
+    pilot_verifiers = [root / "rounds/round5/verify_pilot.py"] + [
+        root / "rounds/round5/tasks" / pilot_id / "verify_pilot.py"
+        for pilot_id in PILOT_IDS if pilot_id != PILOT_ID]
+    for verifier in pilot_verifiers:
+        pilot = subprocess.run(
+            [sys.executable, str(verifier)], cwd=verifier.parent,
+            text=True, capture_output=True, timeout=60)
+        if pilot.returncode:
+            failures.append(
+                f"round-5 pilot controls failed ({verifier.parent.name}):\n"
+                + pilot.stdout[-1000:] + pilot.stderr[-1000:])
     korean_hits = []
     for path in _selftest_source_paths(root):
         try:
@@ -545,6 +550,9 @@ def main(argv=None) -> int:
     p_pilot_r5.add_argument("--model", action="append", dest="models",
                             help="configured model key; repeat to select multiple")
     p_pilot_r5.add_argument("--attempts", type=int, default=1)
+    p_pilot_r5.add_argument(
+        "--pilot-id", choices=PILOT_IDS, default=PILOT_ID,
+        help=f"incident scenario to run (default: {PILOT_ID})")
     p_pilot_r5.add_argument("--timeout", type=int)
     p_pilot_r5.add_argument("--runs-dir", default="runs")
     p_pilot_r5.add_argument("--resume")
@@ -885,7 +893,8 @@ def main(argv=None) -> int:
             run_dir = run_pilot(
                 config, Path(args.runs_dir), args.models, args.attempts,
                 timeout=args.timeout,
-                resume=Path(args.resume) if args.resume else None)
+                resume=Path(args.resume) if args.resume else None,
+                pilot_id=args.pilot_id)
             print(f"Round 5 research evidence: {run_dir}")
             print(f"Pilot report: {run_dir / 'PILOT_REPORT.md'}")
             return 0

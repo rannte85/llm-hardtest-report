@@ -21,6 +21,13 @@
     "the public API and response contracts in repo/sessions.py",
     "the latest user turn"
   ],
+  "grading": {
+    "root_cause_files": ["sessions.py"],
+    "root_cause_functions": ["refresh", "SessionService.refresh"],
+    "turn1_patterns": ["uuid|operation.{0,20}(?:id|key)|idempoten", "session|refresh|retry"],
+    "turn2_patterns": ["version.?1|v1|old client", "omit|no new|must not|invalid|schema|unknown field"],
+    "invalidated_plan_pattern": "response|schema|field"
+  },
   "grading_axes": [
     "evidence-backed hypothesis revision",
     "idempotency scoped to both session and request",

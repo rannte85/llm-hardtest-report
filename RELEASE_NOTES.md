@@ -1,4 +1,4 @@
-# Release Notes — 2.26.0
+# Release Notes — 2.27.0
 
 This repository is ready to publish as `rannte85/llm-hardtest-report`. It contains no raw
 campaign outputs, credentials, local model files, personal filesystem paths, or
@@ -7,6 +7,15 @@ not its prompts, responses, transcripts, account details, or local run directory
 
 The release validation now also covers:
 
+- two selectable, non-canonical Round 5 scenarios with q32 remaining the default;
+- a new partial batch-delivery retry incident with 4/4 public and 10/10 held-back
+  checks for collision-safe idempotency, compatibility, authority, and concurrency;
+- five q33 public-green adversarial fixes that independently fail held-back evidence;
+- per-scenario grading contracts shared by live execution and offline analysis;
+- isolated q33 evidence paths and resume guards that prevent scenario mixing;
+- one private live `gpt-5.6-luna` q33 smoke test that completed all three turns,
+  respected the authority and tool-protocol boundaries, scored 4/4 public and 9/10
+  held-back, and accurately disclosed its delimiter-collision residual risk;
 - public schema v3 with explicit same-host, remote, and unreported serving provenance;
 - conservative v1/v2 migration that never treats a contributor's client OS as the
   model server OS;

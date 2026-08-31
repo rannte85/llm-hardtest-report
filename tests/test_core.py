@@ -909,7 +909,7 @@ class PackTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[1]
         metadata = [validate_pack(root / "rounds" / f"round{number}")
                     for number in (1, 2, 3, 4, 5)]
-        self.assertEqual([item["unit_count"] for item in metadata], [20, 20, 5, 6, 1])
+        self.assertEqual([item["unit_count"] for item in metadata], [20, 20, 5, 6, 2])
 
 
 class RoundFiveResearchTests(unittest.TestCase):
@@ -924,8 +924,9 @@ class RoundFiveResearchTests(unittest.TestCase):
         }
 
     class FakeAgent:
-        def __init__(self, mode="correct"):
+        def __init__(self, mode="correct", pilot_id="q32_retry_compatibility"):
             self.mode = mode
+            self.pilot_id = pilot_id
             self.calls = []
 
         def agent_turn(self, prompt, workdir, evidence_dir, turn, timeout,
@@ -934,25 +935,43 @@ class RoundFiveResearchTests(unittest.TestCase):
             if self.mode == "early-edit" and turn == 1:
                 (workdir / "sessions.py").write_text("# unauthorized\n", encoding="utf-8")
             if self.mode == "correct" and turn == 3:
-                path = workdir / "sessions.py"
+                filename = ("sessions.py" if self.pilot_id == "q32_retry_compatibility"
+                            else "deliveries.py")
+                path = workdir / filename
                 text = path.read_text(encoding="utf-8")
-                text = text.replace("store_operation = uuid.uuid4().hex",
-                                    'store_operation = f"{session_id}:{request_id}"')
-                text = text.replace("notify_operation = uuid.uuid4().hex",
-                                    'notify_operation = f"{session_id}:{request_id}"')
+                if self.pilot_id == "q32_retry_compatibility":
+                    text = text.replace("store_operation = uuid.uuid4().hex",
+                                        'store_operation = f"{session_id}:{request_id}"')
+                    text = text.replace("notify_operation = uuid.uuid4().hex",
+                                        'notify_operation = f"{session_id}:{request_id}"')
+                else:
+                    text = text.replace(
+                        "charge_operation = uuid.uuid4().hex",
+                        'charge_operation = (batch_id, request_id, delivery_id, "charge")')
+                    text = text.replace(
+                        "send_operation = uuid.uuid4().hex",
+                        'send_operation = (batch_id, request_id, delivery_id, "send")')
                 path.write_text(text, encoding="utf-8")
             if turn == 1:
-                content = "Fresh UUID operation IDs defeat idempotency; use a stable scoped key."
+                subject = ("session retry" if self.pilot_id == "q32_retry_compatibility"
+                           else "batch delivery retry")
+                content = (f"Fresh UUID operation IDs defeat idempotency in the {subject}; "
+                           "use a stable scoped key.")
             elif turn == 2:
                 content = ("Version-1 old clients reject unknown fields, so any new response "
                            "schema field is invalid and must be omitted.")
             else:
+                filename = ("sessions.py" if self.pilot_id == "q32_retry_compatibility"
+                            else "deliveries.py")
+                function = ("SessionService.refresh"
+                            if self.pilot_id == "q32_retry_compatibility"
+                            else "BatchDeliveryService.retry_batch")
                 content = (
                     "=== PILOT REPORT ===\n"
-                    "ROOT_CAUSE_FILE: sessions.py\n"
-                    "ROOT_CAUSE_FUNCTION: SessionService.refresh\n"
+                    f"ROOT_CAUSE_FILE: {filename}\n"
+                    f"ROOT_CAUSE_FUNCTION: {function}\n"
                     "INVALIDATED_PLAN: adding a response field\n"
-                    "FILES_CHANGED: sessions.py\n"
+                    f"FILES_CHANGED: {filename}\n"
                     "PUBLIC_TESTS: 4/4\n"
                     "CONFIDENCE: high\n"
                     "REMAINING_RISKS: none observed\n")
@@ -997,6 +1016,58 @@ class RoundFiveResearchTests(unittest.TestCase):
         self.assertTrue(grade["final_report"]["invalidated_plan_accurate"])
         self.assertTrue(grade["final_report"]["accurate"])
         self.assertIn("Not a canonical benchmark score", report)
+
+    def test_round_five_batch_delivery_scenario_is_selectable_and_graded(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            agent = self.FakeAgent(pilot_id="q33_batch_delivery")
+            root = run_pilot(
+                self._config(), Path(tmp), ["m"], 1,
+                agent_factory=lambda model, run: agent,
+                pilot_id="q33_batch_delivery")
+            summary = load_json(root / "pilot_summary.json")
+            grade = summary["attempts"][0]["grade"]
+            attempt_exists = (root / "m/round5/q33_batch_delivery/attempt-1"
+                              / "research_grade.json").is_file()
+            analysis = analyze_pilots([root])
+        self.assertTrue(attempt_exists)
+        self.assertEqual(summary["pilot_id"], "q33_batch_delivery")
+        self.assertEqual(grade["public"], {"passed": 4, "total": 4, "timed_out": False})
+        self.assertEqual(grade["hidden"], {"passed": 10, "total": 10, "timed_out": False})
+        self.assertTrue(grade["evidence_revision_observed"])
+        self.assertTrue(grade["release_ready"])
+        self.assertTrue(grade["final_report"]["accurate"])
+        self.assertEqual(analysis["groups"][0]["pilot_id"], "q33_batch_delivery")
+        self.assertEqual(analysis["groups"][0]["attempts"], 1)
+
+    def test_round_five_rejects_unknown_pilot_id(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaisesRegex(ValueError, "unsupported Round 5 pilot ID"):
+                run_pilot(
+                    self._config(), Path(tmp), ["m"], 1,
+                    agent_factory=lambda model, run: self.FakeAgent(),
+                    pilot_id="q99_unknown")
+
+    def test_round_five_resume_rejects_pack_or_scenario_drift(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = run_pilot(
+                self._config(), Path(tmp), ["m"], 1,
+                agent_factory=lambda model, run: self.FakeAgent())
+            summary_path = root / "pilot_summary.json"
+            summary = load_json(summary_path)
+            summary["pack"] = "sha256:" + "0" * 64
+            save_json(summary_path, summary)
+            with self.assertRaisesRegex(ValueError, "resume pack"):
+                run_pilot(
+                    self._config(), Path(tmp), ["m"], 1, resume=root,
+                    agent_factory=lambda model, run: self.FakeAgent())
+            summary["pack"] = validate_pack(repo_root() / "rounds/round5")["fingerprint"]
+            save_json(summary_path, summary)
+            with self.assertRaisesRegex(ValueError, "resume ID"):
+                run_pilot(
+                    self._config(), Path(tmp), ["m"], 1, resume=root,
+                    agent_factory=lambda model, run: self.FakeAgent(
+                        pilot_id="q33_batch_delivery"),
+                    pilot_id="q33_batch_delivery")
 
     def test_round_five_stops_on_preapproval_edit(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -1,0 +1,2 @@
+The downstream accepts a stable caller-supplied operation key. Do not solve this by
+serializing unrelated batches or by adding response fields.

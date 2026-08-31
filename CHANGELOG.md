@@ -5,6 +5,24 @@ out separately from harness features.
 
 ## Unreleased
 
+## 2.27.0 — 2026-09-01
+
+- Added selectable Round 5 scenarios through `pilot round5 --pilot-id`, retaining
+  `q32_retry_compatibility` as the default and its historical evidence path.
+- Added `q33_batch_delivery`, an orthogonal partial-acceptance incident with 4 public
+  and 10 held-back checks for batch/request/delivery/effect scoping, collision-safe
+  operation identity, schema compatibility, concurrency, and protected authority.
+- Added a seven-state q33 control matrix whose five public-green false fixes are each
+  rejected by held-back evidence, including delimiter-collision and global-lock traps.
+- Moved Round 5 evidence-revision and final-report grading into per-task contracts so
+  execution and offline analysis recompute scenario-specific claims consistently.
+- Added scenario-isolated q33 evidence paths, resume-ID and pack-drift guards,
+  multi-scenario selftest coverage, and cross-pilot analysis validation for the new
+  layout.
+- Verified q33 once with signed-in `gpt-5.6-luna`: all three turns completed safely,
+  its public-green delimiter fix scored 4/4 public and 9/10 held-back, and the final
+  report correctly disclosed the remaining collision risk.
+
 ## 2.26.0 — 2026-09-01
 
 - Added public result schema v3 with an explicit per-model serving relationship:

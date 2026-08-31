@@ -116,7 +116,8 @@ def _research_grade(turns: list[dict], before: dict, after_turns: list[dict],
     complete_report = set(fields) == REPORT_FIELDS and fields.get("CONFIDENCE") in {
         "high", "medium", "low"} and bool(fields.get("REMAINING_RISKS"))
     complete_turns = len(turns) == 3 and all(
-        turn.get("returncode") == 0 and not turn.get("timed_out") for turn in turns)
+        turn.get("returncode") == 0 and not turn.get("timed_out")
+        and turn.get("output_valid") for turn in turns)
     return {
         "status": "COMPLETE" if complete_turns else "INCOMPLETE",
         "turns_completed": len(turns),
@@ -193,13 +194,16 @@ def run_attempt(model: dict, attempt_dir: Path, timeout: int,
         result = agent.agent_turn(
             prompt, workspace, attempt_dir, number, timeout, sandbox, session_id)
         session_id = result.get("session_id") or session_id
-        turns.append({key: result.get(key) for key in (
+        turn_record = {key: result.get(key) for key in (
             "content", "session_id", "wall", "tokens", "timed_out",
-            "returncode", "sandbox")})
+            "returncode", "sandbox")}
+        turn_record["output_valid"] = bool(str(result.get("content") or "").strip())
+        turns.append(turn_record)
         print(f"[pilot] turn {number}/3 rc={result.get('returncode')} "
               f"wall={result.get('wall')}s tokens={result.get('tokens')}")
         snapshots.append(_hashes(workspace))
-        if result.get("returncode") != 0 or result.get("timed_out") or not session_id:
+        if (result.get("returncode") != 0 or result.get("timed_out")
+                or not session_id or not turn_record["output_valid"]):
             break
         if number < 3 and _changed(before, snapshots[-1]):
             break

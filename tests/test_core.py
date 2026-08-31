@@ -302,6 +302,39 @@ class BackendTests(unittest.TestCase):
                 "", {"CODEX_HOME": str(root / "home")}, work, 0)
         self.assertEqual(actual, wanted)
 
+    def test_codex_agent_disables_unsupported_multi_agent_feature(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            work = root / "work"
+            work.mkdir()
+            backend = CodexBackend({
+                "key": "m", "model": "m", "codex_provider": "openai",
+            }, root / "state")
+
+            class FakeProcess:
+                pid = 1
+
+                def wait(self, timeout):
+                    return 0
+
+            commands = []
+
+            def fake_popen(command, **_kwargs):
+                commands.append(command)
+                output = Path(command[command.index("-o") + 1])
+                output.write_text("done", encoding="utf-8")
+                return FakeProcess()
+
+            with patch("subprocess.Popen", side_effect=fake_popen):
+                backend.agent_turn(
+                    "first", work, root / "evidence", 1, 10, "read-only")
+                backend.agent_turn(
+                    "next", work, root / "evidence", 2, 10, "workspace-write",
+                    "11111111-1111-1111-1111-111111111111")
+        for command in commands:
+            position = command.index("--disable")
+            self.assertEqual(command[position + 1], "multi_agent")
+
     def test_missing_choices_is_provider_error(self):
         class FakeResponse:
             def __enter__(self):
@@ -771,6 +804,8 @@ class RoundFiveResearchTests(unittest.TestCase):
                     "PUBLIC_TESTS: 4/4\n"
                     "CONFIDENCE: high\n"
                     "REMAINING_RISKS: none observed\n")
+            if self.mode == "empty" and turn == 1:
+                content = ""
             (evidence_dir / f"transcript_turn{turn}.txt").write_text(
                 content, encoding="utf-8")
             (evidence_dir / f"last_message_turn{turn}.txt").write_text(
@@ -826,6 +861,18 @@ class RoundFiveResearchTests(unittest.TestCase):
             grade = load_json(root / "pilot_summary.json")["attempts"][0]["grade"]
         self.assertEqual(grade["status"], "INCOMPLETE")
         self.assertEqual(grade["turns_completed"], 1)
+        self.assertFalse(grade["release_ready"])
+
+    def test_round_five_empty_agent_output_stops_and_is_incomplete(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            agent = self.FakeAgent("empty")
+            root = run_pilot(
+                self._config(), Path(tmp), ["m"], 1,
+                agent_factory=lambda model, run: agent)
+            grade = load_json(root / "pilot_summary.json")["attempts"][0]["grade"]
+        self.assertEqual(len(agent.calls), 1)
+        self.assertEqual(grade["status"], "INCOMPLETE")
+        self.assertFalse(grade["turns"][0]["output_valid"])
         self.assertFalse(grade["release_ready"])
 
     def test_round_five_requires_repository_agent_transport(self):

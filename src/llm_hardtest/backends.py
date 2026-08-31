@@ -221,13 +221,15 @@ class CodexBackend(Backend):
             command = [
                 "codex", "exec", "-m", self.model["model"], "-C", str(workdir),
                 "-s", sandbox, "--skip-git-repo-check",
-                "-c", 'approval_policy="never"', "-o", str(last_path),
+                "-c", 'approval_policy="never"', "--disable", "multi_agent",
+                "-o", str(last_path),
             ]
         else:
             command = [
                 "codex", "exec", "resume", session_id, "-m", self.model["model"],
                 "--skip-git-repo-check", "-c", 'approval_policy="never"',
-                "-c", f'sandbox_mode="{sandbox}"', "-o", str(last_path),
+                "-c", f'sandbox_mode="{sandbox}"', "--disable", "multi_agent",
+                "-o", str(last_path),
             ]
         effort = self.model.get("reasoning_effort")
         if effort:

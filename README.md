@@ -126,6 +126,11 @@ preview the exact public JSON, and submit it through a GitHub pull request. Raw 
 outputs, endpoint URLs, credentials, local paths, run IDs, and timestamps are excluded.
 See [Voluntary Public Results](docs/PUBLIC_RESULTS.md) for the consent and privacy model.
 
+```bash
+llm-hardtest export runs/my-run --public --output result-bundle.zip
+llm-hardtest submit result-bundle.zip --preview
+```
+
 ## Live terminal dashboard
 
 The CLI shows a live text dashboard automatically when `run` is attached to an

@@ -3,6 +3,11 @@
 All notable changes are documented here. Benchmark-scoring compatibility is called
 out separately from harness features.
 
+## Unreleased
+
+- Added explicit, allowlist-only public result exports with deterministic bundle IDs,
+  privacy validation, stable ZIP output, and no telemetry or automatic submission.
+
 ## 2.1.0 — 2026-08-31
 
 - Classified provider output-limit termination as `INCOMPLETE` instead of a wrong

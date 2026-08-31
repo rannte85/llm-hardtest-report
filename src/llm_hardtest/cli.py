@@ -17,6 +17,7 @@ from .results import output_limited
 from .inspection import inspect_run, render_inspection
 from .replay import make_replay_config
 from .packs import validate_pack
+from .public_results import export_public_bundle
 
 
 def _ask(prompt: str, default: str | None = None) -> str:
@@ -263,6 +264,11 @@ def main(argv=None) -> int:
     p_pack_validate = pack_commands.add_parser("validate", help="validate a pack manifest")
     p_pack_validate.add_argument("path")
     p_pack_validate.add_argument("--json", action="store_true")
+    p_export = sub.add_parser("export", help="create an explicitly public result bundle")
+    p_export.add_argument("run_dir")
+    p_export.add_argument("--public", action="store_true",
+                          help="confirm that the sanitized bundle is intended for review")
+    p_export.add_argument("--output", default="llm-hardtest-public-result.zip")
     sub.add_parser("selftest", help="validate datasets and graders without calling a model")
     args = parser.parse_args(argv)
     try:
@@ -308,6 +314,17 @@ def main(argv=None) -> int:
             metadata = validate_pack(Path(args.path))
             print(json.dumps(metadata, indent=2) if args.json else
                   f'{metadata["id"]}: VALID {metadata["fingerprint"]}')
+            return 0
+        if args.command == "export":
+            if not args.public:
+                raise ValueError("public export requires the explicit --public flag")
+            path, payload, warnings = export_public_bundle(
+                Path(args.run_dir), Path(args.output))
+            print(f"Public bundle: {path}")
+            print(f'Bundle ID: {payload["bundle_id"]}')
+            for warning in warnings:
+                print("WARNING: " + warning)
+            print(f"Preview before submission: llm-hardtest submit {path} --preview")
             return 0
         return selftest()
     except (ValueError, RuntimeError, OSError, json.JSONDecodeError,

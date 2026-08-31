@@ -7,6 +7,7 @@ import stat
 import tempfile
 import threading
 import unittest
+import zipfile
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from unittest.mock import patch
 from pathlib import Path
@@ -16,11 +17,15 @@ from llm_hardtest.cli import discover_models, doctor_config
 from llm_hardtest.common import answer_matches, answer_text, save_json
 from llm_hardtest.orchestrator import _campaign_units, run as run_campaign, validate_config
 from llm_hardtest.progress import TerminalDashboard, _duration
-from llm_hardtest.report import collect, render
+from llm_hardtest.report import collect, generate, render
 from llm_hardtest.results import item_status, result_counts
 from llm_hardtest.inspection import inspect_run, render_inspection
 from llm_hardtest.replay import make_replay_config
 from llm_hardtest.packs import validate_pack
+from llm_hardtest.public_results import (
+    build_public_result, export_public_bundle, load_public_bundle,
+    validate_public_result,
+)
 from llm_hardtest.round12 import run as run_round12
 from llm_hardtest.round3 import _fields, _grade
 from llm_hardtest.round4 import run as run_round4
@@ -673,6 +678,100 @@ class PackTests(unittest.TestCase):
         metadata = [validate_pack(root / "rounds" / f"round{number}")
                     for number in (1, 2, 3, 4, 5)]
         self.assertEqual([item["unit_count"] for item in metadata], [20, 20, 5, 6, 1])
+
+
+class PublicResultTests(unittest.TestCase):
+    def _run(self, root, model_name="org/model"):
+        config = {
+            "name": "private-campaign-name", "repetitions": 1, "rounds": [1],
+            "timeout_seconds": 30,
+            "models": [{
+                "key": "private-user-key", "label": "Private User Label",
+                "model": model_name, "transport": "openai_compat",
+                "base_url": "http://127.0.0.1:8000/v1",
+                "api_key_env": "VERY_PRIVATE_API_KEY", "max_tokens": 2048,
+                "public_metadata": {"quantization": "Q4_K_M", "unknown": "drop-me"},
+            }],
+        }
+        save_json(root / "config.json", config)
+        save_json(root / "private-user-key/round1/attempt-1/result.json", {
+            "attempt": 1, "score": 1, "total": 1, "planned": 1, "wall": 2.0,
+            "results": [{
+                "id": 1, "correct": True, "content": "private raw response",
+                "transcript": "/Users/private/work and sk-secret-secret-secret",
+            }],
+        })
+        generate(root)
+
+    def test_public_export_is_allowlist_only_and_deterministic(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "run"
+            self._run(root)
+            first = Path(tmp) / "first.zip"
+            second = Path(tmp) / "second.zip"
+            _, payload, warnings = export_public_bundle(root, first)
+            export_public_bundle(root, second)
+            raw = first.read_bytes()
+            second_raw = second.read_bytes()
+            loaded = load_public_bundle(first)
+        self.assertEqual(raw, second_raw)
+        text = json.dumps(payload)
+        for private in ("private-campaign-name", "Private User Label", "private-user-key",
+                        "127.0.0.1", "VERY_PRIVATE_API_KEY", "private raw response",
+                        "/Users/private", "drop-me"):
+            self.assertNotIn(private, text)
+        self.assertEqual(payload["models"][0]["public_name"], "org/model")
+        self.assertEqual(payload["models"][0]["public_metadata"],
+                         {"quantization": "Q4_K_M"})
+        self.assertFalse(warnings)
+        self.assertEqual(loaded, payload)
+
+    def test_private_model_path_is_replaced(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "run"
+            self._run(root, "/Users/alice/models/private.gguf")
+            payload, warnings = build_public_result(root)
+        self.assertEqual(payload["models"][0]["public_name"], "model-1")
+        self.assertTrue(warnings)
+        self.assertNotIn("alice", json.dumps(payload))
+
+    def test_public_result_rejects_content_tampering(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "run"
+            self._run(root)
+            payload, _ = build_public_result(root)
+        payload["models"][0]["public_name"] = "changed/model"
+        with self.assertRaisesRegex(ValueError, "bundle_id"):
+            validate_public_result(payload)
+
+    def test_public_export_refuses_overwrite(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "run"
+            self._run(root)
+            output = Path(tmp) / "result.zip"
+            export_public_bundle(root, output)
+            with self.assertRaisesRegex(ValueError, "overwrite"):
+                export_public_bundle(root, output)
+
+    def test_public_bundle_rejects_unexpected_archive_content(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "bad.zip"
+            with zipfile.ZipFile(path, "w") as archive:
+                archive.writestr("../private.txt", "secret")
+            with self.assertRaisesRegex(ValueError, "unexpected files"):
+                load_public_bundle(path)
+
+    def test_privacy_validator_rejects_a_rehashed_private_field(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "run"
+            self._run(root)
+            payload, _ = build_public_result(root)
+        payload["models"][0]["rounds"]["1"]["content"] = "/Users/alice/private"
+        from llm_hardtest.public_results import _bundle_id
+        body = {key: value for key, value in payload.items() if key != "bundle_id"}
+        payload["bundle_id"] = _bundle_id(body)
+        with self.assertRaisesRegex(ValueError, "extra fields"):
+            validate_public_result(payload)
 
 
 class ReportTests(unittest.TestCase):

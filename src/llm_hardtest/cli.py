@@ -14,6 +14,7 @@ from .common import load_json, repo_root, save_json, slug
 from .orchestrator import _model_rounds, run, validate_config
 from .report import generate
 from .results import output_limited
+from .inspection import inspect_run, render_inspection
 
 
 def _ask(prompt: str, default: str | None = None) -> str:
@@ -226,6 +227,9 @@ def main(argv=None) -> int:
     )
     p_report = sub.add_parser("report", help="regenerate a completed campaign report")
     p_report.add_argument("run_dir")
+    p_inspect = sub.add_parser("inspect", help="show unresolved campaign items")
+    p_inspect.add_argument("run_dir")
+    p_inspect.add_argument("--json", action="store_true", help="emit machine-readable JSON")
     p_validate = sub.add_parser("validate", help="validate config syntax and local executables")
     p_validate.add_argument("--config", required=True)
     p_doctor = sub.add_parser("doctor", help="probe configured servers, models, and APIs")
@@ -249,6 +253,10 @@ def main(argv=None) -> int:
             return 0
         if args.command == "report":
             md, js = generate(Path(args.run_dir)); print(md); print(js); return 0
+        if args.command == "inspect":
+            summary = inspect_run(Path(args.run_dir))
+            print(json.dumps(summary, indent=2) if args.json else render_inspection(summary))
+            return 0
         if args.command == "validate":
             validate_config(load_json(Path(args.config)))
             print(f"VALID: {args.config} (run doctor for live API checks)")

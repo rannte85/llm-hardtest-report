@@ -18,6 +18,7 @@ from llm_hardtest.orchestrator import _campaign_units, run as run_campaign, vali
 from llm_hardtest.progress import TerminalDashboard, _duration
 from llm_hardtest.report import collect, render
 from llm_hardtest.results import item_status, result_counts
+from llm_hardtest.inspection import inspect_run, render_inspection
 from llm_hardtest.round12 import run as run_round12
 from llm_hardtest.round3 import _fields, _grade
 from llm_hardtest.round4 import run as run_round4
@@ -51,6 +52,52 @@ class ResultStatusTests(unittest.TestCase):
         }), {
             "PASS": 2, "FAIL": 1, "INCOMPLETE": 0, "REVIEW": 1, "INVALID": 1,
         })
+
+
+class InspectionTests(unittest.TestCase):
+    def test_inspection_reads_legacy_and_current_unresolved_items(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "run-one"
+            save_json(root / "config.json", {
+                "models": [{"key": "m", "model": "m"}],
+            })
+            save_json(root / "m/round1/attempt-1/result.json", {
+                "attempt": 1,
+                "results": [
+                    {"id": 1, "correct": True},
+                    {"id": 2, "correct": False, "extracted": "7"},
+                    {"id": 3, "correct": False, "finish_reason": "length"},
+                    {"id": 4, "correct": None, "valid": False,
+                     "error": "server unavailable"},
+                ],
+            })
+            summary = inspect_run(root)
+        self.assertEqual(summary["unresolved"], 3)
+        self.assertEqual([item["status"] for item in summary["items"]],
+                         ["FAIL", "INCOMPLETE", "INVALID"])
+        text = render_inspection(summary)
+        self.assertIn("q2\tFAIL\textracted=7", text)
+        self.assertIn("q3\tINCOMPLETE\tlength", text)
+        self.assertIn("q4\tINVALID\tserver unavailable", text)
+
+    def test_clean_inspection_has_stable_message(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "clean-run"
+            save_json(root / "config.json", {"models": []})
+            summary = inspect_run(root)
+        self.assertEqual(render_inspection(summary), "clean-run: no unresolved items")
+
+    def test_inspection_requires_a_run_directory(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaisesRegex(ValueError, "config.json"):
+                inspect_run(Path(tmp))
+
+    def test_inspection_rejects_a_traversing_model_key(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "run"
+            save_json(root / "config.json", {"models": [{"key": "../escape"}]})
+            with self.assertRaisesRegex(ValueError, "unsafe model key"):
+                inspect_run(root)
 
 
 class ProgressTests(unittest.TestCase):

@@ -93,6 +93,14 @@ The default output is `runs/<campaign>-<timestamp>/REPORT.md`. The whole `runs/`
 directory is ignored by Git so model outputs and large working copies are not
 accidentally committed.
 
+Inspect failures, incomplete generations, review items, and infrastructure errors
+without changing the saved run:
+
+```bash
+llm-hardtest inspect runs/my-local-models-20260831-090000
+llm-hardtest inspect runs/my-local-models-20260831-090000 --json
+```
+
 ## Live terminal dashboard
 
 The CLI shows a live text dashboard automatically when `run` is attached to an

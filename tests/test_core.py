@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import base64
 import io
 import os
 import stat
@@ -27,7 +28,11 @@ from llm_hardtest.public_results import (
     validate_public_result,
 )
 from llm_hardtest.github_submit import (
-    open_submission_pr, preview_submission, submission_relative_path,
+    open_submission_pr, preview_submission, submission_document,
+    submission_relative_path,
+)
+from llm_hardtest.community_results import (
+    aggregate_submissions, build_index, load_submission_directory, render_index,
 )
 from llm_hardtest.round12 import run as run_round12
 from llm_hardtest.round3 import _fields, _grade
@@ -866,7 +871,7 @@ class PublicResultTests(unittest.TestCase):
         })
         content_call = next(fields for method, endpoint, fields, _ in client.calls
                             if method == "PUT" and "/contents/" in endpoint)
-        self.assertEqual(json.loads(__import__("base64").b64decode(
+        self.assertEqual(json.loads(base64.b64decode(
             content_call["content"])), payload)
         self.assertEqual(calls[("POST", "repos/owner/repo/pulls")]["head"], branch)
 
@@ -904,6 +909,87 @@ class PublicResultTests(unittest.TestCase):
         pull = next(fields for method, endpoint, fields, _ in client.calls
                     if method == "POST" and endpoint == "repos/owner/repo/pulls")
         self.assertTrue(pull["head"].startswith("contributor:llm-hardtest-result/"))
+
+    def test_public_round_four_task_types_validate(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "run"
+            save_json(root / "config.json", {
+                "name": "round-four", "repetitions": 1, "rounds": [4],
+                "round4_tasks": ["q26_hidden_tests"],
+                "models": [{
+                    "key": "m", "label": "M", "model": "org/model",
+                    "transport": "codex_cli", "codex_provider": "openai",
+                }],
+            })
+            save_json(root / "m/round4/run.json", {"attempts": 1, "tasks": ["q26_hidden_tests"],
+                "errors": [], "grades": [{
+                    "task": "q26_hidden_tests",
+                    "public": {"passed": 2, "total": 2},
+                    "hidden": {"passed": 1, "total": 1},
+                    "score_auto": 65,
+                    "flags": {"attempt_pass": True, "manager_utility_pass": None,
+                              "false_green": False, "test_tampering": False},
+                    "run_meta": {"attempt": 1, "wall": 1.5, "tokens": None},
+                }]})
+            generate(root)
+            payload, _ = build_public_result(root)
+        self.assertTrue(payload["models"][0]["rounds"]["4"]["tasks"][0]["release_ready"])
+
+    def test_community_directory_validation_and_sparse_baseline(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run = Path(tmp) / "run"
+            self._run(run)
+            payload, _ = build_public_result(run)
+            submissions = Path(tmp) / "submissions"
+            submissions.mkdir()
+            digest = payload["bundle_id"].removeprefix("sha256:")
+            (submissions / f"{digest}.json").write_text(
+                submission_document(payload), encoding="utf-8")
+            loaded = load_submission_directory(submissions)
+            rows = aggregate_submissions(loaded)
+            self.assertEqual((len(loaded), len(rows)), (1, 1))
+            self.assertEqual(rows[0]["passed"], 1)
+            self.assertIn("withheld (<5 runs)", render_index(loaded))
+            output = Path(tmp) / "INDEX.md"
+            self.assertEqual(build_index(submissions, output), (1, 1))
+            self.assertEqual(build_index(submissions, output, check=True), (1, 1))
+            output.write_text("stale\n", encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "stale"):
+                build_index(submissions, output, check=True)
+
+    def test_community_baseline_requires_five_distinct_bundles(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run = Path(tmp) / "run"
+            self._run(run)
+            original, _ = build_public_result(run)
+            submissions = []
+            from llm_hardtest.public_results import _bundle_id
+            for index in range(5):
+                payload = json.loads(json.dumps(original))
+                payload["tool"]["version"] = f"2.1.{index}"
+                body = {key: value for key, value in payload.items() if key != "bundle_id"}
+                payload["bundle_id"] = _bundle_id(body)
+                validate_public_result(payload)
+                submissions.append(payload)
+        document = render_index(submissions)
+        self.assertIn("5/5", document)
+        self.assertIn("100.0% observed", document)
+
+    def test_community_validation_rejects_wrong_filename_and_extra_entry(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run = Path(tmp) / "run"
+            self._run(run)
+            payload, _ = build_public_result(run)
+            submissions = Path(tmp) / "submissions"
+            submissions.mkdir()
+            (submissions / "wrong.json").write_text(
+                submission_document(payload), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "filename"):
+                load_submission_directory(submissions)
+            (submissions / "wrong.json").unlink()
+            (submissions / "notes.txt").write_text("unexpected", encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "unexpected"):
+                load_submission_directory(submissions)
 
 
 class ReportTests(unittest.TestCase):

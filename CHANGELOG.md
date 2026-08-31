@@ -9,6 +9,8 @@ out separately from harness features.
   privacy validation, stable ZIP output, and no telemetry or automatic submission.
 - Added local submission previews and an explicitly confirmed GitHub pull-request
   workflow that supports both repository owners and contributor forks.
+- Added CI validation for accepted submissions and a deterministic community index
+  that separates incomparable configurations and withholds sparse baselines.
 
 ## 2.1.0 — 2026-08-31
 

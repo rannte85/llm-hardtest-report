@@ -19,6 +19,7 @@ from .replay import make_replay_config
 from .packs import validate_pack
 from .public_results import export_public_bundle
 from .github_submit import DEFAULT_REPOSITORY, open_submission_pr, preview_submission
+from .community_results import build_index, load_submission_directory
 
 
 def _ask(prompt: str, default: str | None = None) -> str:
@@ -278,6 +279,16 @@ def main(argv=None) -> int:
     p_submit.add_argument("--yes", action="store_true",
                           help="confirm the external GitHub branch, file, and PR writes")
     p_submit.add_argument("--repo", default=DEFAULT_REPOSITORY)
+    p_results = sub.add_parser("results", help="validate and aggregate public submissions")
+    results_commands = p_results.add_subparsers(dest="results_command", required=True)
+    p_results_validate = results_commands.add_parser(
+        "validate", help="validate canonical submission files")
+    p_results_validate.add_argument("directory", nargs="?", default="results/submissions")
+    p_results_build = results_commands.add_parser(
+        "build", help="rebuild the community result index")
+    p_results_build.add_argument("directory", nargs="?", default="results/submissions")
+    p_results_build.add_argument("--output", default="results/INDEX.md")
+    p_results_build.add_argument("--check", action="store_true")
     sub.add_parser("selftest", help="validate datasets and graders without calling a model")
     args = parser.parse_args(argv)
     try:
@@ -346,6 +357,17 @@ def main(argv=None) -> int:
                 raise ValueError("opening a GitHub pull request requires --open-pr --yes")
             url = open_submission_pr(payload, args.repo)
             print(f"Pull request: {url}")
+            return 0
+        if args.command == "results":
+            directory = Path(args.directory)
+            if args.results_command == "validate":
+                submissions = load_submission_directory(directory)
+                print(f"VALID: {len(submissions)} public result bundle(s)")
+                return 0
+            bundles, groups = build_index(
+                directory, Path(args.output), check=args.check)
+            action = "VALID" if args.check else "BUILT"
+            print(f"{action}: {args.output} ({bundles} bundle(s), {groups} group(s))")
             return 0
         return selftest()
     except (ValueError, RuntimeError, OSError, json.JSONDecodeError,

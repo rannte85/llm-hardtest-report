@@ -11,3 +11,14 @@ Submitters must preview the exact payload, remove anything they do not want publ
 and open a pull request. Submissions are repository contributions under the project
 license and remain visible in Git history after merge. See
 [`docs/PUBLIC_RESULTS.md`](../docs/PUBLIC_RESULTS.md) for privacy and validation rules.
+
+Maintainers and contributors can reproduce repository checks locally:
+
+```bash
+llm-hardtest results validate
+llm-hardtest results build
+llm-hardtest results build --check
+```
+
+The index groups only identical public configurations and pack fingerprints. An
+observed baseline remains hidden until five comparable runs have been accepted.

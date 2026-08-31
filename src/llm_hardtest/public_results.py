@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import platform
 import re
 import sys
@@ -32,6 +33,11 @@ TASK_FIELDS = {
     "task", "attempt", "public_passed", "public_total", "hidden_passed",
     "hidden_total", "auto_score", "release_ready", "handoff_utility",
     "false_green", "tampering", "timed_out", "wall_seconds", "tokens",
+}
+TASK_BOOLEAN_FIELDS = {"release_ready", "false_green", "tampering", "timed_out"}
+TASK_OPTIONAL_BOOLEAN_FIELDS = {"handoff_utility"}
+TASK_NUMERIC_FIELDS = TASK_FIELDS - {
+    "task", *TASK_BOOLEAN_FIELDS, *TASK_OPTIONAL_BOOLEAN_FIELDS,
 }
 PRIVATE_STRING = re.compile(
     r"(?:^[/~]|^[A-Za-z]:[\\/]|\\|://|/Users/|/home/|@|[\x00-\x1f])")
@@ -261,11 +267,26 @@ def validate_public_result(payload: dict) -> dict:
                             raise ValueError(f"public model {index} has an invalid task row")
                         if _public_text(task.get("task"), maximum=80) is None:
                             raise ValueError(f"public model {index} has an unsafe task id")
-                        if any(not isinstance(item, (int, float, bool, type(None), str))
-                               for item in task.values()):
-                            raise ValueError(f"public model {index} task values are invalid")
+                        for task_key, task_value in task.items():
+                            if task_key == "task":
+                                continue
+                            if task_key in TASK_BOOLEAN_FIELDS:
+                                valid = isinstance(task_value, bool)
+                            elif task_key in TASK_OPTIONAL_BOOLEAN_FIELDS:
+                                valid = task_value is None or isinstance(task_value, bool)
+                            else:
+                                valid = (task_key in TASK_NUMERIC_FIELDS
+                                         and (task_value is None or (
+                                             not isinstance(task_value, bool)
+                                             and isinstance(task_value, (int, float))
+                                             and math.isfinite(task_value)
+                                             and task_value >= 0)))
+                            if not valid:
+                                raise ValueError(
+                                    f"public model {index} task {task_key} is invalid")
                 elif value is not None and (
-                        isinstance(value, bool) or not isinstance(value, (int, float))):
+                        isinstance(value, bool) or not isinstance(value, (int, float))
+                        or not math.isfinite(value) or value < 0):
                     raise ValueError(f"public model {index} round metric {key} is invalid")
         if set(model["public_metadata"]) - PUBLIC_METADATA_FIELDS:
             raise ValueError(f"public model {index} metadata is not allowlisted")
@@ -273,7 +294,8 @@ def validate_public_result(payload: dict) -> dict:
             raise ValueError(f"public model {index} parameters are not allowlisted")
         for key, value in model["public_metadata"].items():
             if key.endswith("_gb"):
-                if isinstance(value, bool) or not isinstance(value, (int, float)) or value <= 0:
+                if (isinstance(value, bool) or not isinstance(value, (int, float))
+                        or not math.isfinite(value) or value <= 0):
                     raise ValueError(f"public model {index} metadata {key} is invalid")
             elif _public_text(value) is None:
                 raise ValueError(f"public model {index} metadata {key} is unsafe")
@@ -281,7 +303,8 @@ def validate_public_result(payload: dict) -> dict:
             if key == "reasoning_effort":
                 if _public_text(value, maximum=32) is None:
                     raise ValueError(f"public model {index} reasoning effort is invalid")
-            elif isinstance(value, bool) or not isinstance(value, (int, float)):
+            elif (isinstance(value, bool) or not isinstance(value, (int, float))
+                  or not math.isfinite(value)):
                 raise ValueError(f"public model {index} parameter {key} is invalid")
     privacy = payload.get("privacy")
     if privacy != {

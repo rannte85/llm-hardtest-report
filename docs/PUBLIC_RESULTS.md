@@ -68,3 +68,10 @@ The repository can aggregate accepted files into counts, score distributions, an
 descriptive baselines. Aggregates are observational examples, not predictions of an
 unseen model and not evidence that different hardware, quantization, prompts, server
 versions, or pack fingerprints are directly comparable.
+
+`results build` groups records only when model name, environment, transport,
+generation parameters, declared metadata, round, and pack fingerprint match. It
+withholds a descriptive pass-rate baseline until five independently submitted runs
+exist in that exact group. A future predictive model would require substantially more
+representative data, uncertainty reporting, abuse controls, and an explicit statement
+of the population it claims to predict.

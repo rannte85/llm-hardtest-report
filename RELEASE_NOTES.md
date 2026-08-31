@@ -1,10 +1,22 @@
-# Release Notes — 2.6.0
+# Release Notes — 2.7.0
 
 This repository is ready to publish as `rannte85/llm-hardtest-report`. It contains no campaign
 outputs, credentials, local model files, personal filesystem paths, or generated
 Python caches.
 
 The release validation covers:
+
+- schema-v2 public bundles with every item status, attempt number, wall time, and
+  completion-token count, plus backward validation of aggregate-only schema v1;
+- aggregate/item consistency checks that reject rehashed score contradictions and
+  conflicting duplicate item observations;
+- community recomputation of item difficulty, corrected discrimination, signal
+  class, missing outcomes, and repeat-vs-configuration disagreement;
+- bundle-cluster 95% intervals where each independent submission contributes one
+  rate regardless of repeated attempts or duplicate model entries;
+- observed-bundle thresholds that cannot be unlocked by 0/0 test suites;
+- optional model format, parameter count, server version, accelerator count, latency,
+  and token-rate fields suitable for a future environment-aware serving recommender;
 
 - explicit-opt-in Round 5 public export, complete JSON preview, and GitHub PR
   submission with no external write before `--open-pr --yes`;

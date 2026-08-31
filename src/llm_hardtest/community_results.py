@@ -2,15 +2,47 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
+import statistics
 from collections import defaultdict
 from pathlib import Path
 
+from .calibration import _item_metrics, _pairwise_stability
 from .github_submit import submission_relative_path
 from .public_pilots import load_public_pilot_bundle
 from .public_results import load_public_bundle
 
 
 MIN_BASELINE_SUBMISSIONS = 5
+
+
+def _cluster_interval(rates: list[float]) -> dict | None:
+    """Wilson-style 95% interval across independent bundle rates, never attempts."""
+    if len(rates) < MIN_BASELINE_SUBMISSIONS:
+        return None
+    z = 1.96
+    sample_size = len(rates)
+    estimate = statistics.mean(rates)
+    denominator = 1 + z ** 2 / sample_size
+    center = (estimate + z ** 2 / (2 * sample_size)) / denominator
+    margin = (z / denominator * math.sqrt(
+        estimate * (1 - estimate) / sample_size
+        + z ** 2 / (4 * sample_size ** 2)))
+    return {
+        "estimate": round(estimate, 6),
+        "low": round(max(0.0, center - margin), 6),
+        "high": round(min(1.0, center + margin), 6),
+        "observed_submissions": sample_size,
+        "method": "bundle_cluster_wilson_95",
+    }
+
+
+def _percentile(values: list[float], percentile: float) -> float | None:
+    if not values:
+        return None
+    ordered = sorted(values)
+    index = max(0, math.ceil(percentile * len(ordered)) - 1)
+    return round(ordered[index], 3)
 
 
 def load_submission_directory(directory: Path) -> list[dict]:
@@ -55,39 +87,120 @@ def aggregate_submissions(submissions: list[dict]) -> list[dict]:
     """Group only identical public configurations, rounds, and pack fingerprints."""
     groups = defaultdict(lambda: {
         "submissions": 0, "runs": 0, "passed": 0, "total": 0, "incomplete": 0,
-        "infrastructure_errors": 0,
+        "manual_review": 0, "infrastructure_errors": 0,
     })
     for payload in submissions:
-        bundle_groups = set()
+        bundle_groups = defaultdict(lambda: {
+            "runs": 0, "passed": 0, "total": 0, "incomplete": 0,
+            "manual_review": 0, "infrastructure_errors": 0,
+            "_item_walls": [], "_token_rates": [],
+        })
         for model in payload["models"]:
             configuration = _configuration_id(payload, model)
             for round_number, metrics in model["rounds"].items():
                 pack = payload["benchmark"]["packs"][round_number]
                 key = (int(round_number), pack, model["public_name"], configuration)
-                group = groups[key]
-                if key not in bundle_groups:
-                    group["submissions"] += 1
-                    bundle_groups.add(key)
-                group["runs"] += 1
-                for field in ("passed", "total", "incomplete", "infrastructure_errors"):
+                local = bundle_groups[key]
+                local["runs"] += 1
+                score_fields = (("release_ready", "attempts") if round_number == "4"
+                                else ("passed", "total"))
+                for target, source in zip(("passed", "total"), score_fields):
+                    value = metrics.get(source)
+                    if isinstance(value, (int, float)) and not isinstance(value, bool):
+                        local[target] += value
+                for field in ("incomplete", "manual_review", "infrastructure_errors"):
                     value = metrics.get(field)
                     if isinstance(value, (int, float)) and not isinstance(value, bool):
-                        group[field] += value
+                        local[field] += value
+                for item in metrics.get("items", []):
+                    wall, tokens = item.get("wall_seconds"), item.get("tokens")
+                    if isinstance(wall, (int, float)) and not isinstance(wall, bool):
+                        local["_item_walls"].append(float(wall))
+                        if (wall > 0 and isinstance(tokens, int)
+                                and not isinstance(tokens, bool)):
+                            local["_token_rates"].append(tokens / wall)
+        for key, local in bundle_groups.items():
+            group = groups[key]
+            group["submissions"] += 1
+            for field, value in local.items():
+                if not field.startswith("_"):
+                    group[field] += value
+            if local["total"] > 0:
+                group.setdefault("_bundle_pass_rates", []).append(
+                    local["passed"] / local["total"])
+            if local["_item_walls"]:
+                group.setdefault("_bundle_mean_walls", []).append(
+                    statistics.mean(local["_item_walls"]))
+            if local["_token_rates"]:
+                group.setdefault("_bundle_mean_token_rates", []).append(
+                    statistics.mean(local["_token_rates"]))
     rows = []
     for (round_number, pack, model_name, configuration), totals in sorted(
             groups.items(), key=lambda item: (item[0][0], item[0][2].lower(), item[0][3])):
+        rates = totals.get("_bundle_pass_rates", [])
         rows.append({
             "round": round_number,
             "pack": pack,
             "model": model_name,
             "configuration": configuration,
-            **totals,
+            **{key: value for key, value in totals.items() if not key.startswith("_")},
+            "observed_submissions": len(rates),
+            "bundle_pass_rate_interval95": _cluster_interval(rates),
+            "bundle_item_wall_p50_seconds": _percentile(
+                totals.get("_bundle_mean_walls", []), 0.5),
+            "bundle_item_wall_p90_seconds": _percentile(
+                totals.get("_bundle_mean_walls", []), 0.9),
+            "bundle_tokens_per_second_p50": _percentile(
+                totals.get("_bundle_mean_token_rates", []), 0.5),
+        })
+    return rows
+
+
+def aggregate_item_diagnostics(submissions: list[dict]) -> list[dict]:
+    """Recompute status-only item signal from schema-v2 community observations."""
+    groups = defaultdict(lambda: {
+        "matrix": defaultdict(dict), "models": {}, "bundles": set(),
+    })
+    for payload in submissions:
+        if payload.get("schema_version", 1) < 2:
+            continue
+        bundle_id = payload["bundle_id"]
+        for model in payload["models"]:
+            configuration = _configuration_id(payload, model)
+            for round_number, metrics in model["rounds"].items():
+                pack = payload["benchmark"]["packs"][round_number]
+                group = groups[(int(round_number), pack)]
+                for item in metrics.get("items", []):
+                    respondent = (bundle_id, configuration, item["attempt"])
+                    previous = group["matrix"][respondent].get(item["item"])
+                    if previous is not None and previous != item["status"]:
+                        raise ValueError(
+                            "one public bundle has conflicting duplicate item outcomes")
+                    group["matrix"][respondent][item["item"]] = item["status"]
+                    group["models"][respondent] = configuration
+                    group["bundles"].add(bundle_id)
+    rows = []
+    for (round_number, pack), group in sorted(groups.items()):
+        if not group["matrix"]:
+            continue
+        rows.append({
+            "round": round_number,
+            "pack": pack,
+            "bundles": len(group["bundles"]),
+            "respondents": len(group["matrix"]),
+            "configurations": len(set(group["models"].values())),
+            "pairwise": _pairwise_stability(group["matrix"], group["models"]),
+            "items": _item_metrics(group["matrix"]),
         })
     return rows
 
 
 def _cell(value: object) -> str:
     return str(value).replace("|", "\\|").replace("\n", " ")
+
+
+def _percent(value: float | None) -> str:
+    return "n/a" if value is None else f"{100 * value:.1f}%"
 
 
 def render_index(submissions: list[dict]) -> str:
@@ -112,27 +225,69 @@ def render_index(submissions: list[dict]) -> str:
     lines += [
         f"Validated bundles: **{len(submissions)}**. Comparable model/round groups: **{len(rows)}**.",
         "",
-        "| Round | Pack | Public model | Config | Bundles | Observed score | Completion | Baseline |",
-        "|---:|---|---|---|---:|---:|---:|---|",
+        "| Round | Pack | Public model | Config | Bundles | Observed score | Completion | Serving observations | Baseline |",
+        "|---:|---|---|---|---:|---:|---:|---|---|",
     ]
     for row in rows:
         total = row["total"]
         passed = row["passed"]
-        attempted = total + row["incomplete"] + row["infrastructure_errors"]
+        attempted = (total + row["incomplete"] + row["manual_review"]
+                     + row["infrastructure_errors"])
         score = f"{passed:g}/{total:g}" if total else "n/a"
         completion = f"{(100 * total / attempted):.1f}%" if attempted else "n/a"
-        baseline = (f"{(100 * passed / total):.1f}% observed"
-                    if row["submissions"] >= MIN_BASELINE_SUBMISSIONS and total else
-                    f"withheld (<{MIN_BASELINE_SUBMISSIONS} bundles)")
+        interval = row["bundle_pass_rate_interval95"]
+        baseline = (
+            f"{100 * interval['estimate']:.1f}% observed "
+            f"[{100 * interval['low']:.1f}–{100 * interval['high']:.1f}%], "
+            f"n={interval['observed_submissions']} bundles"
+            if interval else
+            f"withheld (<{MIN_BASELINE_SUBMISSIONS} observed bundles)")
+        wall50, wall90 = (row["bundle_item_wall_p50_seconds"],
+                          row["bundle_item_wall_p90_seconds"])
+        token_rate = row["bundle_tokens_per_second_p50"]
+        performance = (
+            f"bundle p50/p90 item latency {wall50:g}/{wall90:g}s"
+            if wall50 is not None and wall90 is not None else "latency n/a")
+        if token_rate is not None:
+            performance += f"; p50 {token_rate:g} completion tok/s"
         lines.append(
             f"| {row['round']} | `{row['pack'][7:19]}` | {_cell(row['model'])} | "
-            f"`{row['configuration']}` | {row['submissions']} | {score} | {completion} | {baseline} |")
+            f"`{row['configuration']}` | {row['submissions']} | {score} | {completion} | "
+            f"{performance} | {baseline} |")
+    diagnostics = aggregate_item_diagnostics(submissions)
+    if diagnostics:
+        lines += ["", "## Community Item Diagnostics", ""]
+        for group in diagnostics:
+            pairwise = group["pairwise"]
+            lines += [
+                f"### Round {group['round']} · pack `{group['pack'][7:19]}`",
+                "",
+                f"Bundles: **{group['bundles']}** · respondents: **{group['respondents']}** · "
+                f"configurations: **{group['configurations']}**",
+                "",
+                f"Between-config disagreement: **{_percent(pairwise['between_configuration_disagreement'])}** · "
+                f"within-config disagreement: **{_percent(pairwise['within_configuration_disagreement'])}** · "
+                f"net separation: **{_percent(pairwise['net_separation'])}**",
+                "",
+                "| Item | Scored | Pass rate | Balance | Corrected discrimination | Signal | Incomplete | Review | Invalid | Missing |",
+                "|---|---:|---:|---:|---:|---|---:|---:|---:|---:|",
+            ]
+            for item in group["items"]:
+                discrimination = item["corrected_item_total_correlation"]
+                lines.append(
+                    f"| `{_cell(item['item'])}` | {item['scored']} | "
+                    f"{_percent(item['pass_rate'])} | {_percent(item['difficulty_balance'])} | "
+                    f"{discrimination if discrimination is not None else 'n/a'} | "
+                    f"{item['classification']} | {item['incomplete']} | {item['review']} | "
+                    f"{item['invalid']} | {item['missing']} |")
     lines += [
         "",
         f"Baselines appear only after at least {MIN_BASELINE_SUBMISSIONS} distinct accepted bundles",
-        "share the exact public configuration and pack. Duplicate model entries inside one",
-        "bundle cannot raise this threshold. The values are descriptive observations,",
-        "not predictions for an unseen model or a different runtime configuration.",
+        "with observed scores share the exact public configuration and pack. Each bundle",
+        "contributes one rate regardless of its attempt count; duplicate model entries cannot",
+        "raise the threshold. Brackets are Wilson-style 95% intervals across bundle rates,",
+        "not item-level certainty. Values are descriptive observations, not predictions",
+        "for an unseen model or a different runtime configuration.",
         "",
     ]
     return "\n".join(lines)
@@ -183,33 +338,49 @@ def aggregate_pilot_submissions(submissions: list[dict]) -> list[dict]:
         "unsupported_tool_calls": 0,
     })
     for payload in submissions:
-        bundle_groups = set()
+        bundle_groups = defaultdict(lambda: {
+            "attempts": 0, "complete": 0,
+            "public_passed": 0, "public_total": 0,
+            "hidden_passed": 0, "hidden_total": 0,
+            "evidence_revision": 0, "release_ready": 0, "report_accurate": 0,
+            "authority_violations": 0, "protocol_error_attempts": 0,
+            "unsupported_tool_calls": 0,
+        })
         for model in payload["models"]:
             configuration = _configuration_id(payload, model)
             key = (payload["pilot"]["id"], payload["pilot"]["pack"],
                    model["public_name"], configuration)
-            group = groups[key]
-            if key not in bundle_groups:
-                group["submissions"] += 1
-                bundle_groups.add(key)
+            local = bundle_groups[key]
             for attempt in model["attempts"]:
-                group["attempts"] += 1
-                group["complete"] += attempt["status"] == "COMPLETE"
-                group["public_passed"] += attempt["public"]["passed"]
-                group["public_total"] += attempt["public"]["total"]
-                group["hidden_passed"] += attempt["hidden"]["passed"]
-                group["hidden_total"] += attempt["hidden"]["total"]
-                group["evidence_revision"] += attempt["evidence_revision_observed"]
-                group["release_ready"] += attempt["release_ready"]
-                group["report_accurate"] += attempt["report_accurate"]
-                group["authority_violations"] += not attempt["no_edit_before_approval"]
-                group["protocol_error_attempts"] += not attempt["tool_protocol_clean"]
-                group["unsupported_tool_calls"] += attempt["unsupported_tool_calls"]
+                local["attempts"] += 1
+                local["complete"] += attempt["status"] == "COMPLETE"
+                local["public_passed"] += attempt["public"]["passed"]
+                local["public_total"] += attempt["public"]["total"]
+                local["hidden_passed"] += attempt["hidden"]["passed"]
+                local["hidden_total"] += attempt["hidden"]["total"]
+                local["evidence_revision"] += attempt["evidence_revision_observed"]
+                local["release_ready"] += attempt["release_ready"]
+                local["report_accurate"] += attempt["report_accurate"]
+                local["authority_violations"] += not attempt["no_edit_before_approval"]
+                local["protocol_error_attempts"] += not attempt["tool_protocol_clean"]
+                local["unsupported_tool_calls"] += attempt["unsupported_tool_calls"]
+        for key, local in bundle_groups.items():
+            group = groups[key]
+            group["submissions"] += 1
+            for field, value in local.items():
+                group[field] += value
+            group.setdefault("_bundle_release_rates", []).append(
+                local["release_ready"] / local["attempts"])
     rows = []
     for (pilot, pack, model, configuration), totals in sorted(
             groups.items(), key=lambda item: (item[0][0], item[0][2].lower(), item[0][3])):
-        rows.append({"pilot": pilot, "pack": pack, "model": model,
-                     "configuration": configuration, **totals})
+        rates = totals.get("_bundle_release_rates", [])
+        rows.append({
+            "pilot": pilot, "pack": pack, "model": model,
+            "configuration": configuration,
+            **{key: value for key, value in totals.items() if not key.startswith("_")},
+            "release_ready_interval95": _cluster_interval(rates),
+        })
     return rows
 
 
@@ -244,8 +415,13 @@ def render_pilot_index(submissions: list[dict]) -> str:
     ]
     for row in rows:
         attempts = row["attempts"]
-        baseline = ("observed" if row["submissions"] >= MIN_BASELINE_SUBMISSIONS
-                    else f"withheld (<{MIN_BASELINE_SUBMISSIONS} bundles)")
+        interval = row["release_ready_interval95"]
+        baseline = (
+            f"release {100 * interval['estimate']:.1f}% "
+            f"[{100 * interval['low']:.1f}–{100 * interval['high']:.1f}%], "
+            f"n={interval['observed_submissions']} bundles"
+            if interval else
+            f"withheld (<{MIN_BASELINE_SUBMISSIONS} bundles)")
         lines.append(
             f"| {_cell(row['pilot'])} | `{row['pack'][7:19]}` | {_cell(row['model'])} | "
             f"`{row['configuration']}` | {row['submissions']} | {attempts} | "
@@ -258,10 +434,11 @@ def render_pilot_index(submissions: list[dict]) -> str:
             f"{baseline} |")
     lines += [
         "",
-        f"Baselines are labeled observed only after at least {MIN_BASELINE_SUBMISSIONS} distinct",
-        "accepted bundles share the exact public configuration and pack. Duplicate model",
-        "entries within one bundle cannot raise the threshold. A 0/0 score is unobserved,",
-        "not a failure.",
+        f"Release-ready baselines appear only after at least {MIN_BASELINE_SUBMISSIONS} distinct",
+        "accepted bundles share the exact public configuration and pack. Each bundle",
+        "contributes one release-ready rate regardless of its attempt count; duplicate model",
+        "entries cannot raise the threshold. Brackets are Wilson-style 95% intervals",
+        "across bundle rates. A 0/0 test score is unobserved, not a failure.",
         "",
     ]
     return "\n".join(lines)

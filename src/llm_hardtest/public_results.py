@@ -12,12 +12,17 @@ from pathlib import Path
 from . import __version__
 from .common import load_json
 from .report import collect
+from .results import item_status
 
 
-PUBLIC_SCHEMA_VERSION = 1
+PUBLIC_SCHEMA_VERSION = 2
 PUBLIC_METADATA_FIELDS = {
-    "model_revision", "quantization", "server", "accelerator",
+    "model_revision", "quantization", "model_format", "parameter_count_b",
+    "server", "server_version", "accelerator", "accelerator_count",
     "memory_gb", "system_memory_gb",
+}
+PUBLIC_METADATA_NUMERIC_FIELDS = {
+    "parameter_count_b", "accelerator_count", "memory_gb", "system_memory_gb",
 }
 MODEL_PARAMETER_FIELDS = {
     "reasoning_effort", "context_window", "max_tokens",
@@ -39,6 +44,8 @@ TASK_OPTIONAL_BOOLEAN_FIELDS = {"handoff_utility"}
 TASK_NUMERIC_FIELDS = TASK_FIELDS - {
     "task", *TASK_BOOLEAN_FIELDS, *TASK_OPTIONAL_BOOLEAN_FIELDS,
 }
+PUBLIC_ITEM_FIELDS = {"item", "attempt", "status", "wall_seconds", "tokens"}
+PUBLIC_ITEM_STATUSES = {"PASS", "FAIL", "INCOMPLETE", "REVIEW", "INVALID"}
 PRIVATE_STRING = re.compile(
     r"(?:^[/~]|^[A-Za-z]:[\\/]|\\|://|/Users/|/home/|@|[\x00-\x1f])")
 SECRET_STRING = re.compile(
@@ -93,7 +100,7 @@ def _clean_metadata(model: dict, warnings: list[str], model_number: int) -> dict
         value = raw.get(key)
         if value is None:
             continue
-        if key.endswith("_gb"):
+        if key in PUBLIC_METADATA_NUMERIC_FIELDS:
             if isinstance(value, bool) or not isinstance(value, (int, float)) or value <= 0:
                 warnings.append(f"model-{model_number}: dropped invalid {key}")
                 continue
@@ -120,6 +127,65 @@ def _clean_rounds(rounds: dict) -> dict:
             ]
         cleaned[number] = row
     return cleaned
+
+
+def _public_item_observations(run_dir: Path, model_key: str) -> dict[str, list[dict]]:
+    """Collect every item outcome while excluding prompts and generated content."""
+    observations = {}
+    for number in (1, 2, 3):
+        rows = []
+        for path in sorted((run_dir / model_key / f"round{number}").glob(
+                "attempt-*/result.json")):
+            payload = load_json(path)
+            attempt = payload.get("attempt", path.parent.name.removeprefix("attempt-"))
+            if isinstance(attempt, bool) or not str(attempt).isdigit():
+                raise ValueError(f"public export found an invalid attempt number in {path}")
+            for result in payload.get("results", []):
+                if not isinstance(result, dict) or result.get("id") is None:
+                    raise ValueError(f"public export found an invalid item row in {path}")
+                raw_item = str(result["id"])
+                item = _public_text(
+                    raw_item if raw_item.lower().startswith("q") else f"q{raw_item}",
+                    maximum=80)
+                if item is None:
+                    raise ValueError(f"public export found an unsafe item ID in {path}")
+                rows.append({
+                    "item": item,
+                    "attempt": int(attempt),
+                    "status": item_status(result),
+                    "wall_seconds": result.get("wall"),
+                    "tokens": result.get("completion_tokens"),
+                })
+        if rows:
+            observations[str(number)] = rows
+    v4 = run_dir / model_key / "round4" / "run.json"
+    if v4.is_file():
+        payload = load_json(v4)
+        rows = []
+        graded = set()
+        for grade in payload.get("grades", []):
+            item = _public_text(grade.get("task", grade.get("qid")), maximum=80)
+            attempt = (grade.get("run_meta") or {}).get("attempt")
+            if item is None or isinstance(attempt, bool) or not isinstance(attempt, int):
+                raise ValueError("public export found an invalid Round 4 grade identity")
+            flags = grade.get("flags") or {}
+            status = ("INVALID" if flags.get("model_timed_out") else
+                      "PASS" if flags.get("attempt_pass") else "FAIL")
+            meta = grade.get("run_meta") or {}
+            rows.append({"item": item, "attempt": attempt, "status": status,
+                         "wall_seconds": meta.get("wall"), "tokens": meta.get("tokens")})
+            graded.add((item, attempt))
+        for error in payload.get("errors", []):
+            item = _public_text(error.get("task"), maximum=80)
+            attempt = error.get("attempt")
+            if (item is not None and isinstance(attempt, int)
+                    and not isinstance(attempt, bool) and (item, attempt) not in graded):
+                rows.append({"item": item, "attempt": attempt, "status": "INVALID",
+                             "wall_seconds": None, "tokens": None})
+        if rows:
+            observations["4"] = sorted(
+                rows, key=lambda row: (row["attempt"], row["item"], row["status"]))
+    return observations
 
 
 def build_public_result(run_dir: Path) -> tuple[dict, list[str]]:
@@ -156,10 +222,14 @@ def build_public_result(run_dir: Path) -> tuple[dict, list[str]]:
             elif key == "reasoning_effort" and _public_text(value, maximum=32):
                 parameters[key] = value
         entry = by_key.get(model.get("key"), {"rounds": {}})
+        rounds = _clean_rounds(entry.get("rounds", {}))
+        observations = _public_item_observations(run_dir, model["key"])
+        for number in rounds:
+            rounds[number]["items"] = observations.get(number, [])
         models.append({
             "public_name": name,
             "transport": model.get("transport"),
-            "rounds": _clean_rounds(entry.get("rounds", {})),
+            "rounds": rounds,
             "parameters": parameters,
             "public_metadata": _clean_metadata(model, warnings, index),
         })
@@ -203,7 +273,8 @@ def validate_public_result(payload: dict) -> dict:
         raise ValueError("public result must be a JSON object")
     required = {"schema_version", "bundle_id", "tool", "benchmark",
                 "environment", "models", "privacy"}
-    if set(payload) != required or payload.get("schema_version") != PUBLIC_SCHEMA_VERSION:
+    schema_version = payload.get("schema_version")
+    if set(payload) != required or schema_version not in {1, PUBLIC_SCHEMA_VERSION}:
         raise ValueError("public result has unsupported or unexpected top-level fields")
     without_id = {key: value for key, value in payload.items() if key != "bundle_id"}
     if (not isinstance(payload.get("bundle_id"), str)
@@ -256,10 +327,39 @@ def validate_public_result(payload: dict) -> dict:
             if not isinstance(result, dict):
                 raise ValueError(f"public model {index} round {round_number} is invalid")
             allowed = set(ROUND_FIELDS) | ({"tasks"} if round_number == "4" else set())
+            if schema_version >= 2:
+                allowed.add("items")
             if set(result) - allowed:
                 raise ValueError(f"public model {index} round {round_number} has extra fields")
+            if schema_version >= 2 and "items" not in result:
+                raise ValueError(f"public model {index} round {round_number} has no item outcomes")
             for key, value in result.items():
-                if key == "tasks":
+                if key == "items":
+                    if not isinstance(value, list):
+                        raise ValueError(f"public model {index} items must be a list")
+                    seen_items = set()
+                    for item in value:
+                        if not isinstance(item, dict) or set(item) != PUBLIC_ITEM_FIELDS:
+                            raise ValueError(f"public model {index} has an invalid item outcome")
+                        identity = (item.get("item"), item.get("attempt"))
+                        if (identity in seen_items
+                                or _public_text(item.get("item"), maximum=80) is None
+                                or isinstance(item.get("attempt"), bool)
+                                or not isinstance(item.get("attempt"), int)
+                                or item["attempt"] < 1
+                                or item.get("status") not in PUBLIC_ITEM_STATUSES):
+                            raise ValueError(f"public model {index} item outcome is invalid")
+                        wall, tokens = item.get("wall_seconds"), item.get("tokens")
+                        if (wall is not None and (
+                                isinstance(wall, bool) or not isinstance(wall, (int, float))
+                                or not math.isfinite(wall) or wall < 0)):
+                            raise ValueError(f"public model {index} item wall_seconds is invalid")
+                        if (tokens is not None and (
+                                isinstance(tokens, bool) or not isinstance(tokens, int)
+                                or tokens < 0)):
+                            raise ValueError(f"public model {index} item tokens is invalid")
+                        seen_items.add(identity)
+                elif key == "tasks":
                     if not isinstance(value, list):
                         raise ValueError(f"public model {index} tasks must be a list")
                     for task in value:
@@ -288,12 +388,29 @@ def validate_public_result(payload: dict) -> dict:
                         isinstance(value, bool) or not isinstance(value, (int, float))
                         or not math.isfinite(value) or value < 0):
                     raise ValueError(f"public model {index} round metric {key} is invalid")
+            if schema_version >= 2:
+                counts = {status: 0 for status in PUBLIC_ITEM_STATUSES}
+                for item in result["items"]:
+                    counts[item["status"]] += 1
+                expected_metrics = (
+                    {"passed": counts["PASS"],
+                     "total": counts["PASS"] + counts["FAIL"],
+                     "incomplete": counts["INCOMPLETE"],
+                     "manual_review": counts["REVIEW"],
+                     "infrastructure_errors": counts["INVALID"]}
+                    if round_number != "4" else
+                    {"release_ready": counts["PASS"]})
+                for metric, expected_value in expected_metrics.items():
+                    if metric in result and result[metric] != expected_value:
+                        raise ValueError(
+                            f"public model {index} round {round_number} {metric} "
+                            "contradicts item outcomes")
         if set(model["public_metadata"]) - PUBLIC_METADATA_FIELDS:
             raise ValueError(f"public model {index} metadata is not allowlisted")
         if set(model["parameters"]) - MODEL_PARAMETER_FIELDS:
             raise ValueError(f"public model {index} parameters are not allowlisted")
         for key, value in model["public_metadata"].items():
-            if key.endswith("_gb"):
+            if key in PUBLIC_METADATA_NUMERIC_FIELDS:
                 if (isinstance(value, bool) or not isinstance(value, (int, float))
                         or not math.isfinite(value) or value <= 0):
                     raise ValueError(f"public model {index} metadata {key} is invalid")
@@ -357,8 +474,8 @@ def load_public_bundle(path: Path) -> dict:
             names = archive.namelist()
             if names != ["submission.json", "PRIVACY.txt"]:
                 raise ValueError("public bundle contains unexpected files")
-            info = archive.getinfo("submission.json")
-            if info.file_size > 2_000_000 or info.compress_size > 2_000_000:
+            if any(info.file_size > 2_000_000 or info.compress_size > 2_000_000
+                   for info in archive.infolist()):
                 raise ValueError("public bundle is too large")
             payload = json.loads(archive.read("submission.json").decode("utf-8"))
     except (zipfile.BadZipFile, UnicodeDecodeError) as exc:

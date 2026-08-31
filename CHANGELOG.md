@@ -5,6 +5,18 @@ out separately from harness features.
 
 ## Unreleased
 
+## 2.7.0 — 2026-09-01
+
+- Added public result schema v2, collecting every sanitized item status, attempt,
+  wall time, and completion-token count by default while continuing to exclude all
+  prompts, outputs, transcripts, errors, paths, endpoints, and credentials.
+- Added community-side recomputation of item difficulty, corrected discrimination,
+  missing/incomplete/review/invalid counts, and within/between-configuration stability.
+- Added independent-bundle 95% intervals that prevent repeated attempts or duplicate
+  model entries from overstating sample size; 0/0 bundles no longer unlock baselines.
+- Added optional serving metadata for model format, parameter count, server version,
+  and accelerator count, plus bundle-level latency and token-rate observations.
+
 ## 2.6.0 — 2026-09-01
 
 - Added explicit-opt-in, allowlist-only Round 5 public exports that revalidate local

@@ -169,3 +169,32 @@ Acceptance checks:
   materially different configurations contribute to between-configuration separation.
 - Round 4 release outcomes and Round 1–3 item statuses use the same analysis contract.
 - An installed wheel can analyze a real historical run outside the source checkout.
+
+## Phase 7 — Community evidence and serving data
+
+Goal: preserve enough privacy-safe evidence to recalibrate item discrimination and,
+after sufficient representative collection, support environment-aware model serving
+recommendations.
+
+Deliverables:
+
+1. Export every item status, attempt, wall time, and completion-token count by default
+   without exporting prompts, responses, expected answers, errors, paths, or secrets.
+2. Preserve aggregate-only schema-v1 compatibility while emitting schema v2 for new
+   campaign bundles and rejecting aggregate/item contradictions.
+3. Group exact model, serving, generation, environment, and pack configurations.
+4. Recompute community item signal and repeat/configuration disagreement from accepted
+   content-free observations.
+5. Use independent bundles—not attempts—as the unit for baseline thresholds and 95%
+   intervals, and exclude unobserved 0/0 bundles from the evidence threshold.
+6. Record optional serving metadata and latency/token observations without inferring
+   identifying hardware details.
+
+Acceptance checks:
+
+- Rehashed aggregate contradictions and conflicting duplicate outcomes are rejected.
+- Duplicate model rows and repeated attempts cannot inflate the distinct-bundle count.
+- Five 0/0 bundles do not reveal a baseline; five observed bundles do.
+- Synthetic community observations reproduce known ceiling and negative-discrimination
+  controls.
+- A real historical run exports every recorded item with no raw content leakage.

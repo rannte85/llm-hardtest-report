@@ -32,7 +32,7 @@ from llm_hardtest.github_submit import (
     submission_relative_path,
 )
 from llm_hardtest.community_results import (
-    aggregate_pilot_submissions, aggregate_submissions, build_index,
+    aggregate_item_diagnostics, aggregate_pilot_submissions, aggregate_submissions, build_index,
     build_pilot_index, load_pilot_submission_directory, load_submission_directory,
     render_index, render_pilot_index,
 )
@@ -1255,7 +1255,9 @@ class PublicPilotResultTests(unittest.TestCase):
             payload["bundle_id"] = _bundle_id(body)
             validate_public_pilot_result(payload)
             submissions.append(payload)
-        self.assertIn("| observed |", render_pilot_index(submissions))
+        document = render_pilot_index(submissions)
+        self.assertIn("release 100.0% [56.6–100.0%], n=5 bundles", document)
+        self.assertIn("release 0.0% [0.0–43.4%], n=5 bundles", document)
 
 
 class CalibrationTests(unittest.TestCase):
@@ -1413,7 +1415,10 @@ class PublicResultTests(unittest.TestCase):
                 "model": model_name, "transport": "openai_compat",
                 "base_url": "http://127.0.0.1:8000/v1",
                 "api_key_env": "VERY_PRIVATE_API_KEY", "max_tokens": 2048,
-                "public_metadata": {"quantization": "Q4_K_M", "unknown": "drop-me"},
+                "public_metadata": {
+                    "quantization": "Q4_K_M", "server_version": "1.2.3",
+                    "accelerator_count": 2, "unknown": "drop-me",
+                },
             }],
         }
         save_json(root / "config.json", config)
@@ -1422,6 +1427,7 @@ class PublicResultTests(unittest.TestCase):
             "results": [{
                 "id": 1, "correct": True, "content": "private raw response",
                 "transcript": "/Users/private/work and sk-secret-secret-secret",
+                "wall": 2.0, "completion_tokens": 20,
             }],
         })
         generate(root)
@@ -1445,7 +1451,13 @@ class PublicResultTests(unittest.TestCase):
             self.assertNotIn(private, text)
         self.assertEqual(payload["models"][0]["public_name"], "org/model")
         self.assertEqual(payload["models"][0]["public_metadata"],
-                         {"quantization": "Q4_K_M"})
+                         {"accelerator_count": 2, "quantization": "Q4_K_M",
+                          "server_version": "1.2.3"})
+        self.assertEqual(payload["schema_version"], 2)
+        self.assertEqual(payload["models"][0]["rounds"]["1"]["items"], [{
+            "item": "q1", "attempt": 1, "status": "PASS",
+            "wall_seconds": 2.0, "tokens": 20,
+        }])
         self.assertFalse(warnings)
         self.assertEqual(loaded, payload)
 
@@ -1503,6 +1515,32 @@ class PublicResultTests(unittest.TestCase):
         payload["bundle_id"] = _bundle_id(body)
         with self.assertRaisesRegex(ValueError, "extra fields"):
             validate_public_result(payload)
+
+    def test_schema_v2_rejects_aggregate_item_contradictions(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "run"
+            self._run(root)
+            payload, _ = build_public_result(root)
+        payload["models"][0]["rounds"]["1"]["passed"] = 0
+        from llm_hardtest.public_results import _bundle_id
+        body = {key: value for key, value in payload.items() if key != "bundle_id"}
+        payload["bundle_id"] = _bundle_id(body)
+        with self.assertRaisesRegex(ValueError, "contradicts item outcomes"):
+            validate_public_result(payload)
+
+    def test_schema_v1_aggregate_bundles_remain_accepted(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "run"
+            self._run(root)
+            payload, _ = build_public_result(root)
+        payload["schema_version"] = 1
+        for model in payload["models"]:
+            for result in model["rounds"].values():
+                result.pop("items", None)
+        from llm_hardtest.public_results import _bundle_id
+        body = {key: value for key, value in payload.items() if key != "bundle_id"}
+        payload["bundle_id"] = _bundle_id(body)
+        self.assertEqual(validate_public_result(payload), payload)
 
     def test_submission_preview_and_explicit_consent_guard(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1649,6 +1687,8 @@ class PublicResultTests(unittest.TestCase):
             generate(root)
             payload, _ = build_public_result(root)
         self.assertTrue(payload["models"][0]["rounds"]["4"]["tasks"][0]["release_ready"])
+        community = aggregate_submissions([payload])[0]
+        self.assertEqual((community["passed"], community["total"]), (1, 1))
 
     def test_community_directory_validation_and_sparse_baseline(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1664,7 +1704,9 @@ class PublicResultTests(unittest.TestCase):
             rows = aggregate_submissions(loaded)
             self.assertEqual((len(loaded), len(rows)), (1, 1))
             self.assertEqual(rows[0]["passed"], 1)
-            self.assertIn("withheld (<5 bundles)", render_index(loaded))
+            self.assertEqual(rows[0]["bundle_item_wall_p50_seconds"], 2.0)
+            self.assertEqual(rows[0]["bundle_tokens_per_second_p50"], 10.0)
+            self.assertIn("withheld (<5 observed bundles)", render_index(loaded))
             output = Path(tmp) / "INDEX.md"
             self.assertEqual(build_index(submissions, output), (1, 1))
             self.assertEqual(build_index(submissions, output, check=True), (1, 1))
@@ -1689,6 +1731,31 @@ class PublicResultTests(unittest.TestCase):
         document = render_index(submissions)
         self.assertIn("5/5", document)
         self.assertIn("100.0% observed", document)
+        self.assertIn("[56.6–100.0%], n=5 bundles", document)
+
+    def test_unobserved_bundles_do_not_unlock_a_baseline(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run = Path(tmp) / "run"
+            self._run(run)
+            original, _ = build_public_result(run)
+        from llm_hardtest.public_results import _bundle_id
+        submissions = []
+        for index in range(5):
+            payload = json.loads(json.dumps(original))
+            payload["schema_version"] = 1
+            result = payload["models"][0]["rounds"]["1"]
+            result.pop("items")
+            result["passed"] = 0
+            result["total"] = 0
+            payload["tool"]["version"] = f"legacy-{index}"
+            body = {key: value for key, value in payload.items() if key != "bundle_id"}
+            payload["bundle_id"] = _bundle_id(body)
+            validate_public_result(payload)
+            submissions.append(payload)
+        row = aggregate_submissions(submissions)[0]
+        self.assertEqual(row["observed_submissions"], 0)
+        self.assertIsNone(row["bundle_pass_rate_interval95"])
+        self.assertIn("withheld (<5 observed bundles)", render_index(submissions))
 
     def test_duplicate_model_entries_do_not_raise_the_baseline_threshold(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1703,7 +1770,27 @@ class PublicResultTests(unittest.TestCase):
         rows = aggregate_submissions([payload])
         self.assertEqual(rows[0]["runs"], 5)
         self.assertEqual(rows[0]["submissions"], 1)
-        self.assertIn("withheld (<5 bundles)", render_index([payload]))
+        self.assertIsNone(rows[0]["bundle_pass_rate_interval95"])
+        self.assertIn("withheld (<5 observed bundles)", render_index([payload]))
+
+    def test_schema_v2_community_recomputes_item_discrimination(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run = CalibrationTests()._calibration_run(Path(tmp) / "run")
+            for path in run.glob("m*/round1/attempt-1/result.json"):
+                result = load_json(path)
+                counts = result_counts(result)
+                result["score"] = counts["PASS"]
+                result["total"] = counts["PASS"] + counts["FAIL"]
+                save_json(path, result)
+            payload, _ = build_public_result(run)
+        diagnostics = aggregate_item_diagnostics([payload])
+        self.assertEqual(len(diagnostics), 1)
+        items = {item["item"]: item for item in diagnostics[0]["items"]}
+        self.assertEqual(items["q4"]["classification"], "NEGATIVE")
+        self.assertEqual(items["q5"]["classification"], "CEILING")
+        document = render_index([payload])
+        self.assertIn("Community Item Diagnostics", document)
+        self.assertIn("Corrected discrimination", document)
 
     def test_community_validation_rejects_wrong_filename_and_extra_entry(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -11,8 +11,8 @@ from .common import load_json
 from .pilot_analysis import collect_pilot_attempts
 from .public_results import (
     FINGERPRINT, FORBIDDEN_KEYS, MODEL_PARAMETER_FIELDS, PRIVATE_STRING,
-    PUBLIC_METADATA_FIELDS, SECRET_STRING, _bundle_id, _canonical, _clean_metadata,
-    _public_environment, _public_text, _walk,
+    PUBLIC_METADATA_FIELDS, PUBLIC_METADATA_NUMERIC_FIELDS, SECRET_STRING,
+    _bundle_id, _canonical, _clean_metadata, _public_environment, _public_text, _walk,
 )
 
 
@@ -139,7 +139,7 @@ def _validate_model_identity(model: dict, index: int) -> None:
     if not isinstance(parameters, dict) or set(parameters) - MODEL_PARAMETER_FIELDS:
         raise ValueError(f"public pilot model {index} parameters are not allowlisted")
     for key, value in metadata.items():
-        if key.endswith("_gb"):
+        if key in PUBLIC_METADATA_NUMERIC_FIELDS:
             if not _valid_nonnegative(value) or value == 0:
                 raise ValueError(f"public pilot model {index} metadata {key} is invalid")
         elif _public_text(value) is None:

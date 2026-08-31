@@ -3,7 +3,8 @@
 This directory contains voluntarily submitted, sanitized benchmark summaries. The
 project does not automatically collect telemetry or local campaign data.
 
-- `schema-v1.json` documents the public result shape.
+- `schema-v1.json` documents legacy aggregate-only public results.
+- `schema-v2.json` documents the current item-level, content-free public result shape.
 - `submissions/` contains one canonical JSON document per accepted bundle.
 - `INDEX.md` is generated from accepted submissions and contains descriptive examples.
 - `pilot-schema-v1.json` documents the sanitized Round 5 summary shape.
@@ -27,5 +28,7 @@ llm-hardtest results pilots build --check
 ```
 
 The index groups only identical public configurations and pack fingerprints. An
-observed baseline remains hidden until five distinct comparable bundles have been
-accepted; repeating a model entry inside one bundle cannot meet that threshold.
+observed baseline remains hidden until five distinct comparable bundles with scored
+outcomes have been accepted; repeating a model entry inside one bundle cannot meet
+that threshold. Schema-v2 submissions also produce item discrimination and stability
+diagnostics without publishing prompts or model outputs.

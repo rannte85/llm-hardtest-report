@@ -4,11 +4,11 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-**Current release: 2.6.0** — adds explicit, privacy-safe Round 5 pilot export and
-GitHub pull-request submission, plus a separately validated community pilot index.
-It also includes eight-axis cross-pilot analysis, controlled persistent-session
-evidence collection, calibration analysis, focused replay, and reusable benchmark
-packs. Canonical Round 1–4 questions and grading contracts are unchanged.
+**Current release: 2.7.0** — collects every sanitized item outcome in public bundles,
+recomputes community item discrimination, and reports uncertainty across independent
+submissions without overweighting repeated attempts. It also records opt-in serving
+metadata and latency/token observations for a future environment-aware model recommender.
+Canonical Round 1–4 questions and grading contracts are unchanged.
 
 LLM Hardtest Report is a local-first command-line benchmark for comparing language
 models as reasoners, coding workers, and safe handoff agents. Point it at one or more
@@ -183,6 +183,13 @@ llm-hardtest pilot submit pilot-bundle.zip --preview
 llm-hardtest pilot submit pilot-bundle.zip --open-pr --yes
 ```
 
+Standard campaign exports use public schema v2. Every item outcome is included by
+default as a status, attempt number, wall time, and completion-token count. Prompt and
+response content is never included. Accepted v2 bundles let the community index
+recompute item difficulty, corrected discrimination, and within/between-configuration
+disagreement instead of relying only on aggregate scores. See the
+[community data model](docs/COMMUNITY_DATA_MODEL.md).
+
 ## Live terminal dashboard
 
 The CLI shows a live text dashboard automatically when `run` is attached to an
@@ -353,6 +360,8 @@ broad filesystem access may read the benchmark source. See
 - [Scoring and interpretation](docs/SCORING.md)
 - [Calibration and discrimination analysis](docs/CALIBRATION.md)
 - [Round 5 cross-pilot analysis](docs/PILOT_ANALYSIS.md)
+- [Voluntary public results](docs/PUBLIC_RESULTS.md)
+- [Community data model and serving recommendations](docs/COMMUNITY_DATA_MODEL.md)
 - [Benchmark integrity](docs/BENCHMARK_INTEGRITY.md)
 - [Repository and source guide](docs/REPOSITORY_GUIDE.md)
 - [Development and release guide](docs/DEVELOPMENT.md)

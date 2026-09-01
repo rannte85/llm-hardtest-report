@@ -44,7 +44,8 @@ is statistically supported.
 
 ## Cross-scenario portfolio
 
-Analysis schema 7 includes the schema-5 portfolio and acquisition plan per exact
+Analysis schema 8 includes the schema-5 portfolio and acquisition plan, schema-7
+family-wise decisions, and adaptive bootstrap resolution per exact
 inference configuration.
 It shows:
 
@@ -67,8 +68,9 @@ portfolio is a coverage and failure-envelope view, not a composite benchmark sco
 For each exact shared scenario version, the analyzer averages every cross-configuration
 attempt distance, averages within-configuration attempt distances on both sides, and
 subtracts that repeat noise from the between-configuration distance. It then resamples
-the scenario-level adjusted effects—not individual attempts or vector axes—5,000 times
-with a fixed seed to produce a reproducible 95% percentile interval.
+the scenario-level adjusted effects—not individual attempts or vector axes—with a fixed
+seed to produce a reproducible 95% percentile interval. A one-pair family retains the
+5,000-draw floor. Larger eligible families use the schema-8 budget described below.
 
 Inference requires at least three exact shared scenario versions, one version per shared
 pilot, two transport-complete attempts per side/version, complete transport for every
@@ -76,7 +78,7 @@ shared attempt, and no pre-approval edit violation. If any gate fails, the statu
 `INSUFFICIENT_EVIDENCE`. Otherwise, the interval is `STABLE_SEPARATION` only when its
 lower bound exceeds the five-percentage-point minimum effect, `NO_STABLE_SEPARATION`
 when its upper bound does not exceed that threshold, and `INCONCLUSIVE` when it crosses
-the threshold. With multiple eligible configuration pairs, schema 7 applies the same
+the threshold. With multiple eligible configuration pairs, schema 8 applies the same
 Bonferroni simultaneous-confidence family described below before assigning this status;
 the pointwise 95% separation status remains diagnostic only. These labels are
 conservative descriptive evidence, not a significance test, causal estimate, model
@@ -84,7 +86,7 @@ prediction, leaderboard score, or automatic promotion.
 
 ## Directional observed-configuration contrast
 
-Unsigned distance answers whether two configurations behave differently. Schema 7
+Unsigned distance answers whether two configurations behave differently. Schema 8
 separately asks which observed configuration had the better outcome over exact shared
 scenario versions. All eight axes are defined as higher-is-better. For every attempt,
 the analyzer takes their equal-weight mean only when all axes are observed, averages
@@ -106,7 +108,7 @@ favored configuration. A stable direction also receives the same single-scenario
 removal audit, and signed per-axis rows show which observed capabilities favor each
 side.
 
-When a portfolio has `m` eligible configuration pairs, schema 7 keeps that pointwise
+When a portfolio has `m` eligible configuration pairs, schema 8 keeps that pointwise
 95% interval for diagnosis but makes the favored-configuration decision with a
 Bonferroni simultaneous interval at confidence `1 - 0.05/m`. The complete family of
 eligible pairs—not only pairs that look promising—sets `m`. This targets 95% family-
@@ -114,8 +116,19 @@ wise simultaneous coverage under the bootstrap interval procedure's assumptions.
 Ineligible pairs remain explicitly insufficient and are not counted as tested
 directional hypotheses.
 
+Schema 8 selects `B = max(5,000, ceil(2 × m × 100 / 0.05))`, equivalently
+`max(5,000, 4,000m)`, deterministic draws for every eligible pair. Because each side of
+the adjusted interval has probability `0.05 / (2m)`, this keeps at least 100 expected
+draws in each family-wise tail. The pointwise interval reuses the same draws. This
+prevents a 45-pair portfolio, for example, from deriving its adjusted endpoints from
+only about 2.8 expected tail draws under the former fixed 5,000-draw budget; it now uses
+180,000 draws and 100 expected draws per adjusted tail. Computation therefore grows
+with the tested family and can be materially slower for large portfolios.
+
 The JSON records the multiplicity method, eligible family size, adjustment divisor,
-simultaneous confidence, pointwise status, and family-wise status. Directional
+simultaneous confidence, selected bootstrap samples, sample policy, tail probability,
+expected tail draws, pointwise status, and family-wise status. Markdown displays the
+family size, selected draws, and expected family-wise tail resolution. Directional
 leave-one-scenario-out recomputes every omission with the same original family size;
 it never falls back to an easier pointwise threshold.
 
@@ -168,7 +181,7 @@ For each outcome axis, schema 4 and later report scenario-weighted between-confi
 distance, within-configuration repeat noise, their difference, and the share of positive
 adjusted separation. The shares sum to one when positive signal exists. This
 decomposition remains unsigned and explains where configurations differ. The separate
-schema-7 directional contrast uses signed higher-is-better differences and must pass
+schema-8 directional contrast uses signed higher-is-better differences and must pass
 its stricter evidence and material-effect decision before naming an observed favored
 configuration. Aggregate distance still weights all comparable axes equally.
 Contribution shares remain unavailable until both sides have enough repeats to estimate

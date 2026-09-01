@@ -5,6 +5,23 @@ out separately from harness features.
 
 ## Unreleased
 
+## 2.45.0 — 2026-09-01
+
+- Added Round 5 analysis schema 8 with an adaptive deterministic bootstrap budget for
+  family-wise unsigned separation and directional advantage.
+- Replaced the fixed 5,000-draw family interval with
+  `max(5,000, 4,000 × eligible comparison pairs)`, preserving at least 100 expected
+  draws in each Bonferroni-adjusted tail.
+- Added interval-level Monte Carlo resolution plus multiplicity-level sample policy,
+  selected samples, minimum tail target, and expected adjusted-tail draws to JSON.
+- Added family size, selected draw count, and expected tail resolution to both
+  pairwise Markdown tables.
+- Added regression coverage for 0, 1, 3, 6, and 45-pair budgets and for adaptive
+  unsigned/directional portfolio output. Canonical scoring and automatic promotion
+  remain disabled.
+- All 255 source tests and the repository selftest pass; fresh wheel and sdist
+  installs both report version 2.45.0 and pass the installed selftest.
+
 ## 2.44.1 — 2026-09-01
 
 - Hardened q41's public and held-back queue-neutral timeout controls against loaded

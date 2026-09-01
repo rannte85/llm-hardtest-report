@@ -4,8 +4,8 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-**Current release: 2.44.1** — controls family-wise discrimination and directional
-claims, with a load-stable q41 structured-concurrency control matrix on macOS CI.
+**Current release: 2.45.0** — keeps family-wise bootstrap tails resolved as the number
+of eligible Round 5 configuration comparisons grows.
 
 LLM Hardtest Report is a local-first command-line benchmark for comparing language
 models as reasoners, coding workers, and safe handoff agents. Point it at one or more
@@ -222,7 +222,7 @@ configurations only on an exact shared scenario fingerprint. Pairwise analysis s
 within-configuration repeat noise and resamples whole scenarios for a deterministic 95%
 interval. It requires three shared exact versions and two complete attempts per side and
 labels evidence as stable, inconclusive, no stable separation, or insufficient.
-Analysis schema 7 also calculates the minimum additional complete attempts per
+Analysis schema 8 also calculates the minimum additional complete attempts per
 configuration,
 prioritizes scenarios by attainable pair-coverage gain per attempt, and requires a fresh
 cohort when invalid history cannot be repaired by appending attempts. Axis attribution
@@ -233,7 +233,11 @@ attempts within scenarios instead of treating repeats as independent incidents. 
 multiple configuration pairs are eligible, the favored-configuration decision uses a
 Bonferroni simultaneous-confidence interval across the complete comparison family;
 the same adjustment governs stable unsigned separation. Pointwise 95% intervals remain
-visible for diagnosis but cannot declare a stable difference or winner.
+visible for diagnosis but cannot declare a stable difference or winner. Its
+deterministic bootstrap budget grows as `max(5,000, 4,000 × eligible pairs)`, retaining
+at least 100 expected draws in each family-wise tail instead of estimating large
+portfolios from a handful of extreme draws. Reports expose the selected sample count,
+tail probability, and expected tail resolution.
 Leave-one-scenario-out
 checks identify stable results that depend on one incident and redirect collection to
 the influential scenarios. This remains descriptive observed-configuration evidence,

@@ -1369,3 +1369,29 @@ Acceptance checks:
   one held-back check.
 - Current fingerprint is
   `sha256:1186a977c1b4264fcf47497c027299b84f627ae1308f6488d85cfa34d1443679`.
+
+## Phase 46 — Family-wise bootstrap tail resolution
+
+Goal: prevent large configuration portfolios from presenting Bonferroni endpoints
+whose extreme tails are supported by only a handful of Monte Carlo draws.
+
+Deliverables:
+
+1. Calculate the complete eligible pair family before drawing bootstrap samples.
+2. Select `max(5,000, 4,000m)` deterministic draws for `m` eligible pairs, preserving
+   at least 100 expected draws in each adjusted tail.
+3. Reuse the adaptive budget for unsigned separation, signed directional advantage,
+   and every leave-one-scenario-out case with the original family size.
+4. Publish interval tail probability and expected draws plus multiplicity sample policy,
+   selected samples, target resolution, and achieved expected resolution.
+5. Show family size, draws, and expected tail resolution in Markdown and document the
+   increased cost for large comparison families.
+
+Acceptance checks:
+
+- Zero- and one-pair families retain the 5,000-draw floor.
+- Three, six, and 45 eligible pairs select 12,000, 24,000, and 180,000 draws.
+- Every eligible family-wise interval reports at least 100 expected draws per tail.
+- Pointwise and family-wise intervals reuse the same deterministic draws.
+- Adaptive sampling does not change evidence gates, material-effect boundaries,
+  canonical scoring, or automatic promotion behavior.

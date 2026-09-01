@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import random
 import re
 import statistics
@@ -29,6 +30,7 @@ MIN_ADJUSTED_SEPARATION = 0.05
 MIN_DIRECTIONAL_ADVANTAGE = 0.05
 FAMILYWISE_ALPHA = 0.05
 BOOTSTRAP_SAMPLES = 5000
+MIN_EXPECTED_FAMILYWISE_TAIL_DRAWS = 100
 
 
 def _safe_file(path: Path, run_dir: Path) -> Path:
@@ -371,14 +373,35 @@ def _percentile(values: list[float], quantile: float) -> float:
     return ordered[lower] * (1 - weight) + ordered[upper] * weight
 
 
-def _scenario_bootstrap_draws(values: list[float]) -> list[float] | None:
+def _bootstrap_sample_count(family_size: int) -> int:
+    if (isinstance(family_size, bool) or not isinstance(family_size, int)
+            or family_size < 0):
+        raise ValueError("bootstrap family size must be a non-negative integer")
+    divisor = max(1, family_size)
+    required = math.ceil(
+        2 * divisor * MIN_EXPECTED_FAMILYWISE_TAIL_DRAWS / FAMILYWISE_ALPHA)
+    return max(BOOTSTRAP_SAMPLES, required)
+
+
+def _bootstrap_resolution(samples: int, confidence: float) -> dict:
+    tail_probability = (1.0 - confidence) / 2
+    return {
+        "tail_probability": round(tail_probability, 12),
+        "expected_draws_per_tail": round(samples * tail_probability, 6),
+    }
+
+
+def _scenario_bootstrap_draws(values: list[float],
+                              samples: int = BOOTSTRAP_SAMPLES) -> list[float] | None:
     """Bootstrap scenario-level effects, not individual attempts or outcome axes."""
     if len(values) < MIN_SHARED_SCENARIOS:
         return None
+    if isinstance(samples, bool) or not isinstance(samples, int) or samples < 1:
+        raise ValueError("scenario bootstrap samples must be a positive integer")
     rng = random.Random(730031)
     return [
         statistics.mean(rng.choice(values) for _ in values)
-        for _ in range(BOOTSTRAP_SAMPLES)
+        for _ in range(samples)
     ]
 
 
@@ -392,7 +415,9 @@ def _scenario_interval(draws: list[float] | None,
     return {
         "method": "scenario-resampling",
         "confidence": round(confidence, 12),
-        "samples": BOOTSTRAP_SAMPLES,
+        "samples": len(draws),
+        "monte_carlo_resolution": _bootstrap_resolution(
+            len(draws), confidence),
         "lower": round(_percentile(draws, alpha / 2), 6),
         "upper": round(_percentile(draws, 1 - alpha / 2), 6),
     }
@@ -409,8 +434,10 @@ def _separation_classification(interval: dict | None) -> str:
 
 
 def _separation_status(values: list[float], eligible: bool,
-                       confidence: float = 0.95) -> tuple[str, dict | None]:
-    draws = _scenario_bootstrap_draws(values) if eligible else None
+                       confidence: float = 0.95,
+                       family_size: int = 1) -> tuple[str, dict | None]:
+    samples = _bootstrap_sample_count(family_size)
+    draws = _scenario_bootstrap_draws(values, samples) if eligible else None
     interval = _scenario_interval(draws, confidence)
     return _separation_classification(interval), interval
 
@@ -423,13 +450,17 @@ def _outcome_mean(attempt: dict) -> float | None:
     return statistics.mean(values)
 
 
-def _directional_bootstrap_draws(scenarios: list[dict]) -> list[float] | None:
+def _directional_bootstrap_draws(
+        scenarios: list[dict],
+        samples: int = BOOTSTRAP_SAMPLES) -> list[float] | None:
     """Resample scenarios and attempts within each selected scenario once."""
     if len(scenarios) < MIN_SHARED_SCENARIOS:
         return None
+    if isinstance(samples, bool) or not isinstance(samples, int) or samples < 1:
+        raise ValueError("directional bootstrap samples must be a positive integer")
     rng = random.Random(730032)
     draws = []
-    for _ in range(BOOTSTRAP_SAMPLES):
+    for _ in range(samples):
         effects = []
         for _ in scenarios:
             scenario = rng.choice(scenarios)
@@ -452,7 +483,9 @@ def _directional_interval(draws: list[float] | None,
     return {
         "method": "hierarchical-scenario-and-attempt-resampling",
         "confidence": round(confidence, 12),
-        "samples": BOOTSTRAP_SAMPLES,
+        "samples": len(draws),
+        "monte_carlo_resolution": _bootstrap_resolution(
+            len(draws), confidence),
         "lower": round(_percentile(draws, alpha / 2), 6),
         "upper": round(_percentile(draws, 1 - alpha / 2), 6),
     }
@@ -485,7 +518,9 @@ def _directional_advantage(scenarios: list[dict], eligible: bool,
         if row["left_attempt_values"] and row["right_attempt_values"]
     ]
     can_infer = eligible and len(effects) == len(scenarios)
-    draws = _directional_bootstrap_draws(scenarios) if can_infer else None
+    samples = _bootstrap_sample_count(family_size)
+    draws = (_directional_bootstrap_draws(scenarios, samples)
+             if can_infer else None)
     pointwise = _directional_interval(draws, 0.95)
     divisor = max(1, family_size)
     family_confidence = 1.0 - FAMILYWISE_ALPHA / divisor
@@ -508,6 +543,14 @@ def _directional_advantage(scenarios: list[dict], eligible: bool,
             "adjustment_divisor": divisor,
             "simultaneous_confidence": (
                 round(family_confidence, 12) if family_size else None),
+            "bootstrap_sample_policy": (
+                "adaptive_minimum_100_expected_draws_per_familywise_tail"),
+            "bootstrap_samples": samples if family_size else None,
+            "minimum_expected_tail_draws": (
+                MIN_EXPECTED_FAMILYWISE_TAIL_DRAWS),
+            "expected_familywise_tail_draws": (
+                round(samples * FAMILYWISE_ALPHA / (2 * family_size), 6)
+                if family_size else None),
         },
     }
 
@@ -605,10 +648,11 @@ def _leave_one_out_robustness(scenario_rows: list[dict], status: str,
         row["adjusted_separation"] for row in scenario_rows)
     cases = []
     family_confidence = 1.0 - FAMILYWISE_ALPHA / max(1, family_size)
+    samples = _bootstrap_sample_count(family_size)
     for omitted in scenario_rows:
         remaining = [row["adjusted_separation"] for row in scenario_rows
                      if row is not omitted]
-        draws = _scenario_bootstrap_draws(remaining)
+        draws = _scenario_bootstrap_draws(remaining, samples)
         pointwise = _scenario_interval(draws, 0.95)
         simultaneous = _scenario_interval(draws, family_confidence)
         pointwise_status = _separation_classification(pointwise)
@@ -1182,12 +1226,14 @@ def _portfolio(attempts: list[dict], aliases: dict[str, str],
     eligible_pair_family_size = sum(row["_pair_eligible"] for row in comparisons)
     family_confidence = (
         1.0 - FAMILYWISE_ALPHA / max(1, eligible_pair_family_size))
+    bootstrap_samples = _bootstrap_sample_count(eligible_pair_family_size)
     for row in comparisons:
         inputs = row.pop("_directional_inputs")
         effects = row.pop("_pair_effects")
         eligible = row.pop("_pair_eligible")
         next_args = row.pop("_next_evidence_args")
-        draws = _scenario_bootstrap_draws(effects) if eligible else None
+        draws = (_scenario_bootstrap_draws(effects, bootstrap_samples)
+                 if eligible else None)
         pointwise = _scenario_interval(draws, 0.95)
         simultaneous = _scenario_interval(draws, family_confidence)
         pointwise_status = _separation_classification(pointwise)
@@ -1207,6 +1253,16 @@ def _portfolio(attempts: list[dict], aliases: dict[str, str],
                 "adjustment_divisor": max(1, eligible_pair_family_size),
                 "simultaneous_confidence": (
                     round(family_confidence, 12)
+                    if eligible_pair_family_size else None),
+                "bootstrap_sample_policy": (
+                    "adaptive_minimum_100_expected_draws_per_familywise_tail"),
+                "bootstrap_samples": (
+                    bootstrap_samples if eligible_pair_family_size else None),
+                "minimum_expected_tail_draws": (
+                    MIN_EXPECTED_FAMILYWISE_TAIL_DRAWS),
+                "expected_familywise_tail_draws": (
+                    round(bootstrap_samples * FAMILYWISE_ALPHA
+                          / (2 * eligible_pair_family_size), 6)
                     if eligible_pair_family_size else None),
             },
         })
@@ -1345,7 +1401,7 @@ def analyze_pilots(run_dirs: list[Path], include_model_labels: bool = False) -> 
             "canonical_promotion_ready": False,
         })
     return {
-        "schema_version": 7,
+        "schema_version": 8,
         "analysis_kind": "round5-research",
         "canonical_score": False,
         "source_runs": len(run_dirs),
@@ -1458,10 +1514,11 @@ def render_pilot_analysis(analysis: dict) -> str:
             "Only attempts with the same scenario ID and exact scenario fingerprint are",
             "compared. Repeat noise is subtracted before a deterministic 95% interval",
             "resamples whole scenarios. The decision uses the same family-wise",
-            "simultaneous-confidence adjustment as directional advantage. A missing",
-            "shared version remains unavailable.", "",
-            "| Left | Right | Shared | Between | Repeat noise | Adjusted | Pointwise 95% | Simultaneous interval | Family | Pointwise status | Family-wise status | LOO robustness | Next evidence |",
-            "|---|---|---:|---:|---:|---:|---|---|---:|---|---|---|---|",
+            "simultaneous-confidence adjustment as directional advantage. Bootstrap",
+            "draws grow with the eligible comparison family so each adjusted tail has",
+            "at least 100 expected draws. A missing shared version remains unavailable.", "",
+            "| Left | Right | Shared | Between | Repeat noise | Adjusted | Pointwise 95% | Simultaneous interval | Family | Draws | Expected / tail | Pointwise status | Family-wise status | LOO robustness | Next evidence |",
+            "|---|---|---:|---:|---:|---:|---|---|---:|---:|---:|---|---|---|---|",
         ]
         for row in comparisons:
             adjusted = row["repeat_adjusted_separation"]
@@ -1480,6 +1537,8 @@ def render_pilot_analysis(analysis: dict) -> str:
                 f"{_percent(adjusted['mean_adjusted_separation'])} | "
                 f"{pointwise_text} | {simultaneous_text} | "
                 f"{adjusted['multiplicity']['eligible_comparisons']} | "
+                f"{adjusted['multiplicity']['bootstrap_samples']} | "
+                f"{adjusted['multiplicity']['expected_familywise_tail_draws']} | "
                 f"{adjusted['pointwise_status']} | {adjusted['status']} | "
                 f"{row['single_scenario_robustness']['status']} | "
                 f"{row['next_evidence']['action']} |")
@@ -1490,9 +1549,10 @@ def render_pilot_analysis(analysis: dict) -> str:
             "and attempts within each selected scenario. The decision interval applies",
             "a Bonferroni simultaneous-confidence adjustment across every eligible",
             "configuration pair; no favored configuration is reported unless that wider",
-            "interval clears the material-effect boundary.", "",
-            "| Left | Right | Left advantage | Pointwise 95% | Simultaneous interval | Family | Favored | Pointwise status | Family-wise status | LOO robustness |",
-            "|---|---|---:|---|---|---:|---|---|---|---|",
+            "interval clears the material-effect boundary. The adaptive draw count keeps",
+            "at least 100 expected draws in each family-wise tail.", "",
+            "| Left | Right | Left advantage | Pointwise 95% | Simultaneous interval | Family | Draws | Expected / tail | Favored | Pointwise status | Family-wise status | LOO robustness |",
+            "|---|---|---:|---|---|---:|---:|---:|---|---|---|---|",
         ]
         for row in comparisons:
             directional = row["directional_advantage"]
@@ -1508,6 +1568,8 @@ def render_pilot_analysis(analysis: dict) -> str:
                 f"{_percent(directional['mean_left_advantage'])} | "
                 f"{pointwise_text} | {simultaneous_text} | "
                 f"{directional['multiplicity']['eligible_comparisons']} | "
+                f"{directional['multiplicity']['bootstrap_samples']} | "
+                f"{directional['multiplicity']['expected_familywise_tail_draws']} | "
                 f"{directional['favored_configuration'] or 'none'} | "
                 f"{directional['pointwise_status']} | {directional['status']} | "
                 f"{directional['single_scenario_robustness']['status']} |")

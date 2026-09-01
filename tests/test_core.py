@@ -71,7 +71,7 @@ from llm_hardtest.calibration import (
 )
 from llm_hardtest.panel_config import build_panel_config, write_panel_config
 from llm_hardtest.pilot_analysis import (
-    _directional_advantage, _directional_robustness,
+    _bootstrap_sample_count, _directional_advantage, _directional_robustness,
     _evidence_collection_plan, _leave_one_out_robustness, _next_pair_evidence,
     _separation_status, analyze_pilots, write_pilot_analysis,
 )
@@ -2026,7 +2026,7 @@ class SnapshotCache:
                     summary_row["grade"] = missing_axis_grade
             save_json(missing_axis_summary_path, missing_axis_summary)
             missing_axis_comparison = analyze_pilots(roots)["portfolio"]["pairwise"][0]
-        self.assertEqual(analysis["schema_version"], 7)
+        self.assertEqual(analysis["schema_version"], 8)
         self.assertEqual(portfolio["required_pilots"], [
             "q32_retry_compatibility", "q33_batch_delivery", "q34_config_overlay",
             "q35_snapshot_race", "q36_jsonl_stream", "q37_archive_boundary",
@@ -2228,6 +2228,13 @@ class SnapshotCache:
         self.assertEqual(result["status"], "INCONCLUSIVE")
         self.assertIsNone(result["favored_configuration"])
         self.assertEqual(result["multiplicity"]["eligible_comparisons"], 6)
+        self.assertEqual(result["multiplicity"]["bootstrap_samples"], 24000)
+        self.assertEqual(
+            result["multiplicity"]["expected_familywise_tail_draws"], 100.0)
+        self.assertEqual(result["familywise_bootstrap"]["samples"], 24000)
+        self.assertEqual(
+            result["familywise_bootstrap"]["monte_carlo_resolution"]
+            ["expected_draws_per_tail"], 100.0)
         self.assertAlmostEqual(
             result["familywise_bootstrap"]["confidence"], 1 - 0.05 / 6)
         self.assertGreaterEqual(
@@ -2239,7 +2246,7 @@ class SnapshotCache:
                 scenarios, True, "config-1", "config-2", family_size=0)
         pointwise_status, pointwise = _separation_status(list(effects), True)
         family_status, simultaneous = _separation_status(
-            list(effects), True, 1 - 0.05 / 6)
+            list(effects), True, 1 - 0.05 / 6, family_size=6)
         self.assertEqual(pointwise_status, "STABLE_SEPARATION")
         self.assertEqual(family_status, "INCONCLUSIVE")
         self.assertGreater(pointwise["lower"], 0.05)
@@ -2257,6 +2264,17 @@ class SnapshotCache:
             robustness={"status": "NOT_APPLICABLE", "influential_pilot_ids": []})
         self.assertEqual(
             next_evidence["action"], "REPLICATE_NOISIEST_SCENARIO")
+
+    def test_round_five_bootstrap_budget_preserves_familywise_tail_resolution(self):
+        self.assertEqual(_bootstrap_sample_count(0), 5000)
+        self.assertEqual(_bootstrap_sample_count(1), 5000)
+        self.assertEqual(_bootstrap_sample_count(3), 12000)
+        self.assertEqual(_bootstrap_sample_count(6), 24000)
+        self.assertEqual(_bootstrap_sample_count(45), 180000)
+        with self.assertRaisesRegex(ValueError, "family size"):
+            _bootstrap_sample_count(True)
+        with self.assertRaisesRegex(ValueError, "family size"):
+            _bootstrap_sample_count(-1)
 
     def test_round_five_portfolio_adjusts_all_eligible_configuration_pairs(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -2280,11 +2298,21 @@ class SnapshotCache:
             separation = comparison["repeat_adjusted_separation"]
             self.assertEqual(
                 directional["multiplicity"]["eligible_comparisons"], 3)
+            self.assertEqual(
+                directional["multiplicity"]["bootstrap_samples"], 12000)
+            self.assertEqual(
+                directional["multiplicity"]
+                ["expected_familywise_tail_draws"], 100.0)
             self.assertAlmostEqual(
                 directional["familywise_bootstrap"]["confidence"],
                 1 - 0.05 / 3)
             self.assertEqual(
                 separation["multiplicity"]["eligible_comparisons"], 3)
+            self.assertEqual(
+                separation["multiplicity"]["bootstrap_samples"], 12000)
+            self.assertEqual(
+                separation["multiplicity"]
+                ["expected_familywise_tail_draws"], 100.0)
             self.assertAlmostEqual(
                 separation["familywise_bootstrap"]["confidence"],
                 1 - 0.05 / 3)
@@ -2652,8 +2680,10 @@ class PilotAnalysisTests(unittest.TestCase):
             labeled_text = labeled.read_text(encoding="utf-8")
             machine_payload = json.loads(machine.read_text(encoding="utf-8"))
         self.assertEqual(machine_payload, analysis)
+        self.assertEqual(machine_payload["schema_version"], 8)
         self.assertIn("### Evidence collection plan", default_text)
         self.assertIn("### Shared-scenario directional advantage", default_text)
+        self.assertIn("Expected / tail", default_text)
         self.assertIn("Minimum additional complete attempts: **36**", default_text)
         for private in ("Private Strong", "Private Weak", "private/strong",
                         "private/weak", str(run)):

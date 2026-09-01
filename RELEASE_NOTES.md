@@ -1,11 +1,28 @@
-# Release Notes — 2.44.1
+# Release Notes — 2.45.0
 
 This repository is ready to publish as `rannte85/llm-hardtest-report`. It contains no raw
 campaign outputs, credentials, local model files, personal filesystem paths, or
 generated Python caches. The included Luna result is the allowlist-only public bundle,
 not its prompts, responses, transcripts, account details, or local run directory.
 
-This patch release adds:
+This release adds:
+
+- Round 5 analysis schema 8 with deterministic bootstrap samples that scale with the
+  complete eligible pair family;
+- `max(5,000, 4,000 × eligible pairs)` draws, retaining at least 100 expected draws in
+  each Bonferroni-adjusted tail instead of allowing a growing portfolio to rely on a
+  handful of extreme samples;
+- JSON Monte Carlo resolution, sample policy, selected samples, minimum tail target,
+  and expected adjusted-tail draws for both unsigned and directional analysis;
+- Markdown family size, draw count, and expected tail resolution;
+- 0, 1, 3, 6, and 45-pair budget controls plus adaptive three-configuration integration
+  coverage, without enabling canonical scoring or automatic promotion;
+- all 255 source tests and the repository selftest passing, plus clean wheel and sdist
+  installs reporting 2.45.0 and passing their installed selftests.
+
+## Previous release: 2.44.1
+
+The previous patch release added:
 
 - load-stable q41 queue-neutral timeout controls with 10× per-worker timing headroom
   while accumulated queue delay still rejects timeout-around-semaphore designs;

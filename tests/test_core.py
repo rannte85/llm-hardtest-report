@@ -4,6 +4,7 @@ import json
 import base64
 import io
 import os
+import re
 import runpy
 import shutil
 import sqlite3
@@ -1822,6 +1823,27 @@ class SnapshotCache:
         self.assertEqual(public["pilot"]["id"], "q38_webhook_replay")
         self.assertEqual(public["models"][0]["attempts"][0]["hidden"]["passed"], 10)
         self.assertEqual(warnings, [])
+
+    def test_webhook_rotation_evidence_accepts_semantic_all_pairs_wording(self):
+        task = load_json(
+            repo_root() / "rounds/round5/tasks/q38_webhook_replay/task.json")
+        pattern = task["grading"]["turn2_patterns"][1]
+        self.assertRegex(
+            "Verify every supplied v1 against the exact raw body and every active secret.",
+            re.compile(pattern, re.I),
+        )
+        self.assertNotRegex(
+            "Verify the first signature with the current secret.",
+            re.compile(pattern, re.I),
+        )
+        self.assertNotRegex(
+            "Verify every supplied v1 against the current secret.",
+            re.compile(pattern, re.I),
+        )
+        self.assertNotRegex(
+            "Verify the first signature against every active secret.",
+            re.compile(pattern, re.I),
+        )
 
     def test_round_five_portfolio_requires_repeated_exact_scenario_coverage(self):
         with tempfile.TemporaryDirectory() as tmp:

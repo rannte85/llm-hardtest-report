@@ -1105,3 +1105,26 @@ Acceptance checks:
   and the same body under a separately signed timestamp is not a false replay.
 - q38 changes only its own scenario fingerprint, and portfolio readiness requires two
   exact-version attempts per configuration across q32–q38.
+
+## Phase 37 — q38 semantic-grader and live-model validation
+
+Goal: verify that q38 measures the intended engineering revision instead of one
+preferred phrase, then collect a bounded final-fingerprint smoke comparison.
+
+Deliverables:
+
+1. Accept explicit all-signature/all-active-secret reasoning even when formatting
+   inserts a line break, while rejecting first-signature/current-secret-only plans.
+2. Preserve the baseline, correct, and twelve partial/adversarial control outcomes.
+3. Run one final-fingerprint attempt each with local E4B and signed-in GPT-5.6 Luna.
+4. Independently analyze the eight outcome axes and retain the raw evidence locally.
+
+Acceptance checks:
+
+- The semantic positive and partial-plan negative regression both pass.
+- All fourteen q38 controls retain their 2/4·2/10 baseline, 4/4·10/10 correct, and
+  public-green held-back separation contracts.
+- Live evidence shares fingerprint
+  `sha256:1baf8e1d5fe47ecd9a94c6da6d9a70e42fb2f916961c50adfffad93e2b344c62`.
+- The one-scenario, one-attempt observation remains `INSUFFICIENT_EVIDENCE` and is
+  never presented as a model ranking or prediction.

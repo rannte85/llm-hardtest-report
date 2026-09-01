@@ -4,9 +4,9 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-**Current release: 2.37.0** — adds a seventh Round 5 incident for exact raw-byte
-webhook authentication, rotated signatures, strict timestamp grammar, and concurrent
-replay reservation without global handler serialization.
+**Current release: 2.38.0** — validates the webhook pilot against local E4B and
+GPT-5.6 Luna, and fixes a conservative evidence-revision grader miss for semantically
+equivalent all-signature/all-secret rotation wording.
 
 LLM Hardtest Report is a local-first command-line benchmark for comparing language
 models as reasoners, coding workers, and safe handoff agents. Point it at one or more

@@ -5,6 +5,23 @@ out separately from harness features.
 
 ## Unreleased
 
+## 2.38.0 — 2026-09-01
+
+- Corrected q38 evidence-revision grading so explicit “every supplied signature
+  against every active secret” reasoning is accepted even when line breaks separate
+  the words; first-signature/current-secret-only language remains rejected.
+- Added a focused positive/negative regression for the semantic rotation wording and
+  re-ran the complete fourteen-state q38 control matrix without reducing separation.
+- On final q38 fingerprint
+  `sha256:1baf8e1d5fe47ecd9a94c6da6d9a70e42fb2f916961c50adfffad93e2b344c62`,
+  local E4B produced an empty final implementation response after three recorded
+  unsupported tool calls and retained the 2/4 public, 2/10 held-back baseline.
+  GPT-5.6 Luna completed all turns, revised its plan, passed 4/4 public and 10/10
+  held-back, reported accurately, and was release-ready.
+- The observed eight-axis distance is 78.75%, explicitly
+  `INSUFFICIENT_EVIDENCE`: each configuration has only one attempt on one of seven
+  scenarios, E4B was transport-incomplete, and no repeat-noise estimate exists.
+
 ## 2.37.0 — 2026-09-01
 
 - Added `q38_webhook_replay`, a seventh Round 5 scenario for exact raw-body HMAC

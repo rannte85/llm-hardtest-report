@@ -1,4 +1,4 @@
-# Release Notes — 2.37.0
+# Release Notes — 2.38.0
 
 This repository is ready to publish as `rannte85/llm-hardtest-report`. It contains no raw
 campaign outputs, credentials, local model files, personal filesystem paths, or
@@ -6,6 +6,21 @@ generated Python caches. The included Luna result is the allowlist-only public b
 not its prompts, responses, transcripts, account details, or local run directory.
 
 The release validation now also covers:
+
+- a fairness correction to q38's evidence-revision detector: explicit all-signature
+  and all-active-secret reasoning now passes without requiring one preferred phrase;
+- a positive/negative regression that retains rejection of first-signature and
+  current-secret-only reasoning;
+- exact-final-fingerprint live checks where local E4B returned an empty final
+  implementation response after three recorded unsupported calls and retained the
+  2/4·2/10 baseline, while GPT-5.6 Luna revised its plan, completed with clean
+  protocol and authority, reached 4/4·10/10, and produced an accurate release-ready
+  report;
+- a 78.75% descriptive eight-axis distance that remains `INSUFFICIENT_EVIDENCE`
+  because there is only one attempt per configuration on one scenario and the E4B
+  attempt was incomplete;
+
+## Previous release: 2.37.0
 
 - `q38_webhook_replay`, a seventh long-horizon incident for exact wire
   authentication and concurrent exactly-once processing;

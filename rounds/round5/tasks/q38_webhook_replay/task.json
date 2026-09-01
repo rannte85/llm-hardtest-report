@@ -22,7 +22,7 @@
     ],
     "turn2_patterns": [
       "raw|exact.{0,20}bytes|canonical",
-      "rotation|multiple.{0,20}signature|previous.{0,20}secret",
+      "rotation|multiple.{0,20}signature|previous.{0,20}secret|(?=[\\s\\S]*(?:every|all)[\\s\\S]{0,30}(?:v1|signature))(?=[\\s\\S]*(?:every|all)[\\s\\S]{0,30}(?:active[\\s\\S]{0,10})?secret)",
       "concurr|reserve|check.?then.?act|lock|reentran",
       "failure|release|retry",
       "duplicate.{0,20}key|json.{0,20}object"

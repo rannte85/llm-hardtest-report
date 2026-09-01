@@ -820,3 +820,36 @@ Acceptance checks:
   baseline, while Luna reaches 4/4·9/10 and misses only the new-parent tombstone case.
 - Repository selftest, all 210 source tests, installed-package verification, and the
   Linux/macOS CI matrix pass without publishing raw model evidence.
+
+## Phase 29 — Scenario-stable evidence portfolios
+
+Goal: keep Round 5 evidence reusable as new incidents are added and compare a model
+configuration's observed failure envelope across scenarios without manufacturing a
+single leaderboard score.
+
+Deliverables:
+
+1. Fingerprint each scenario's task contract, verifier, candidate repository, and
+   held-back grader assets independently while continuing to validate the global pack.
+2. Record schema-2 internal summaries with explicit scenario fingerprint scope and
+   reject relabelled current evidence or incompatible resume directories.
+3. Preserve schema-1 historical analysis in exact pack groups; never silently migrate
+   or merge its opaque historical identity with current schema-2 evidence.
+4. Add a q32–q34 configuration portfolio with explicit coverage, missing scenarios,
+   mixed-version ambiguity, scenario-weighted means, worst observed held-back rate,
+   authority/protocol outcomes, and conservative evidence gates.
+5. Compare configurations only over exact shared `(pilot_id, fingerprint)` coordinates
+   and retain every missing coordinate as unavailable rather than zero.
+
+Acceptance checks:
+
+- Editing q34 changes only q34's fingerprint; q32/q33 remain stable, and generated
+  caches do not affect any fingerprint.
+- A schema-2 summary with a relabelled fingerprint is rejected; two versions under one
+  pilot ID are marked ambiguous and cannot become interpretation-ready.
+- Full q32–q34 coverage requires two complete attempts per configuration per scenario;
+  exact shared-version distance is reproducible and no canonical score is emitted.
+- Historical schema-1 synthetic evidence remains analyzable and anonymous by default.
+- Repository selftest, all 214 source tests, installed-package verification, live E4B
+  and Luna one-scenario smoke checks, and the Linux/macOS CI matrix pass without
+  publishing raw model evidence.

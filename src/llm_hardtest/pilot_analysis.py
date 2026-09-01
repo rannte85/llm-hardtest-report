@@ -10,7 +10,8 @@ from pathlib import Path
 from .calibration import _model_identity
 from .common import load_json, save_json, slug
 from .round5 import (
-    PILOT_ID, REPORT_FIELDS, UNSUPPORTED_CALL_PATTERN, _report_fields, pilot_assets,
+    PILOT_ID, PILOT_IDS, REPORT_FIELDS, UNSUPPORTED_CALL_PATTERN, _report_fields,
+    pilot_assets, pilot_fingerprint,
 )
 
 
@@ -293,6 +294,113 @@ def _configuration_rows(attempts: list[dict], aliases: dict[str, str],
     return rows
 
 
+def _portfolio(attempts: list[dict], aliases: dict[str, str],
+               include_model_labels: bool) -> dict:
+    by_identity = defaultdict(list)
+    by_identity_scenario = defaultdict(list)
+    for attempt in attempts:
+        identity = attempt["identity"]
+        by_identity[identity].append(attempt)
+        by_identity_scenario[(identity, attempt["pilot_id"], attempt["pack"])].append(
+            attempt)
+    configurations = []
+    for identity in sorted(by_identity):
+        rows = by_identity[identity]
+        scenario_rows = []
+        packs_by_pilot = defaultdict(set)
+        complete_by_pilot = defaultdict(int)
+        for (candidate, pilot_id, pack), values in sorted(by_identity_scenario.items()):
+            if candidate != identity:
+                continue
+            summary = _configuration_rows(values, aliases, include_model_labels)[0]
+            summary.pop("configuration", None)
+            summary.pop("model_label", None)
+            scenario_rows.append({"pilot_id": pilot_id, "pack": pack, **summary})
+            packs_by_pilot[pilot_id].add(pack)
+            complete_by_pilot[pilot_id] += summary["complete"]
+        observed = sorted(packs_by_pilot)
+        missing = sorted(set(PILOT_IDS) - set(observed))
+        pack_ambiguous = sorted(
+            pilot_id for pilot_id, packs in packs_by_pilot.items() if len(packs) > 1)
+        hidden_rates = [row["hidden_pass_rate"] for row in scenario_rows
+                        if row["hidden_pass_rate"] is not None]
+        public_rates = [row["public_pass_rate"] for row in scenario_rows
+                        if row["public_pass_rate"] is not None]
+        release_rates = [row["release_ready_rate"] for row in scenario_rows
+                         if row["release_ready_rate"] is not None]
+        gates = {
+            "all_required_pilots_observed": not missing,
+            "one_pack_per_pilot": not pack_ambiguous,
+            "two_complete_attempts_per_pilot": (
+                not missing and all(complete_by_pilot[pilot_id] >= 2
+                                    for pilot_id in PILOT_IDS)),
+            "all_attempts_transport_complete": all(
+                row["metrics"]["status"] == "COMPLETE" for row in rows),
+            "all_attempts_respect_preapproval_boundary": all(
+                row["metrics"]["no_edit_before_approval"] for row in rows),
+        }
+        result = {
+            "configuration": aliases[identity],
+            "pilots_observed": observed,
+            "missing_pilots": missing,
+            "pack_ambiguous_pilots": pack_ambiguous,
+            "attempts": len(rows),
+            "complete_attempts": sum(
+                row["metrics"]["status"] == "COMPLETE" for row in rows),
+            "scenario_results": scenario_rows,
+            "mean_public_pass_rate": _mean(public_rates),
+            "mean_hidden_pass_rate": _mean(hidden_rates),
+            "worst_case_hidden_pass_rate": (
+                round(min(hidden_rates), 6) if hidden_rates else None),
+            "mean_release_ready_rate": _mean(release_rates),
+            "authority_violations": sum(
+                not row["metrics"]["no_edit_before_approval"] for row in rows),
+            "protocol_error_attempts": sum(
+                row["metrics"]["unsupported_tool_calls"] > 0 for row in rows),
+            "coverage_gates": gates,
+            "ready_for_cross_scenario_interpretation": all(gates.values()),
+        }
+        if include_model_labels:
+            result["model_label"] = sorted(row["label"] for row in rows)[0]
+        configurations.append(result)
+
+    comparisons = []
+    identities = sorted(by_identity)
+    for left, right in combinations(identities, 2):
+        left_keys = {(row["pilot_id"], row["pack"])
+                     for row in by_identity[left]}
+        right_keys = {(row["pilot_id"], row["pack"])
+                      for row in by_identity[right]}
+        versions = []
+        for pilot_id, pack in sorted(left_keys & right_keys):
+            left_rows = by_identity_scenario[(left, pilot_id, pack)]
+            right_rows = by_identity_scenario[(right, pilot_id, pack)]
+            distances = [
+                _distance(a["metrics"]["vector"], b["metrics"]["vector"])
+                for a in left_rows for b in right_rows]
+            versions.append({
+                "pilot_id": pilot_id,
+                "pack": pack,
+                "attempt_pairs": len(distances),
+                "mean_distance": round(statistics.mean(distances), 6),
+            })
+        comparisons.append({
+            "left": aliases[left],
+            "right": aliases[right],
+            "shared_pilots": sorted({row["pilot_id"] for row in versions}),
+            "shared_scenario_versions": len(versions),
+            "scenario_distances": versions,
+            "mean_distance": (_mean([row["mean_distance"] for row in versions])
+                              if versions else None),
+        })
+    return {
+        "required_pilots": list(PILOT_IDS),
+        "configurations": configurations,
+        "pairwise": comparisons,
+        "canonical_score": False,
+    }
+
+
 def collect_pilot_attempts(run_dirs: list[Path]) -> list[dict]:
     canonical = [path.resolve() for path in run_dirs]
     if len(canonical) != len(set(canonical)):
@@ -301,8 +409,9 @@ def collect_pilot_attempts(run_dirs: list[Path]) -> list[dict]:
     for run_dir in canonical:
         config = load_json(_safe_file(run_dir / "config.json", run_dir))
         summary = load_json(_safe_file(run_dir / "pilot_summary.json", run_dir))
+        summary_schema = summary.get("schema_version") if isinstance(summary, dict) else None
         if (not isinstance(config, dict) or not isinstance(summary, dict)
-                or summary.get("schema_version") != 1
+                or summary_schema not in {1, 2}
                 or summary.get("canonical_score") is not False):
             raise ValueError(f"invalid non-canonical pilot summary: {run_dir}")
         pack, pilot_id = summary.get("pack"), summary.get("pilot_id")
@@ -311,6 +420,12 @@ def collect_pilot_attempts(run_dirs: list[Path]) -> list[dict]:
         if not isinstance(pilot_id, str) or not pilot_id:
             raise ValueError(f"invalid pilot ID: {run_dir}")
         pilot_assets(pilot_id)
+        if summary_schema == 2:
+            if summary.get("fingerprint_scope") != "scenario":
+                raise ValueError(f"invalid pilot fingerprint scope: {run_dir}")
+            if pack != pilot_fingerprint(pilot_id):
+                raise ValueError(
+                    f"pilot scenario fingerprint does not match installed assets: {run_dir}")
         models = config.get("models")
         if not isinstance(models, list):
             raise ValueError(f"invalid pilot model configuration: {run_dir}")
@@ -396,11 +511,12 @@ def analyze_pilots(run_dirs: list[Path], include_model_labels: bool = False) -> 
             "canonical_promotion_ready": False,
         })
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "analysis_kind": "round5-research",
         "canonical_score": False,
         "source_runs": len(run_dirs),
         "model_labels_included": include_model_labels,
+        "portfolio": _portfolio(attempts, aliases, include_model_labels),
         "groups": results,
     }
 
@@ -421,6 +537,43 @@ def render_pilot_analysis(analysis: dict) -> str:
         "credentials are not copied. Model labels appear only when explicitly requested.", "",
         f"Analyzed pilot directories: **{analysis['source_runs']}**.", "",
     ]
+    portfolio = analysis["portfolio"]
+    lines += [
+        "## Cross-scenario capability portfolio", "",
+        "This is a coverage and failure-envelope view, not an aggregate benchmark score.",
+        "Scenario means weight each observed scenario/version equally; missing scenarios",
+        "remain missing and never become zeroes.", "",
+        "| Configuration | Coverage | Missing | Pack ambiguity | Attempts | Worst hidden | "
+        "Mean hidden | Mean release ready | Protocol-error attempts | Evidence ready |",
+        "|---|---:|---|---|---:|---:|---:|---:|---:|---:|",
+    ]
+    required = len(portfolio["required_pilots"])
+    for row in portfolio["configurations"]:
+        name = row.get("model_label", row["configuration"])
+        lines.append(
+            f"| {_escape(name)} | {len(row['pilots_observed'])}/{required} | "
+            f"{_escape(', '.join(row['missing_pilots']) or 'none')} | "
+            f"{_escape(', '.join(row['pack_ambiguous_pilots']) or 'none')} | "
+            f"{row['attempts']} | {_percent(row['worst_case_hidden_pass_rate'])} | "
+            f"{_percent(row['mean_hidden_pass_rate'])} | "
+            f"{_percent(row['mean_release_ready_rate'])} | "
+            f"{row['protocol_error_attempts']} | "
+            f"{'yes' if row['ready_for_cross_scenario_interpretation'] else 'no'} |")
+    comparisons = portfolio["pairwise"]
+    if comparisons:
+        lines += [
+            "", "### Shared-scenario configuration distance", "",
+            "Only attempts with the same scenario ID and exact scenario fingerprint are",
+            "compared. A missing shared version remains unavailable.", "",
+            "| Left | Right | Shared pilots | Shared versions | Mean distance |",
+            "|---|---|---|---:|---:|",
+        ]
+        for row in comparisons:
+            lines.append(
+                f"| {row['left']} | {row['right']} | "
+                f"{_escape(', '.join(row['shared_pilots']) or 'none')} | "
+                f"{row['shared_scenario_versions']} | {_percent(row['mean_distance'])} |")
+    lines += [""]
     for group in analysis["groups"]:
         pairwise, gates = group["pairwise"], group["automatic_gates"]
         lines += [
@@ -468,7 +621,10 @@ def render_pilot_analysis(analysis: dict) -> str:
         "- Between-configuration distance is useful only relative to repeat instability.",
         "  Positive net separation is encouraging evidence, not proof of general ability.",
         "- A single task cannot support IRT estimates, causal attribution, or predictions for",
-        "  models that were not actually run.", "",
+        "  models that were not actually run.",
+        "- Portfolio worst-case and mean rates summarize only observed scenarios. They are",
+        "  never imputed, never a canonical score, and require the explicit coverage gates",
+        "  before cross-scenario interpretation.", "",
     ]
     return "\n".join(lines)
 

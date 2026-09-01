@@ -2,8 +2,8 @@
 
 `llm-hardtest pilot analyze` compares completed or incomplete Round 5 research
 evidence across model configurations and repeated attempts. It remains separate from
-the canonical Round 1–4 calibration report because Round 5 currently contains one
-long-horizon task rather than a set of independently scored items.
+the canonical Round 1–4 calibration report because each Round 5 scenario is a
+long-horizon incident rather than a bank of independently scored items.
 
 ```bash
 llm-hardtest pilot analyze runs/pilot-a runs/pilot-b \
@@ -39,8 +39,25 @@ different configurations:
 
 Positive net separation is useful evidence that the task distinguishes the observed
 configurations beyond their own repeat noise. It is not an IRT estimate, a causal
-effect, or proof of general model quality. With one task, no score prediction for an
-untested model is statistically supported.
+effect, or proof of general model quality. No score prediction for an untested model
+is statistically supported.
+
+## Cross-scenario portfolio
+
+Analysis schema 2 adds one portfolio row per exact inference configuration. It shows:
+
+- which required q32–q34 scenarios were observed and which remain missing;
+- whether one scenario ID was mixed across multiple fingerprints;
+- attempts and transport-complete attempts;
+- scenario-weighted mean public, held-back, and release-ready rates;
+- the worst observed held-back rate as a failure-envelope indicator;
+- authority and tool-protocol failures;
+- pairwise configuration distance over exact shared `(pilot_id, fingerprint)` pairs.
+
+Missing scenarios remain missing and are never imputed as zero or success. A scenario
+with more repeated attempts does not receive more weight in the displayed means. The
+portfolio is a coverage and failure-envelope view, not a composite benchmark score.
+`canonical_score` remains false.
 
 ## Automatic evidence gates
 
@@ -55,17 +72,30 @@ Passing these gates never promotes Round 5 automatically. Manual review of grade
 ambiguity, runtime variance, transcript quality, and task contamination remains
 required. `canonical_promotion_ready` therefore remains false in research reports.
 
+A configuration portfolio is ready for cross-scenario interpretation only when all
+required scenarios are present at one fingerprint each, every scenario has at least
+two transport-complete attempts, every attempt completed transport, and no attempt
+violated the pre-approval edit boundary. Product failure and protocol errors remain
+visible outcomes; they do not disappear behind the coverage gate.
+
 ## Integrity and privacy
 
 Before calculation, the analyzer:
 
 - rejects a duplicate input directory;
-- validates the pilot ID and exact pack fingerprint;
+- validates the pilot ID and exact scenario fingerprint for current schema-2 runs;
 - rejects unsafe model keys and evidence symlinks escaping the run directory;
 - requires the run summary and raw grade to match exactly;
 - recomputes transport completion and release readiness from lower-level evidence;
 - rescans bounded-size transcripts for unsupported tool calls;
 - rejects contradictory or malformed status, timing, token, score, and sandbox data.
+
+Scenario fingerprints cover only that task's contract, verifier, candidate repository,
+and held-back grader assets. Adding a new scenario therefore does not relabel unchanged
+q32–q34 evidence. Schema-1 legacy summaries remain readable but retain their historical
+opaque pack identity; exact-version grouping still prevents them from being silently
+pooled with current evidence. Analyze schema-2 evidence with the matching installed
+release so its asset fingerprint can be verified.
 
 By default, output configurations are named `config-1`, `config-2`, and so on. Raw
 prompts, model responses, endpoints, filesystem paths, credentials, and model labels

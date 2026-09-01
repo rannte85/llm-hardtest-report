@@ -27,11 +27,11 @@ UNSUPPORTED_CALL_PATTERN = re.compile(
     r"tool router error:\s*)unsupported call:\s*([A-Za-z0-9_.-]+)", re.I | re.M)
 
 
-def pilot_assets(pilot_id: str) -> tuple[Path, Path, dict]:
+def pilot_assets(pilot_id: str, base: Path | None = None) -> tuple[Path, Path, dict]:
     if pilot_id not in PILOT_IDS:
         raise ValueError(
             f"unsupported Round 5 pilot ID: {pilot_id!r}; choose one of {PILOT_IDS}")
-    base = repo_root() / "rounds/round5"
+    base = (base or repo_root() / "rounds/round5").resolve()
     task_root = base if pilot_id == PILOT_ID else base / "tasks" / pilot_id
     task = load_json(task_root / "task.json")
     if task.get("id") != pilot_id:
@@ -64,6 +64,34 @@ def pilot_assets(pilot_id: str) -> tuple[Path, Path, dict]:
     if not source.is_dir() or not hidden.is_file():
         raise ValueError(f"Round 5 task assets are incomplete: {pilot_id}")
     return source, hidden, task
+
+
+def pilot_fingerprint(pilot_id: str, base: Path | None = None) -> str:
+    """Hash only one pilot's contract so unrelated scenarios cannot cause drift."""
+    base = (base or repo_root() / "rounds/round5").resolve()
+    source, hidden, _ = pilot_assets(pilot_id, base)
+    task_root = base if pilot_id == PILOT_ID else base / "tasks" / pilot_id
+    candidates = [task_root / "task.json", task_root / "verify_pilot.py"]
+    candidates.extend(source.rglob("*"))
+    candidates.extend(hidden.parent.rglob("*"))
+    files = []
+    for path in candidates:
+        if (not path.is_file() or "__pycache__" in path.parts
+                or path.suffix in {".pyc", ".pyo"} or path.name == ".DS_Store"):
+            continue
+        resolved = path.resolve()
+        try:
+            relative = resolved.relative_to(task_root.resolve())
+        except ValueError as exc:
+            raise ValueError(f"Round 5 pilot asset escapes its task: {path}") from exc
+        files.append((relative.as_posix(), resolved))
+    if not files:
+        raise ValueError(f"Round 5 task has no fingerprinted assets: {pilot_id}")
+    digest = hashlib.sha256(b"llm-hardtest.round5-scenario.v1\0")
+    for relative, path in sorted(set(files)):
+        digest.update(relative.encode("utf-8") + b"\0")
+        digest.update(path.read_bytes())
+    return "sha256:" + digest.hexdigest()
 
 
 def _hashes(root: Path) -> dict[str, str]:
@@ -336,10 +364,17 @@ def run_pilot(config: dict, runs_dir: Path, model_keys: list[str] | None,
         raise ValueError("pilot resume config does not match saved config.json")
     if not snapshot.exists():
         save_json(snapshot, config)
-    pack = validate_pack(repo_root() / "rounds/round5")["fingerprint"]
+    # The global manifest is still validated, while result identity is scoped to the
+    # selected scenario so adding q35 cannot invalidate unchanged q32 evidence.
+    validate_pack(repo_root() / "rounds/round5")
+    pack = pilot_fingerprint(pilot_id)
     saved_summary = root / "pilot_summary.json"
     if saved_summary.is_file():
         saved = load_json(saved_summary)
+        if (saved.get("schema_version") != 2
+                or saved.get("fingerprint_scope") != "scenario"):
+            raise ValueError(
+                "pilot resume summary does not use the current scenario fingerprint contract")
         if saved.get("pilot_id") != pilot_id:
             raise ValueError("pilot resume ID does not match saved pilot_summary.json")
         if saved.get("pack") != pack:
@@ -365,7 +400,8 @@ def run_pilot(config: dict, runs_dir: Path, model_keys: list[str] | None,
             if grade.get("pilot_id") != pilot_id:
                 raise ValueError("pilot attempt ID does not match the selected pilot")
             rows.append({"model": model["key"], "grade": grade})
-    summary = {"schema_version": 1, "pilot_id": pilot_id, "pack": pack,
+    summary = {"schema_version": 2, "fingerprint_scope": "scenario",
+               "pilot_id": pilot_id, "pack": pack,
                "canonical_score": False, "attempts": rows}
     save_json(root / "pilot_summary.json", summary)
     (root / "PILOT_REPORT.md").write_text(_render(summary), encoding="utf-8")

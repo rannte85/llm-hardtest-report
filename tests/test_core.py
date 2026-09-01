@@ -4,6 +4,7 @@ import json
 import base64
 import io
 import os
+import shutil
 import sqlite3
 import stat
 import tempfile
@@ -70,7 +71,7 @@ from llm_hardtest.public_pilots import (
     build_public_pilot_result, export_public_pilot_bundle,
     load_public_pilot_bundle, validate_public_pilot_result,
 )
-from llm_hardtest.round5 import run_pilot
+from llm_hardtest.round5 import pilot_fingerprint, run_pilot
 from llm_hardtest.round12 import run as run_round12
 from llm_hardtest.round3 import _fields, _grade
 from llm_hardtest.round4 import run as run_round4
@@ -911,6 +912,35 @@ class PackTests(unittest.TestCase):
                     for number in (1, 2, 3, 4, 5)]
         self.assertEqual([item["unit_count"] for item in metadata], [20, 20, 5, 6, 3])
 
+    def test_round_five_scenario_fingerprints_are_isolated(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source = repo_root() / "rounds/round5"
+            root = Path(tmp) / "round5"
+            shutil.copytree(source, root)
+            before = {
+                pilot: pilot_fingerprint(pilot, root)
+                for pilot in ("q32_retry_compatibility", "q33_batch_delivery",
+                              "q34_config_overlay")
+            }
+            q34 = root / "tasks/q34_config_overlay/repo/config_merge.py"
+            q34.write_text(q34.read_text(encoding="utf-8") + "\n# q34 drift\n",
+                           encoding="utf-8")
+            self.assertEqual(
+                pilot_fingerprint("q32_retry_compatibility", root),
+                before["q32_retry_compatibility"])
+            self.assertEqual(
+                pilot_fingerprint("q33_batch_delivery", root),
+                before["q33_batch_delivery"])
+            self.assertNotEqual(
+                pilot_fingerprint("q34_config_overlay", root),
+                before["q34_config_overlay"])
+            cache = root / "tasks/q33_batch_delivery/repo/__pycache__/ignored.pyc"
+            cache.parent.mkdir(exist_ok=True)
+            cache.write_bytes(b"generated")
+            self.assertEqual(
+                pilot_fingerprint("q33_batch_delivery", root),
+                before["q33_batch_delivery"])
+
 
 class RoundFiveResearchTests(unittest.TestCase):
     def _config(self, transport="codex_cli"):
@@ -1108,6 +1138,39 @@ def merge_config(base, overlay):
         self.assertEqual(public["models"][0]["attempts"][0]["hidden"]["passed"], 10)
         self.assertEqual(warnings, [])
 
+    def test_round_five_portfolio_requires_repeated_exact_scenario_coverage(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            config = self._config()
+            config["models"].append({
+                **config["models"][0],
+                "key": "m2", "label": "M2", "model": "fake-model-2",
+            })
+            roots = []
+            for pilot_id in ("q32_retry_compatibility", "q33_batch_delivery",
+                             "q34_config_overlay"):
+                roots.append(run_pilot(
+                    config, Path(tmp), None, 2,
+                    agent_factory=lambda model, run, selected=pilot_id: self.FakeAgent(
+                        pilot_id=selected),
+                    pilot_id=pilot_id))
+            analysis = analyze_pilots(roots)
+            portfolio = analysis["portfolio"]
+        self.assertEqual(analysis["schema_version"], 2)
+        self.assertEqual(portfolio["required_pilots"], [
+            "q32_retry_compatibility", "q33_batch_delivery", "q34_config_overlay",
+        ])
+        self.assertEqual(len(portfolio["configurations"]), 2)
+        for row in portfolio["configurations"]:
+            self.assertEqual(row["attempts"], 6)
+            self.assertEqual(row["missing_pilots"], [])
+            self.assertEqual(row["pack_ambiguous_pilots"], [])
+            self.assertEqual(row["worst_case_hidden_pass_rate"], 1.0)
+            self.assertTrue(row["ready_for_cross_scenario_interpretation"])
+        comparison = portfolio["pairwise"][0]
+        self.assertEqual(comparison["shared_pilots"], portfolio["required_pilots"])
+        self.assertEqual(comparison["shared_scenario_versions"], 3)
+        self.assertEqual(comparison["mean_distance"], 0.0)
+
     def test_round_five_rejects_unknown_pilot_id(self):
         with tempfile.TemporaryDirectory() as tmp:
             with self.assertRaisesRegex(ValueError, "unsupported Round 5 pilot ID"):
@@ -1129,7 +1192,7 @@ def merge_config(base, overlay):
                 run_pilot(
                     self._config(), Path(tmp), ["m"], 1, resume=root,
                     agent_factory=lambda model, run: self.FakeAgent())
-            summary["pack"] = validate_pack(repo_root() / "rounds/round5")["fingerprint"]
+            summary["pack"] = pilot_fingerprint("q32_retry_compatibility")
             save_json(summary_path, summary)
             with self.assertRaisesRegex(ValueError, "resume ID"):
                 run_pilot(
@@ -1137,6 +1200,18 @@ def merge_config(base, overlay):
                     agent_factory=lambda model, run: self.FakeAgent(
                         pilot_id="q33_batch_delivery"),
                     pilot_id="q33_batch_delivery")
+
+    def test_round_five_analysis_rejects_relabelled_scenario_fingerprint(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = run_pilot(
+                self._config(), Path(tmp), ["m"], 1,
+                agent_factory=lambda model, run: self.FakeAgent())
+            summary_path = root / "pilot_summary.json"
+            summary = load_json(summary_path)
+            summary["pack"] = "sha256:" + "0" * 64
+            save_json(summary_path, summary)
+            with self.assertRaisesRegex(ValueError, "scenario fingerprint"):
+                analyze_pilots([root])
 
     def test_round_five_stops_on_preapproval_edit(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1282,7 +1357,8 @@ class PilotAnalysisTests(unittest.TestCase):
     def test_cross_pilot_analysis_separates_models_from_repeat_noise(self):
         with tempfile.TemporaryDirectory() as tmp:
             run = self._pilot_run(Path(tmp) / "pilot")
-            group = analyze_pilots([run])["groups"][0]
+            analysis = analyze_pilots([run])
+            group = analysis["groups"][0]
         self.assertEqual(group["attempts"], 4)
         self.assertEqual(group["model_configurations"], 2)
         self.assertEqual(group["pairwise"]["within_configuration_pairs"], 2)
@@ -1293,6 +1369,25 @@ class PilotAnalysisTests(unittest.TestCase):
         self.assertFalse(group["canonical_promotion_ready"])
         rows = {row["configuration"]: row for row in group["configurations"]}
         self.assertEqual(sum(row["unsupported_tool_calls"] for row in rows.values()), 2)
+        for row in analysis["portfolio"]["configurations"]:
+            self.assertEqual(
+                row["missing_pilots"], ["q33_batch_delivery", "q34_config_overlay"])
+            self.assertFalse(row["ready_for_cross_scenario_interpretation"])
+
+    def test_cross_pilot_portfolio_marks_multiple_versions_as_ambiguous(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            first = self._pilot_run(Path(tmp) / "pilot-a")
+            second = self._pilot_run(Path(tmp) / "pilot-b")
+            summary_path = second / "pilot_summary.json"
+            summary = load_json(summary_path)
+            summary["pack"] = "sha256:" + "d" * 64
+            save_json(summary_path, summary)
+            portfolio = analyze_pilots([first, second])["portfolio"]
+        for row in portfolio["configurations"]:
+            self.assertEqual(
+                row["pack_ambiguous_pilots"], ["q32_retry_compatibility"])
+            self.assertFalse(row["coverage_gates"]["one_pack_per_pilot"])
+            self.assertFalse(row["ready_for_cross_scenario_interpretation"])
 
     def test_pilot_analysis_is_anonymous_unless_labels_are_requested(self):
         with tempfile.TemporaryDirectory() as tmp:

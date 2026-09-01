@@ -108,8 +108,12 @@ llm-hardtest pilot round5 --config round5-research.json --model local-agent \
 ```
 
 Completed attempts are reused. A partial attempt is never overwritten; preserve it
-and start a new pilot directory. A run created with an older pack fingerprint is also
-refused rather than relabeling old evidence as the current task pack.
+and start a new pilot directory. New summaries use a scenario-scoped fingerprint over
+that task's contract, verifier, candidate repository, and held-back grader assets.
+Adding q35 therefore cannot invalidate unchanged q32 evidence. Resume requires the
+current schema-2 scenario fingerprint and refuses mismatched or legacy summaries
+rather than relabeling old evidence. Legacy schema-1 evidence remains available to the
+offline analyzer in its own exact historical pack group.
 
 ## Compare models and repeats
 
@@ -130,8 +134,11 @@ The analyzer independently checks the embedded summary against every raw
 `research_grade.json`, validates turn completion and sandbox metadata, rescans
 transcripts for unsupported tool calls, and recomputes the `release_ready` invariant.
 It rejects duplicate directories, escaping evidence symlinks, contradictory status,
-and tampered summaries. See [Cross-Pilot Analysis](PILOT_ANALYSIS.md) for formulas and
-interpretation limits.
+tampered summaries, relabelled current fingerprints, and cross-version ambiguity. Its
+portfolio reports q32–q34 coverage, missing scenarios, worst observed held-back
+performance, and pairwise distance only where configurations share the exact same
+scenario fingerprint. Missing evidence is never converted into a failure or a score.
+See [Cross-Pilot Analysis](PILOT_ANALYSIS.md) for formulas and interpretation limits.
 
 The q32 matrix includes:
 

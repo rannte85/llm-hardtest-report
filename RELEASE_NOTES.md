@@ -1,4 +1,4 @@
-# Release Notes — 2.28.0
+# Release Notes — 2.29.0
 
 This repository is ready to publish as `rannte85/llm-hardtest-report`. It contains no raw
 campaign outputs, credentials, local model files, personal filesystem paths, or
@@ -6,6 +6,22 @@ generated Python caches. The included Luna result is the allowlist-only public b
 not its prompts, responses, transcripts, account details, or local run directory.
 
 The release validation now also covers:
+
+- deterministic scenario-scoped Round 5 fingerprints that isolate unchanged evidence
+  from unrelated scenario additions or edits;
+- schema-2 internal pilot summaries whose scope and current installed assets are
+  verified before analysis or resume;
+- a q32–q34 configuration portfolio with explicit missing coverage, mixed-version
+  ambiguity, worst observed held-back performance, and conservative readiness gates;
+- configuration distance calculated only for exact shared scenario fingerprints,
+  without missing-value imputation or a synthetic canonical score;
+- adversarial relabelled-fingerprint and mixed-version rejection plus backward-readable
+  schema-1 historical evidence;
+- 214 passing source tests covering the new integrity and portfolio contracts;
+- one new q34 attempt each from local Gemma 4 E4B and signed-in GPT-5.6 Luna, both
+  verified against the same scenario fingerprint. E4B scored 3/4 public and 6/10
+  held-back, Luna scored 4/4 and 9/10, and their exact-version eight-axis distance was
+  31.875%; the deliberately sparse one-scenario evidence remains not interpretation-ready;
 
 - a third, orthogonal Round 5 scenario for layered configuration merge semantics;
 - 4 public and 10 held-back q34 checks plus six public-green false fixes covering

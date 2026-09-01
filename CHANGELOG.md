@@ -5,6 +5,28 @@ out separately from harness features.
 
 ## Unreleased
 
+## 2.29.0 — 2026-09-01
+
+- Replaced the global Round 5 pack identity in new runs with deterministic
+  scenario-scoped fingerprints, so adding or changing one pilot cannot invalidate
+  evidence from an unchanged pilot.
+- Added schema-2 Round 5 summaries and current-asset fingerprint verification;
+  relabelled evidence, invalid fingerprint scopes, mixed scenario versions, and unsafe
+  resume attempts are rejected while historical schema-1 analysis remains readable.
+- Added a cross-scenario configuration portfolio with explicit q32–q34 coverage,
+  missing and ambiguous versions, worst observed held-back performance, protocol and
+  authority outcomes, and conservative evidence-readiness gates.
+- Added pairwise model-configuration distance only over exact shared scenario/version
+  coordinates. Missing scenarios are not imputed and the portfolio never emits a
+  canonical aggregate score.
+- Added isolation, fingerprint-tamper, mixed-version, repeated-coverage, anonymity, and
+  historical-compatibility regression controls; all 214 source tests pass.
+- Repeated the q34 smoke check once on local Gemma 4 E4B and once on signed-in
+  GPT-5.6 Luna. Both produced the same verified scenario fingerprint; E4B scored
+  3/4 public and 6/10 held-back, Luna scored 4/4 and 9/10, and their exact-version
+  eight-axis distance was 31.875%. One attempt on one scenario correctly remains
+  below the portfolio interpretation gate.
+
 ## 2.28.0 — 2026-09-01
 
 - Added `q34_config_overlay`, an orthogonal Round 5 incident for recursive mapping

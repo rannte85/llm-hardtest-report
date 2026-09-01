@@ -4,10 +4,11 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-**Current release: 2.28.0** — adds an orthogonal third Round 5 scenario for layered
-configuration semantics. It distinguishes recursive merge, valid falsy overrides,
-nested null tombstones, list replacement, and deep immutability while preserving the
-existing q32/q33 evidence paths.
+**Current release: 2.29.0** — makes Round 5 evidence reusable across benchmark growth.
+Each scenario now has an isolated fingerprint, and cross-scenario portfolio analysis
+reports exact coverage, missing scenarios, worst observed performance, version
+ambiguity, and same-scenario configuration distance without inventing an aggregate
+leaderboard score.
 
 LLM Hardtest Report is a local-first command-line benchmark for comparing language
 models as reasoners, coding workers, and safe handoff agents. Point it at one or more
@@ -197,8 +198,8 @@ model identifiers, local paths, or credentials.
 See [Calibration and Discrimination Analysis](docs/CALIBRATION.md) for formulas,
 sample limitations, and a recommended study design.
 
-Round 5 research evidence has its own multi-axis analysis because one long-horizon
-task cannot support item-total statistics:
+Round 5 research evidence has its own multi-axis analysis because each long-horizon
+scenario is an indivisible incident rather than an item bank:
 
 ```bash
 llm-hardtest pilot analyze runs/pilot-a runs/pilot-b --output round5-analysis.md
@@ -207,8 +208,10 @@ llm-hardtest pilot analyze runs/pilot-a runs/pilot-b --output round5-analysis.md
 It compares repeated outcome distance within one configuration against distance
 between configurations across transport completion, authority safety, hypothesis
 revision, public and held-back tests, release readiness, report accuracy, and tool
-protocol compliance. Model labels remain anonymous unless
-`--include-model-labels` is explicitly supplied. See
+protocol compliance. It also builds a configuration portfolio across q32–q34, keeps
+missing scenarios unobserved, exposes the worst observed held-back rate, and compares
+configurations only on an exact shared scenario fingerprint. Model labels remain
+anonymous unless `--include-model-labels` is explicitly supplied. See
 [Round 5 Cross-Pilot Analysis](docs/PILOT_ANALYSIS.md).
 
 ## Voluntary public results

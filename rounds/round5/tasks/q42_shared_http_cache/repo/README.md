@@ -16,9 +16,11 @@ A cacheable 200 response requires a valid non-negative `Cache-Control: max-age`,
 `private` or `no-store`, no `Set-Cookie`, and no `Vary: *`. `Vary` names are validated,
 deduplicated case-insensitively, and their normalized request values form the variant
 key. Repeated `Cache-Control` fields are combined; conflicting repeated numeric
-directives, malformed `Age`, or malformed response headers fail closed without cache
-mutation. `Age` contributes to current age. An entry is fresh only while current age is
-strictly less than `max-age`.
+directives, malformed `Age`, or malformed response headers are protocol errors:
+`get()` raises `CacheError` and performs no cache mutation. In contrast, a valid but
+uncacheable response still returns its body without shared storage. `Age` contributes
+to current age. An entry is fresh only while current age is strictly less than
+`max-age`.
 
 A stale entry with `ETag` or `Last-Modified` is revalidated using cache-owned
 conditionals. A 304 preserves the stored body and merges end-to-end metadata before

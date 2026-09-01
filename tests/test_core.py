@@ -2479,6 +2479,25 @@ class SnapshotCache:
             analysis["groups"][0]["fingerprint_verification"],
             ["release-registry"])
 
+    def test_round_five_analysis_accepts_historical_q42_contract(self):
+        historical = (
+            "sha256:c1a1d19d78c91ef335735734cf0ff15fff3fa25aa3aed986101e86ebc29b539f")
+        with tempfile.TemporaryDirectory() as tmp:
+            root = run_pilot(
+                self._config(), Path(tmp), ["m"], 1,
+                agent_factory=lambda model, run: self.FakeAgent(
+                    pilot_id="q42_shared_http_cache"),
+                pilot_id="q42_shared_http_cache")
+            summary_path = root / "pilot_summary.json"
+            summary = load_json(summary_path)
+            summary["pack"] = historical
+            save_json(summary_path, summary)
+            analysis = analyze_pilots([root])
+        self.assertEqual(analysis["groups"][0]["pack"], historical)
+        self.assertEqual(
+            analysis["groups"][0]["fingerprint_verification"],
+            ["release-registry"])
+
     def test_round_five_analysis_never_pools_current_and_historical_versions(self):
         historical = (
             "sha256:1186a977c1b4264fcf47497c027299b84f627ae1308f6488d85cfa34d1443679")
@@ -2509,6 +2528,11 @@ class SnapshotCache:
             self.assertIn(
                 pilot_fingerprint(pilot_id),
                 {entry["fingerprint"] for entry in registry["pilots"][pilot_id]})
+        q42 = registry["pilots"]["q42_shared_http_cache"]
+        self.assertEqual([entry["fingerprint"] for entry in q42], [
+            "sha256:c1a1d19d78c91ef335735734cf0ff15fff3fa25aa3aed986101e86ebc29b539f",
+            pilot_fingerprint("q42_shared_http_cache"),
+        ])
         with tempfile.TemporaryDirectory() as tmp:
             malformed = json.loads(json.dumps(registry))
             malformed["pilots"][PILOT_IDS[0]].append(

@@ -5,6 +5,22 @@ out separately from harness features.
 
 ## Unreleased
 
+## 2.47.1 — 2026-09-01
+
+- Clarified q42's malformed-response contract after a live model exposed an ambiguous
+  interpretation of “fail closed”: conflicting numeric cache directives, malformed
+  `Age`, and malformed response headers must raise `CacheError` without mutation,
+  while valid but uncacheable responses still return their body without storage.
+- Preserved the v2.47.0 q42 fingerprint in the public release registry instead of
+  relabelling its evidence. The clarified current fingerprint is
+  `sha256:ff9d7064a5fc5edb83889887db389772b1b03e529cb22ae9b4e58b5a108d9fb2`.
+- Recorded one local-only exact-v2.47.0 smoke attempt per permitted configuration:
+  E4B safely stopped at the turn-1 unsupported-tool circuit breaker, while GPT-5.6
+  Luna completed cleanly at 4/4 public and 9/10 held-back and revealed the ambiguity.
+- All 260 source tests, the complete q42 control matrix, and the repository selftest
+  pass with historical and current q42 contracts kept distinct; fresh wheel and sdist
+  installs reproduce both contracts and pass their installed selftests.
+
 ## 2.47.0 — 2026-09-01
 
 - Added `q42_shared_http_cache`, an orthogonal Round 5 incident spanning authenticated

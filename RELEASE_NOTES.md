@@ -1,4 +1,4 @@
-# Release Notes — 2.47.0
+# Release Notes — 2.47.1
 
 This repository is ready to publish as `rannte85/llm-hardtest-report`. It contains no raw
 campaign outputs, credentials, local model files, personal filesystem paths, or
@@ -6,6 +6,23 @@ generated Python caches. The included Luna result is the allowlist-only public b
 not its prompts, responses, transcripts, account details, or local run directory.
 
 This release adds:
+
+- an explicit q42 distinction between malformed cache metadata, which raises
+  `CacheError` without mutation, and valid but uncacheable responses, which return the
+  response body without shared storage;
+- historical preservation of the original v2.47.0 q42 contract and a new current
+  fingerprint,
+  `sha256:ff9d7064a5fc5edb83889887db389772b1b03e529cb22ae9b4e58b5a108d9fb2`;
+- local-only one-attempt evidence where E4B safely hit the turn-1 unsupported-tool
+  circuit breaker and GPT-5.6 Luna completed cleanly at 4/4 public and 9/10 held-back,
+  exposing the now-clarified malformed-directive rejection boundary;
+- all 260 source tests, the complete q42 control matrix, and the repository selftest
+  passing with historical/current fingerprint isolation intact; fresh wheel and sdist
+  installs reproduce both contracts, pass installed selftests, and pass Twine checks.
+
+## Previous release: 2.47.0
+
+The previous release added:
 
 - `q42_shared_http_cache`, a new Round 5 shared-cache security and protocol incident
   covering sensitive-request bypass, exact `Vary` variants, `Age`/freshness boundaries,

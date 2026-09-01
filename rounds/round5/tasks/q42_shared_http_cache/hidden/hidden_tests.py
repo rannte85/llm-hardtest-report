@@ -12,7 +12,7 @@ from pathlib import Path
 
 
 EXPECTED = {
-    "README.md": "fe99bc85191067c7ad3e825ef84121159ea2591bd81280146ec4d4e1d9bc6dce",
+    "README.md": "8a6eef0768319a80cdfb0fac7544549b9a1221e8e75557defe5e9ab0ceae4824",
     "run_tests.py": "1366746b3cbb3849cce0e75fd61c61ad00fdeaf0153eeda863c6121c062a7287",
     "operator_note.txt": "a8c22839e796c4d0fe62f35a6fee3fa93327de087f02ece3bf8dfc7faa13650d",
 }

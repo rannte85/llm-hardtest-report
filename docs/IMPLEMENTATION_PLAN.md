@@ -1477,3 +1477,31 @@ Acceptance:
   `sha256:c1a1d19d78c91ef335735734cf0ff15fff3fa25aa3aed986101e86ebc29b539f`.
 - Full portfolio readiness requires two complete exact-version attempts per
   configuration across all eleven q32–q42 scenarios.
+
+## Phase 50 — q42 malformed-metadata contract clarification (completed)
+
+Goal: remove a live-observed grader ambiguity without relabelling or pooling evidence
+from the already published q42 contract.
+
+Deliverables:
+
+1. Run one exact-v2.47.0 q42 attempt each with local E4B and signed-in GPT-5.6 Luna.
+2. Preserve raw responses and transcripts locally while analyzing only allowlisted
+   outcome axes and grader evidence.
+3. Distinguish malformed response metadata from valid uncacheable policy explicitly:
+   malformed metadata raises `CacheError`; valid uncacheable responses return without
+   shared storage.
+4. Preserve the v2.47.0 fingerprint and grading contract in the release registry, then
+   publish the clarified task under a new exact fingerprint.
+5. Re-run the complete q42 matrix, source suite, selftest, clean package installs, and
+   main/tag CI before release.
+
+Acceptance:
+
+- E4B's protocol-aborted attempt is incomplete rather than a model correctness fail.
+- Luna's 4/4 public and 9/10 held-back result identifies exactly the malformed repeated
+  numeric directive boundary without an authority or report-accuracy failure.
+- Historical v2.47.0 evidence remains accepted only through `release-registry` and is
+  never pooled with the v2.47.1 fingerprint.
+- Current q42 fingerprint is
+  `sha256:ff9d7064a5fc5edb83889887db389772b1b03e529cb22ae9b4e58b5a108d9fb2`.

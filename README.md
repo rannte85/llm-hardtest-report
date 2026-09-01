@@ -4,8 +4,8 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-**Current release: 2.47.0** — adds q42's shared HTTP cache isolation, revalidation,
-freshness-boundary, and exact-request single-flight incident.
+**Current release: 2.47.1** — makes q42's malformed-response rejection semantics
+explicit while preserving the original v2.47.0 contract as historical evidence.
 
 LLM Hardtest Report is a local-first command-line benchmark for comparing language
 models as reasoners, coding workers, and safe handoff agents. Point it at one or more

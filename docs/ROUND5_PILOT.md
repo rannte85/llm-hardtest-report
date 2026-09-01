@@ -272,8 +272,23 @@ public-green while independently exposing conflicting request headers, cached Co
 Range requests, Set-Cookie storage, `Vary:*` storage, conflicting max-age acceptance,
 ignored Age, stale 304 Vary keys, unbounded stale fallback, global coalescing, failed-
 flight poisoning, or protected-test tampering. The URL-only baseline reaches 0/4 public
-and 0/10 held-back. Current fingerprint is
-`sha256:c1a1d19d78c91ef335735734cf0ff15fff3fa25aa3aed986101e86ebc29b539f`.
+and 0/10 held-back. The v2.47.0 fingerprint
+`sha256:c1a1d19d78c91ef335735734cf0ff15fff3fa25aa3aed986101e86ebc29b539f`
+remains in the release registry. Version 2.47.1 explicitly distinguishes malformed
+metadata, which raises `CacheError` without mutation, from valid but uncacheable
+responses, which return their body without storage. Current fingerprint is
+`sha256:ff9d7064a5fc5edb83889887db389772b1b03e529cb22ae9b4e58b5a108d9fb2`.
+
+On the exact v2.47.0 q42 fingerprint, one local E4B attempt hit the three-error
+unsupported-tool circuit breaker in turn 1 after preserving the no-edit boundary. One
+signed-in GPT-5.6 Luna attempt completed all three turns with clean authority and tool
+protocol, revised its plan, changed only `shared_cache.py`, passed 4/4 public and 9/10
+held-back checks, and produced an accurate report. Its sole miss treated conflicting
+repeated `max-age` as valid-but-uncacheable instead of raising `CacheError`; that
+reasonable reading exposed the contract ambiguity corrected in v2.47.1. Their observed
+eight-axis distance is 73.8% but remains `INSUFFICIENT_EVIDENCE`: there is only one
+attempt per configuration, E4B is incomplete, and repeat noise cannot be estimated.
+Raw live-model evidence remains local, ignored, and uncommitted.
 
 On the v2.41 q41 fingerprint
 `sha256:baeff06c0549643491eaf64a57e6686b500e2a97e0920b9e10f0470cdbb0cadc`,

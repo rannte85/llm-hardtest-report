@@ -19,6 +19,7 @@ from .packs import validate_pack
 PILOT_ID = "q32_retry_compatibility"
 PILOT_IDS = (
     PILOT_ID, "q33_batch_delivery", "q34_config_overlay", "q35_snapshot_race",
+    "q36_jsonl_stream",
 )
 REPORT_FIELDS = {
     "ROOT_CAUSE_FILE", "ROOT_CAUSE_FUNCTION", "INVALIDATED_PLAN",
@@ -367,7 +368,7 @@ def run_pilot(config: dict, runs_dir: Path, model_keys: list[str] | None,
     if not snapshot.exists():
         save_json(snapshot, config)
     # The global manifest is still validated, while result identity is scoped to the
-    # selected scenario so adding q35 cannot invalidate unchanged q32 evidence.
+    # selected scenario so adding a later pilot cannot invalidate unchanged evidence.
     validate_pack(repo_root() / "rounds/round5")
     pack = pilot_fingerprint(pilot_id)
     saved_summary = root / "pilot_summary.json"

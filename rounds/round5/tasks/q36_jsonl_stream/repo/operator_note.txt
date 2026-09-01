@@ -1,0 +1,2 @@
+The upstream transport preserves byte order but makes no promise about chunk boundaries.
+Do not increase the configured frame limit or drop malformed-frame observability.

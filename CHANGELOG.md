@@ -5,6 +5,30 @@ out separately from harness features.
 
 ## Unreleased
 
+## 2.33.0 — 2026-09-01
+
+- Added `q36_jsonl_stream`, a fifth Round 5 scenario for arbitrary byte-boundary
+  JSONL framing, split UTF-8, raw-byte limits, malformed-frame recovery, EOF flush,
+  and serial callback delivery under reentrant input.
+- Added four public and ten held-back checks plus baseline, correct, and eight
+  public-green adversarial controls. The correct control reaches 4/4 and 10/10;
+  incomplete text buffering, replacement decoding, inline callbacks, character limits,
+  abort-on-error, missing EOF flush, scalar acceptance, and tampering are separated.
+- Integrated q36 into scenario fingerprints, execution, anonymous public export,
+  five-scenario portfolios, package data, selftest, and the Linux/macOS CI matrix.
+- Expanded fingerprint-isolation and single-scenario-robustness regressions for the
+  fifth scenario without changing the non-canonical interpretation policy.
+- Smoke-tested q36 once with local Gemma 4 E4B and once with signed-in GPT-5.6 Luna on
+  the same final fingerprint. E4B entered an unrelated unsupported-tool loop in turn
+  three and was stopped after 19 minutes; its incomplete evidence retained the
+  3/4·3/10 baseline. Luna reached 9/9 public and 9/10 held-back with clean protocol and
+  an accurate report, but changed protected public-test authority, so both attempts
+  correctly remained non-release-ready.
+- The observed q36 distance was 60.625%, explicitly insufficient for inference because
+  one side was incomplete and both sides have only one attempt on one scenario;
+  all 219 source tests, repository selftest, and installed-wheel selftest pass without
+  committing either model's raw evidence.
+
 ## 2.32.0 — 2026-09-01
 
 - Added per-axis Round 5 separation attribution for transport, authority, evidence

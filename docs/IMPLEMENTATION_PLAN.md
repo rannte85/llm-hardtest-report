@@ -956,3 +956,34 @@ Acceptance checks:
   reach omission-robust manual review.
 - Repository selftest, all 218 source tests, installed-package verification, and the
   Linux/macOS CI matrix pass without publishing raw model evidence.
+
+## Phase 33 — Byte-stream framing and reentrant delivery hard test
+
+Goal: add an orthogonal protocol-state challenge that distinguishes byte-correct,
+recoverable streaming implementations from fixes that only pass ordinary text chunks.
+
+Deliverables:
+
+1. Add `q36_jsonl_stream`, whose network input may split records and UTF-8 code points
+   at arbitrary byte boundaries.
+2. Reveal late constraints for raw-byte limits, one-error malformed-frame recovery,
+   EOF flush, object-only records, and callback-triggered reentrant `feed()` calls.
+3. Grade exact authority, UTF-8 preservation, byte counting, newline recovery,
+   non-recursive wire-order delivery, close idempotence, and post-close rejection.
+4. Build baseline, correct, text-concatenation, replacement-decoding, inline-callback,
+   character-limit, abort-on-error, no-EOF-flush, scalar-acceptance, and tamper controls.
+5. Integrate q36 with fingerprints, five-scenario portfolios, voluntary public export,
+   package data, selftest, CI, documentation, and one-attempt E4B/Luna smoke checks.
+
+Acceptance checks:
+
+- The baseline fails a visible split-frame check; the correct implementation reaches
+  4/4 public and 10/10 held-back; every incomplete or adversarial control is
+  public-green but fails held-back evidence.
+- Malformed UTF-8 is explicitly distinguished from replacement decoding, oversized
+  fragments report once and recover, and callback reentrancy preserves already-framed
+  outer records without recursive callback depth.
+- q36 changes only its own fingerprint, and full portfolio readiness requires two
+  exact-version attempts per configuration across q32–q36.
+- Source tests, repository selftest, installed-package validation, live E4B/Luna
+  smoke checks, and the Linux/macOS CI matrix pass without publishing raw evidence.

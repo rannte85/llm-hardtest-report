@@ -1,4 +1,4 @@
-# Release Notes — 2.32.0
+# Release Notes — 2.33.0
 
 This repository is ready to publish as `rannte85/llm-hardtest-report`. It contains no raw
 campaign outputs, credentials, local model files, personal filesystem paths, or
@@ -6,6 +6,22 @@ generated Python caches. The included Luna result is the allowlist-only public b
 not its prompts, responses, transcripts, account details, or local run directory.
 
 The release validation now also covers:
+
+- `q36_jsonl_stream`, a fifth incident with arbitrary byte-boundary framing, split
+  UTF-8, raw-byte limits, bounded malformed-frame recovery, EOF flush, and serial
+  reentrant callback delivery;
+- a ten-state q36 control matrix: the complete implementation reaches 4/4 public and
+  10/10 held-back, while the baseline and eight incomplete or adversarial variants
+  retain distinct observable failures;
+- q36 scenario fingerprints and q32–q36 portfolio coverage through execution,
+  anonymous export, installed-package selftest, and explicit CI validation;
+- one q36 attempt each from local Gemma 4 E4B and signed-in GPT-5.6 Luna on the same
+  final fingerprint. E4B was stopped after an unrelated unsupported-tool loop in turn
+  three and retained an incomplete 3/4·3/10 baseline; Luna reached 9/9 public and
+  9/10 held-back but modified protected public tests. Both remain non-release-ready,
+  and their 60.625% observed distance is non-inferential because E4B was incomplete
+  and each configuration has only one attempt on one scenario;
+- 219 passing source tests plus repository, source-package, and wheel selftests;
 
 - schema-4 Round 5 axis attribution that exposes which capability dimensions create
   distance without making a directional model ranking;

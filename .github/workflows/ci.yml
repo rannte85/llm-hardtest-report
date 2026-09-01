@@ -97,3 +97,5 @@ jobs:
             rounds/round5/tasks/q34_config_overlay/verify_pilot.py
           PYTHONDONTWRITEBYTECODE=1 python \
             rounds/round5/tasks/q35_snapshot_race/verify_pilot.py
+          PYTHONDONTWRITEBYTECODE=1 python \
+            rounds/round5/tasks/q36_jsonl_stream/verify_pilot.py

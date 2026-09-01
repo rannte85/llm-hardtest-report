@@ -1,4 +1,25 @@
-# Release Notes — 2.50.0
+# Release Notes — 2.51.0
+
+This release closes the objective-subset post-selection gap in paired comparisons:
+
+- `--multiplicity-family-size 1..4` reserves unreported or previously explored axes;
+- Holm p-values, Bonferroni simultaneous intervals, adaptive bootstrap draws, and
+  discrete p-value resolution all use the declared family;
+- the family cannot be smaller than selected objectives, and output distinguishes
+  `EXPLICIT_RESERVED` from the backward-compatible `TESTED_OBJECTIVES` default;
+- a six-pair control moves from a nominal single-axis direction at Holm p=0.03125 to
+  `RESOLUTION_LIMITED` at Holm p=0.125 when four explored axes are reserved;
+- schema v6 records the full contract while v1–v5 stay immutable;
+- all 265 source tests and repository gates pass; fresh wheel and sdist installs
+  report 2.51.0, expose the CLI flag, reproduce reserved-family Holm adjustment, and
+  pass installed selftests, while both artifacts pass Twine checks.
+
+## Previous release: 2.50.0
+
+The previous release made exact paired-test resolution visible before users collected
+or interpreted more evidence.
+
+# Historical release notes — 2.50.0
 
 This release makes exact paired-test resolution visible before users collect or
 interpret more evidence:

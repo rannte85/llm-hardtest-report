@@ -15,10 +15,10 @@ project does not automatically collect telemetry or local campaign data.
   are retained for historical clients.
 - `collection-plan-schema-v2.json` documents the current independent-bundle
   evidence-gap and acquisition-plan response; v1 is retained for compatibility.
-- `paired-comparison-schema-v5.json` documents current cluster-paired head-to-head
+- `paired-comparison-schema-v6.json` documents current cluster-paired head-to-head
   comparison with family-wise simultaneous practical-effect intervals, an adaptive
-  bootstrap budget, and a discrete sign-flip/Holm resolution audit; v1–v4 are retained
-  for historical clients.
+  bootstrap budget, a discrete sign-flip/Holm resolution audit, and explicit reserved
+  objective-family slots; v1–v5 are retained for historical clients.
 - `prediction-readiness-schema-v2.json` documents the current non-authorizing
   evidence-design audit required before any predictive serving model is fitted; v1 is
   retained.
@@ -100,6 +100,11 @@ reach 0.05 at Holm's strictest rank and reports the conservative additional non-
 pair floor. Zero-difference pairs cannot manufacture resolution, and the floor is not
 a power guarantee. The result contains configuration identities and counts but no
 contributing bundle IDs.
+When objectives were explored outside the current invocation,
+`--multiplicity-family-size` reserves up to four family slots. Holm multipliers,
+Bonferroni intervals, bootstrap draws, and resolution diagnostics use the declared
+family rather than only emitted objectives, preventing a favorable subset query from
+silently weakening correction.
 
 `results readiness` evaluates independent objective coverage, configuration and
 serving-environment diversity, paired overlap, and exact model-profile repetition

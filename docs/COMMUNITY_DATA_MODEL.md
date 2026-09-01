@@ -95,6 +95,10 @@ when deriving the best attainable exact p-value,
 applies the strictest Holm family multiplier, and reports a conservative acquisition
 floor when rejection is mathematically unavailable on the current grid. That count is
 neither estimated power nor evidence that future pairs will agree.
+For exploratory analysis, the paired contract can reserve up to four multiplicity
+slots even when only a subset is emitted. This declared family flows through Holm
+p-values, simultaneous intervals, bootstrap resolution, and discrete p floors; it
+prevents post-selection from being represented as a pre-registered single-axis claim.
 
 Version 2.13 provides the first read-only form of this interface:
 

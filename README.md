@@ -4,8 +4,8 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-**Current release: 2.50.0** — exposes discrete sign-flip resolution limits and the
-conservative additional non-zero pair floor needed for family-wise claims.
+**Current release: 2.51.0** — lets exploratory comparisons reserve unreported
+objective slots so post-selection cannot silently shrink Holm/Bonferroni correction.
 
 LLM Hardtest Report is a local-first command-line benchmark for comparing language
 models as reasoners, coding workers, and safe handoff agents. Point it at one or more
@@ -396,13 +396,14 @@ llm-hardtest results compare \
   --objective accuracy \
   --objective latency \
   --objective throughput \
+  --multiplicity-family-size 4 \
   --minimum-accuracy-effect 0.05 \
   --minimum-latency-effect-seconds 0.5 \
   --minimum-throughput-effect 5
 ```
 
 The machine-readable response follows
-[`results/paired-comparison-schema-v5.json`](results/paired-comparison-schema-v5.json).
+[`results/paired-comparison-schema-v6.json`](results/paired-comparison-schema-v6.json).
 Each metric requires at least five shared independent bundles. Repeated runs are
 collapsed within their bundle before comparison. A deterministic paired-cluster
 bootstrap supplies both a diagnostic 95% interval and a Bonferroni simultaneous
@@ -421,6 +422,12 @@ additional independent non-zero pairs would be needed merely to make rejection
 discretely possible. `RESOLUTION_LIMITED` therefore distinguishes an unattainable
 p-value grid from ordinary inconclusive evidence. This is a conservative design floor,
 not a power calculation or a guarantee that more data will support a direction.
+By default, the multiplicity family contains objectives actually tested in that call.
+If axes were inspected, queried, or selected elsewhere, reserve the complete planned
+family with `--multiplicity-family-size 1..4`. Reserved slots participate in Holm
+rank multipliers, Bonferroni confidence, bootstrap tail resolution, and the discrete
+p-value audit even when their objective rows are not emitted. The declared family
+cannot be smaller than the selected objective count.
 
 ## Audit readiness before predictive serving
 

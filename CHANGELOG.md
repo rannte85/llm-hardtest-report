@@ -5,6 +5,20 @@ out separately from harness features.
 
 ## Unreleased
 
+## 2.51.0 — 2026-09-01
+
+- Added `--multiplicity-family-size 1..4` to paired comparisons so callers can reserve
+  unreported or previously explored objective slots instead of correcting only the
+  favorable subset returned by one invocation.
+- Reserved slots now drive Holm rank multipliers, Bonferroni simultaneous confidence,
+  adaptive bootstrap draws, and discrete sign-flip resolution. The family cannot be
+  smaller than the selected objective count.
+- Added explicit `TESTED_OBJECTIVES` and `EXPLICIT_RESERVED` scope metadata and
+  immutable paired-comparison schema v6; schemas v1–v5 remain historical.
+- Added a post-selection regression where one six-pair axis is directional at family
+  size one but remains resolution-limited with Holm p=0.125 when four explored slots
+  are honestly reserved, including canonical JSON, SQLite, and CLI parity.
+
 ## 2.50.0 — 2026-09-01
 
 - Added a fail-closed discrete-resolution audit to every eligible paired objective.

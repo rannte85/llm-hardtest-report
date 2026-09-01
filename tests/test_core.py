@@ -5600,8 +5600,10 @@ class PublicResultTests(unittest.TestCase):
             left_configuration=configurations["org/fast"],
             right_configuration=configurations["org/accurate"],
             objectives=["accuracy", "latency", "throughput"])
-        self.assertEqual(result["schema_version"], 5)
+        self.assertEqual(result["schema_version"], 6)
         self.assertEqual(result["tested_objectives"], 3)
+        self.assertEqual(result["multiplicity_family_scope"], "TESTED_OBJECTIVES")
+        self.assertEqual(result["multiplicity_family_size"], 3)
         self.assertEqual(result["bootstrap_samples"], 12_000)
         self.assertEqual(result["simultaneous_confidence"], 0.98333333)
         self.assertEqual(result["minimum_nonzero_pairs_for_strictest_holm"], 7)
@@ -5659,6 +5661,36 @@ class PublicResultTests(unittest.TestCase):
             self.assertEqual(
                 row["inference_resolution"][
                     "additional_nonzero_pairs_for_strictest_holm"], 1)
+
+    def test_paired_comparison_reserves_explored_objective_family(self):
+        submissions = self._recommendation_submissions(6)
+        configurations = {
+            row["model"]: row["configuration"]
+            for row in catalog_submissions(submissions)["configurations"]
+        }
+        arguments = {
+            "round_number": 1,
+            "left_configuration": configurations["org/fast"],
+            "right_configuration": configurations["org/accurate"],
+            "objectives": ["accuracy"],
+        }
+        selected_only = compare_submissions(submissions, **arguments)
+        reserved = compare_submissions(
+            submissions, **arguments, multiplicity_family_size=4)
+        self.assertEqual(selected_only["status"], "RIGHT_DIRECTIONAL_EVIDENCE")
+        self.assertEqual(selected_only["multiplicity_family_size"], 1)
+        self.assertEqual(selected_only["objectives_result"][0]["p_holm"], 0.03125)
+        self.assertEqual(reserved["multiplicity_family_scope"], "EXPLICIT_RESERVED")
+        self.assertEqual(reserved["multiplicity_family_size"], 4)
+        self.assertEqual(reserved["bootstrap_samples"], 16_000)
+        self.assertEqual(reserved["simultaneous_confidence"], 0.9875)
+        self.assertEqual(reserved["status"], "RESOLUTION_LIMITED")
+        self.assertEqual(reserved["objectives_result"][0]["p_holm"], 0.125)
+        self.assertEqual(
+            reserved["objectives_result"][0]["simultaneous_interval"]["family_size"],
+            4)
+        self.assertIn("Multiplicity family: **4** (EXPLICIT_RESERVED)",
+                      render_paired_comparison(reserved))
 
     def test_paired_comparison_audits_discrete_resolution_and_zero_pairs(self):
         self.assertEqual(
@@ -5920,6 +5952,7 @@ class PublicResultTests(unittest.TestCase):
             "objectives": ["accuracy", "latency", "throughput"],
             "minimum_effects": {
                 "accuracy": 0.1, "latency": 1.0, "throughput": 10.0},
+            "multiplicity_family_size": 4,
         }
         with tempfile.TemporaryDirectory() as tmp:
             directory = Path(tmp) / "submissions"
@@ -5942,6 +5975,7 @@ class PublicResultTests(unittest.TestCase):
                 "--minimum-accuracy-effect", "0.1",
                 "--minimum-latency-effect-seconds", "1",
                 "--minimum-throughput-effect", "10", "--json",
+                "--multiplicity-family-size", "4",
             ]
             with patch("sys.stdout", source_stdout):
                 self.assertEqual(main([
@@ -6013,6 +6047,18 @@ class PublicResultTests(unittest.TestCase):
                 submissions, round_number=1, left_configuration=left,
                 right_configuration=right, objectives=["accuracy"],
                 minimum_effects={"accuracy": 1.1})
+        for invalid_family in (0, 5, True, 2.5):
+            with self.subTest(family=invalid_family), self.assertRaisesRegex(
+                    ValueError, "family size"):
+                compare_submissions(
+                    submissions, round_number=1, left_configuration=left,
+                    right_configuration=right, objectives=["accuracy"],
+                    multiplicity_family_size=invalid_family)
+        with self.assertRaisesRegex(ValueError, "family size"):
+            compare_submissions(
+                submissions, round_number=1, left_configuration=left,
+                right_configuration=right, objectives=["accuracy", "latency"],
+                multiplicity_family_size=1)
 
         mixed = json.loads(json.dumps(self._recommendation_submissions(2)))
         from llm_hardtest.public_results import _bundle_id
@@ -6028,7 +6074,7 @@ class PublicResultTests(unittest.TestCase):
 
     def test_published_paired_comparison_schema_matches_runtime_contract(self):
         schema = json.loads((
-            repo_root() / "results/paired-comparison-schema-v5.json").read_text(
+            repo_root() / "results/paired-comparison-schema-v6.json").read_text(
                 encoding="utf-8"))
         submissions = self._full_coordinate_submissions(7)
         configurations = {

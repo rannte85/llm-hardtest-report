@@ -13,7 +13,7 @@ from .community_results import (
 from .public_results import normalized_serving_environment
 
 
-PAIRED_COMPARISON_SCHEMA_VERSION = 5
+PAIRED_COMPARISON_SCHEMA_VERSION = 6
 SIGN_FLIP_EXACT_LIMIT = 65_536
 SIGN_FLIP_MONTE_CARLO_SAMPLES = 20_000
 SIGN_FLIP_ABSOLUTE_TOLERANCE = 1e-12
@@ -194,12 +194,14 @@ def _paired_intervals(effects: list[float], seed: str,
     return pointwise, simultaneous
 
 
-def _holm_adjust(rows: list[dict]) -> None:
+def _holm_adjust(rows: list[dict], family_size: int) -> None:
     tested = [row for row in rows if row["p_raw"] is not None]
+    if family_size < len(tested):
+        raise ValueError("Holm family cannot be smaller than tested objectives")
     previous = 0.0
     for rank, row in enumerate(sorted(
             tested, key=lambda value: (value["p_raw"], value["objective"])), 1):
-        adjusted = min(1.0, row["p_raw"] * (len(tested) - rank + 1))
+        adjusted = min(1.0, row["p_raw"] * (family_size - rank + 1))
         previous = max(previous, adjusted)
         row["p_holm"] = round(previous, 8)
 
@@ -237,7 +239,8 @@ def compare_paired_observations(observations: list[dict], *, round_number: int,
                                 right_configuration: str,
                                 pack: str | None = None,
                                 objectives: list[str] | None = None,
-                                minimum_effects: dict | None = None) -> dict:
+                                minimum_effects: dict | None = None,
+                                multiplicity_family_size: int | None = None) -> dict:
     """Compare two exact configurations only within shared independent bundles."""
     if isinstance(round_number, bool) or round_number not in {1, 2, 3, 4}:
         raise ValueError("comparison round must be one of 1, 2, 3, or 4")
@@ -257,7 +260,17 @@ def compare_paired_observations(observations: list[dict], *, round_number: int,
             or set(objectives) - RECOMMENDATION_OBJECTIVES):
         raise ValueError("comparison objectives must be unique values from: "
                          + ", ".join(sorted(RECOMMENDATION_OBJECTIVES)))
+    if multiplicity_family_size is not None and (
+            isinstance(multiplicity_family_size, bool)
+            or not isinstance(multiplicity_family_size, int)
+            or multiplicity_family_size < len(objectives)
+            or multiplicity_family_size > len(RECOMMENDATION_OBJECTIVES)):
+        raise ValueError(
+            "multiplicity family size must be an integer from the selected objective "
+            "count through 4")
     minimum_effects = _minimum_effects(objectives, minimum_effects)
+    explicit_family = multiplicity_family_size is not None
+    declared_family_size = multiplicity_family_size or 0
 
     round_rows = [row for row in observations if row["round"] == round_number]
     available_packs = sorted({row["pack"] for row in round_rows})
@@ -276,12 +289,16 @@ def compare_paired_observations(observations: list[dict], *, round_number: int,
         "minimum_paired_bundles": MIN_BASELINE_SUBMISSIONS,
         "multiplicity_method": (
             "holm_p_values_and_bonferroni_simultaneous_intervals_across_"
-            "tested_objectives"),
+            "declared_objective_family"),
+        "multiplicity_family_scope": (
+            "EXPLICIT_RESERVED" if explicit_family else "TESTED_OBJECTIVES"),
+        "multiplicity_family_size": declared_family_size,
         "familywise_alpha": FAMILYWISE_ALPHA,
-        "bootstrap_sample_policy": "max(2000,4000*tested_objectives)",
+        "bootstrap_sample_policy": "max(2000,4000*multiplicity_family_size)",
         "bootstrap_samples": 0,
         "simultaneous_confidence": None,
-        "minimum_nonzero_pairs_for_strictest_holm": 0,
+        "minimum_nonzero_pairs_for_strictest_holm": (
+            _minimum_nonzero_pairs_for_holm(declared_family_size)),
         "resolution_limited_objectives": 0,
         "status": "NO_OBSERVATIONS",
         "reason": "no observations exist for the requested round and pack",
@@ -365,14 +382,17 @@ def compare_paired_observations(observations: list[dict], *, round_number: int,
             row["classification"] = "PENDING"
         objective_rows.append(row)
     tested_objectives = len(effects_by_objective)
-    bootstrap_samples = _bootstrap_sample_count(tested_objectives)
+    family_size = multiplicity_family_size or tested_objectives
+    bootstrap_samples = (
+        _bootstrap_sample_count(family_size) if tested_objectives else 0)
     result["tested_objectives"] = tested_objectives
+    result["multiplicity_family_size"] = family_size
     result["bootstrap_samples"] = bootstrap_samples
     result["simultaneous_confidence"] = (
-        round(1 - FAMILYWISE_ALPHA / tested_objectives, 8)
+        round(1 - FAMILYWISE_ALPHA / family_size, 8)
         if tested_objectives else None)
     result["minimum_nonzero_pairs_for_strictest_holm"] = (
-        _minimum_nonzero_pairs_for_holm(tested_objectives))
+        _minimum_nonzero_pairs_for_holm(family_size))
     configuration_pair = ":".join(sorted(
         (left_configuration, right_configuration)))
     for row in objective_rows:
@@ -382,16 +402,16 @@ def compare_paired_observations(observations: list[dict], *, round_number: int,
         seed = (f"paired:{selected_pack}:{round_number}:"
                 f"{configuration_pair}:{row['objective']}")
         row["interval95"], row["simultaneous_interval"] = _paired_intervals(
-            effects, seed, tested_objectives, bootstrap_samples)
+            effects, seed, family_size, bootstrap_samples)
         row["inference_resolution"] = _inference_resolution(
-            effects, tested_objectives)
+            effects, family_size)
         row["test"] = _sign_flip_test(effects, seed)
         row["p_raw"] = row["test"]["p_value"]
     result["resolution_limited_objectives"] = sum(
         row["inference_resolution"] is not None
         and row["inference_resolution"]["status"] == "DISCRETE_P_LIMIT"
         for row in objective_rows)
-    _holm_adjust(objective_rows)
+    _holm_adjust(objective_rows, family_size)
     for row in objective_rows:
         if row["classification"] == "INSUFFICIENT":
             continue
@@ -470,6 +490,8 @@ def render_paired_comparison(result: dict) -> str:
         f"Family-wise alpha: **{result['familywise_alpha']}** · simultaneous confidence: "
         f"**{result['simultaneous_confidence'] if result['simultaneous_confidence'] is not None else 'n/a'}** · "
         f"bootstrap samples: **{result['bootstrap_samples']}**", "",
+        f"Multiplicity family: **{result['multiplicity_family_size']}** "
+        f"({result['multiplicity_family_scope']})", "",
         f"Strictest-rank Holm resolution: **{result['minimum_nonzero_pairs_for_strictest_holm']} "
         f"non-zero pairs** · resolution-limited objectives: "
         f"**{result['resolution_limited_objectives']}**", "",
@@ -516,6 +538,9 @@ def render_paired_comparison(result: dict) -> str:
         "Bonferroni simultaneous paired-cluster bootstrap interval clearing the declared",
         "non-zero objective-specific minimum practical effect and Holm-adjusted p < 0.05.",
         "A zero floor retains the Holm-controlled historical non-zero rule.",
+        "An explicit reserved family keeps unreported or previously explored objectives",
+        "inside Holm and Bonferroni correction; it cannot be smaller than the selected",
+        "objective count. The default family contains the objectives tested in this call.",
         "The resolution audit reports the best exact sign-flip p-value attainable from",
         "pairs beyond its disclosed numerical effect tolerance at Holm's strictest rank.",
         "Its additional-pair count",

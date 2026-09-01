@@ -530,6 +530,10 @@ def main(argv=None) -> int:
         choices=("accuracy", "completion", "latency", "throughput"),
         help="paired objective; repeat for multiple axes (default: accuracy)")
     p_results_compare.add_argument(
+        "--multiplicity-family-size", type=int,
+        help=("reserve 1..4 objective slots for Holm/Bonferroni correction; "
+              "must cover every selected objective"))
+    p_results_compare.add_argument(
         "--minimum-accuracy-effect", type=float,
         help="minimum practical accuracy-rate advantage (0..1)")
     p_results_compare.add_argument(
@@ -850,6 +854,7 @@ def main(argv=None) -> int:
                     "right_configuration": args.right_configuration,
                     "objectives": args.objective,
                     "minimum_effects": minimum_effects,
+                    "multiplicity_family_size": args.multiplicity_family_size,
                 }
                 if args.database:
                     result = compare_database(

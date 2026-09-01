@@ -1619,3 +1619,32 @@ Acceptance checks:
   family still requests one non-zero pair; pair count alone cannot fake resolution.
 - Left/right swaps retain identical resolution metadata, JSON and verified SQLite
   remain byte-identical, and schema v4 stays unchanged while v5 exactly covers runtime.
+
+## Phase 55 — Reserved objective-family correction (completed)
+
+Goal: prevent post-hoc objective subset selection from silently weakening family-wise
+paired inference across repeated exploratory queries.
+
+Deliverables:
+
+1. Accept an optional declared multiplicity family size from one through four, never
+   smaller than the selected objective count.
+2. Preserve the historical per-call tested-objective family when no declaration is
+   supplied and label both scopes explicitly.
+3. Use the declared family for Holm rank multipliers, Bonferroni simultaneous
+   confidence, adaptive bootstrap samples, and discrete sign-flip resolution.
+4. Apply the contract identically through Python, canonical JSON, verified SQLite,
+   CLI, and Markdown without inventing rows for reserved objectives.
+5. Publish immutable paired-comparison schema v6 and retain v1–v5 unchanged.
+
+Acceptance checks:
+
+- One selected accuracy axis over six aligned pairs retains raw p=0.03125 and the
+  historical family-one directional result.
+- Reserving four explored slots on the same evidence produces Holm p=0.125, 98.75%
+  simultaneous confidence, 16,000 draws, and `RESOLUTION_LIMITED`.
+- Boolean, non-integer, zero, over-four, and below-selected-count declarations fail
+  before analysis or output mutation.
+- JSON and verified SQLite CLI paths remain byte-identical with the same declared
+  family; default three-objective comparisons remain unchanged.
+- Schema v5 stays byte-for-byte unchanged and schema v6 exactly covers runtime JSON.

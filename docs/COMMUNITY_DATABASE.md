@@ -192,6 +192,10 @@ raw p-value supported by pairs beyond it, applies the strictest Holm multiplier,
 and gives a conservative additional non-zero pair floor when that adjusted value
 cannot reach 0.05. Zero-difference pairs do not improve this resolution, and the floor
 is not a statistical-power promise.
+The optional `--multiplicity-family-size` applies identically to JSON and verified
+SQLite. It reserves unreported or previously explored objective slots in the Holm and
+Bonferroni family, so querying a favorable subset cannot silently reclaim a smaller
+correction. The value must cover every selected objective and may not exceed four.
 
 The database adapter first collapses repeated runs to one metric value per bundle and
 configuration, then retains only shared bundles for each selected objective. It feeds

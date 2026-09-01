@@ -8,6 +8,7 @@ import runpy
 import shutil
 import sqlite3
 import stat
+import subprocess
 import tempfile
 import threading
 import unittest
@@ -443,6 +444,85 @@ class BackendTests(unittest.TestCase):
         for command in commands:
             position = command.index("--disable")
             self.assertEqual(command[position + 1], "multi_agent")
+
+    def test_codex_agent_allows_recovery_from_one_unsupported_tool_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            work = root / "work"
+            work.mkdir()
+            backend = CodexBackend({
+                "key": "m", "model": "m", "codex_provider": "openai",
+            }, root / "state")
+
+            class RecoveringProcess:
+                pid = 1
+
+                def __init__(self, command, stream):
+                    self.command = command
+                    self.stream = stream
+                    self.calls = 0
+
+                def wait(self, timeout):
+                    self.calls += 1
+                    if self.calls == 1:
+                        self.stream.write(
+                            "ERROR codex_core::tools::router: "
+                            "error=request_user_input is unavailable in Default mode\n")
+                        self.stream.flush()
+                        raise subprocess.TimeoutExpired("codex", timeout)
+                    Path(self.command[self.command.index("-o") + 1]).write_text(
+                        "recovered", encoding="utf-8")
+                    return 0
+
+            def fake_popen(command, **kwargs):
+                return RecoveringProcess(command, kwargs["stdout"])
+
+            with patch("subprocess.Popen", side_effect=fake_popen):
+                result = backend.agent_turn(
+                    "first", work, root / "evidence", 1, 10, "read-only")
+        self.assertFalse(result["protocol_aborted"])
+        self.assertIsNone(result["termination_reason"])
+        self.assertEqual(result["content"], "recovered")
+
+    def test_codex_agent_aborts_repeated_unsupported_tool_loop(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            work = root / "work"
+            work.mkdir()
+            backend = CodexBackend({
+                "key": "m", "model": "m", "codex_provider": "openai",
+            }, root / "state")
+
+            class LoopingProcess:
+                pid = 1
+
+                def __init__(self, stream):
+                    self.stream = stream
+                    self.calls = 0
+
+                def wait(self, timeout):
+                    self.calls += 1
+                    self.stream.write(
+                        "ERROR codex_core::tools::router: "
+                        "error=request_user_input is unavailable in Default mode\n")
+                    self.stream.flush()
+                    raise subprocess.TimeoutExpired("codex", timeout)
+
+            def fake_popen(_command, **kwargs):
+                return LoopingProcess(kwargs["stdout"])
+
+            with patch("subprocess.Popen", side_effect=fake_popen), \
+                    patch("llm_hardtest.backends._stop_process", return_value=-15) as stopped:
+                result = backend.agent_turn(
+                    "next", work, root / "evidence", 2, 10, "workspace-write",
+                    "11111111-1111-1111-1111-111111111111")
+        stopped.assert_called_once()
+        self.assertFalse(result["timed_out"])
+        self.assertTrue(result["protocol_aborted"])
+        self.assertEqual(result["termination_reason"], "unsupported_tool_loop")
+        self.assertEqual(result["protocol_abort_tool_names"], ["request_user_input"])
+        self.assertEqual(result["returncode"], -15)
+        self.assertIn("PROTOCOL_ABORT", result["transcript"])
 
     def test_missing_choices_is_provider_error(self):
         class FakeResponse:
@@ -1116,21 +1196,32 @@ class SnapshotCache:
                     "REMAINING_RISKS: none observed\n")
             if self.mode == "empty" and turn == 1:
                 content = ""
+            protocol_loop = self.mode == "protocol-loop" and turn == 1
+            protocol_errors = (
+                "\nERROR codex_core::tools::router: "
+                "error=request_user_input is unavailable in Default mode" * 3
+                if protocol_loop else "")
             (evidence_dir / f"transcript_turn{turn}.txt").write_text(
                 content + ("\nERROR codex_core::tools::router: "
                            "error=unsupported call: tool_code"
-                           if self.mode == "unsupported" and turn == 1 else ""),
+                           if self.mode == "unsupported" and turn == 1 else "")
+                + protocol_errors,
                 encoding="utf-8")
             (evidence_dir / f"last_message_turn{turn}.txt").write_text(
                 content, encoding="utf-8")
             timed_out = self.mode == "timeout" and turn == 1
             transcript = content + ("\nERROR codex_core::tools::router: "
                                     "error=unsupported call: tool_code"
-                                    if self.mode == "unsupported" and turn == 1 else "")
+                                    if self.mode == "unsupported" and turn == 1 else "") \
+                + protocol_errors
             return {"content": content, "transcript": transcript,
                     "session_id": "00000000-0000-0000-0000-000000000001",
                     "wall": 0.1, "tokens": 10, "timed_out": timed_out,
-                    "returncode": -9 if timed_out else 0, "sandbox": sandbox}
+                    "protocol_aborted": protocol_loop,
+                    "termination_reason": ("unsupported_tool_loop"
+                                           if protocol_loop else None),
+                    "returncode": (-15 if protocol_loop else
+                                   (-9 if timed_out else 0)), "sandbox": sandbox}
 
     def test_round_five_correct_research_attempt_is_fully_graded(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1497,6 +1588,22 @@ class SnapshotCache:
         self.assertEqual(grade["unsupported_tool_names"], ["tool_code"])
         self.assertIn("Protocol errors", report)
 
+    def test_round_five_protocol_loop_aborts_attempt_with_explicit_reason(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            agent = self.FakeAgent("protocol-loop")
+            root = run_pilot(
+                self._config(), Path(tmp), ["m"], 1,
+                agent_factory=lambda model, run: agent)
+            grade = load_json(
+                root / "m/round5/attempt-1/research_grade.json")
+            report = (root / "PILOT_REPORT.md").read_text(encoding="utf-8")
+        self.assertEqual(len(agent.calls), 1)
+        self.assertEqual(grade["status"], "INCOMPLETE")
+        self.assertTrue(grade["protocol_aborted"])
+        self.assertEqual(grade["stop_reason"], "unsupported_tool_loop")
+        self.assertEqual(grade["unsupported_tool_calls"], 3)
+        self.assertIn("unsupported_tool_loop", report)
+
     def test_round_five_requires_repository_agent_transport(self):
         with tempfile.TemporaryDirectory() as tmp:
             with self.assertRaisesRegex(ValueError, "codex_cli"):
@@ -1683,6 +1790,38 @@ class PilotAnalysisTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "release_ready contradicts"):
                 analyze_pilots([run])
 
+    def test_pilot_analysis_rejects_abort_without_threshold_transcript_evidence(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run = self._pilot_run(Path(tmp) / "pilot")
+            grade_path = run / "strong/round5/attempt-1/research_grade.json"
+            grade = load_json(grade_path)
+            grade.update({
+                "status": "INCOMPLETE", "turns_completed": 3,
+                "protocol_aborted": True,
+                "stop_reason": "unsupported_tool_loop",
+                "release_ready": False,
+            })
+            grade["turns"][2].update({
+                "protocol_aborted": True,
+                "termination_reason": "unsupported_tool_loop",
+                "returncode": -15,
+            })
+            for turn in (1, 2, 3):
+                path = run / f"strong/round5/attempt-1/transcript_turn{turn}.txt"
+                path.write_text(
+                    "ERROR codex_core::tools::router: "
+                    "error=request_user_input is unavailable in Default mode\n",
+                    encoding="utf-8")
+            save_json(grade_path, grade)
+            summary = load_json(run / "pilot_summary.json")
+            for row in summary["attempts"]:
+                if row["model"] == "strong" and row["grade"]["attempt"] == 1:
+                    row["grade"] = grade
+            save_json(run / "pilot_summary.json", summary)
+            with self.assertRaisesRegex(
+                    ValueError, "per-turn threshold transcript evidence"):
+                analyze_pilots([run])
+
     def test_pilot_analysis_does_not_turn_unobserved_tests_into_failures(self):
         with tempfile.TemporaryDirectory() as tmp:
             run = self._pilot_run(Path(tmp) / "pilot")
@@ -1764,6 +1903,59 @@ class PublicPilotResultTests(unittest.TestCase):
         self.assertEqual(payload["models"][0]["attempts"][0]["public"], {
             "passed": 4, "total": 4, "timed_out": False,
         })
+        self.assertEqual(payload["schema_version"], 2)
+        self.assertFalse(payload["models"][0]["attempts"][0]["protocol_aborted"])
+        self.assertIsNone(payload["models"][0]["attempts"][0]["stop_reason"])
+
+    def test_validator_accepts_legacy_v1_without_protocol_stop_fields(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            payload, _ = build_public_pilot_result(self._run(Path(tmp) / "run"))
+        payload["schema_version"] = 1
+        for model in payload["models"]:
+            for attempt in model["attempts"]:
+                attempt.pop("protocol_aborted")
+                attempt.pop("stop_reason")
+        from llm_hardtest.public_results import _bundle_id
+        body = {key: value for key, value in payload.items() if key != "bundle_id"}
+        payload["bundle_id"] = _bundle_id(body)
+        self.assertEqual(validate_public_pilot_result(payload), payload)
+
+    def test_protocol_abort_requires_three_observed_errors(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            payload, _ = build_public_pilot_result(self._run(Path(tmp) / "run"))
+        attempt = payload["models"][0]["attempts"][0]
+        attempt.update({
+            "status": "INCOMPLETE", "turns_completed": 1,
+            "protocol_aborted": True, "stop_reason": "unsupported_tool_loop",
+            "unsupported_tool_calls": 2, "tool_protocol_clean": False,
+            "release_ready": False,
+        })
+        from llm_hardtest.public_results import _bundle_id
+        body = {key: value for key, value in payload.items() if key != "bundle_id"}
+        payload["bundle_id"] = _bundle_id(body)
+        with self.assertRaisesRegex(ValueError, "threshold evidence"):
+            validate_public_pilot_result(payload)
+
+    def test_incomplete_public_pilot_requires_stop_reason(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            payload, _ = build_public_pilot_result(self._run(Path(tmp) / "run"))
+        attempt = payload["models"][0]["attempts"][0]
+        attempt.update({
+            "status": "INCOMPLETE", "turns_completed": 1,
+            "release_ready": False,
+        })
+        from llm_hardtest.public_results import _bundle_id
+        body = {key: value for key, value in payload.items() if key != "bundle_id"}
+        payload["bundle_id"] = _bundle_id(body)
+        with self.assertRaisesRegex(ValueError, "requires a stop_reason"):
+            validate_public_pilot_result(payload)
+
+    def test_published_pilot_v2_schema_declares_protocol_stop_contract(self):
+        schema = load_json(repo_root() / "results/pilot-schema-v2.json")
+        attempt = schema["$defs"]["attempt"]
+        self.assertEqual(schema["properties"]["schema_version"]["const"], 2)
+        self.assertIn("protocol_aborted", attempt["required"])
+        self.assertIn("stop_reason", attempt["required"])
 
     def test_rehashed_semantic_tampering_is_rejected(self):
         with tempfile.TemporaryDirectory() as tmp:

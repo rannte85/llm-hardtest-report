@@ -11,6 +11,10 @@ import urllib.request
 from pathlib import Path
 
 from .common import save_json
+from .protocol import MAX_UNSUPPORTED_CALLS_PER_AGENT_TURN, unsupported_tool_calls
+
+
+AGENT_POLL_SECONDS = 0.25
 
 
 class BackendError(RuntimeError):
@@ -28,6 +32,43 @@ class Backend:
 
     def complete(self, messages: list[dict], timeout: int) -> dict:
         raise NotImplementedError
+
+
+def _new_protocol_calls(path: Path, position: int,
+                        carry: str) -> tuple[list[str], int, str]:
+    """Scan only newly appended complete transcript lines."""
+    try:
+        with path.open("rb") as reader:
+            reader.seek(position)
+            data = reader.read()
+            position = reader.tell()
+    except OSError:
+        return [], position, carry
+    text = carry + data.decode("utf-8", errors="replace")
+    lines = text.splitlines(keepends=True)
+    if lines and not lines[-1].endswith(("\n", "\r")):
+        carry = lines.pop()[-8192:]
+    else:
+        carry = ""
+    return unsupported_tool_calls("".join(lines)), position, carry
+
+
+def _stop_process(proc: subprocess.Popen, *, hard: bool) -> int:
+    """Stop exactly one spawned process group and return its terminal code."""
+    stop_signal = signal.SIGKILL if hard else signal.SIGTERM
+    try:
+        if os.name == "posix":
+            os.killpg(proc.pid, stop_signal)
+        else:  # pragma: no cover - Windows runner behavior
+            proc.kill() if hard else proc.terminate()
+    except ProcessLookupError:
+        pass
+    try:
+        return proc.wait(timeout=30 if hard else 5)
+    except subprocess.TimeoutExpired:
+        if hard:
+            raise
+        return _stop_process(proc, hard=True)
 
 
 def _codex_json_usage(transcript: str) -> dict | None:
@@ -302,16 +343,35 @@ class CodexBackend(Backend):
                 command, cwd=workdir, env=env, stdout=stream,
                 stderr=subprocess.STDOUT, text=True, start_new_session=(os.name == "posix"))
             timed_out = False
-            try:
-                returncode = proc.wait(timeout=timeout)
-            except subprocess.TimeoutExpired:
-                timed_out = True
-                if os.name == "posix":
-                    os.killpg(proc.pid, signal.SIGKILL)
-                else:  # pragma: no cover - Windows runner behavior
-                    proc.kill()
-                returncode = proc.wait(timeout=30)
-                stream.write(f"\n[harness] TIMEOUT: killed after {timeout}s\n")
+            protocol_aborted = False
+            termination_reason = None
+            detected_calls: list[str] = []
+            scan_position, carry = 0, ""
+            deadline = time.monotonic() + timeout
+            while True:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    timed_out = True
+                    termination_reason = "timeout"
+                    returncode = _stop_process(proc, hard=True)
+                    stream.write(f"\n[harness] TIMEOUT: killed after {timeout}s\n")
+                    break
+                try:
+                    returncode = proc.wait(timeout=min(AGENT_POLL_SECONDS, remaining))
+                    break
+                except subprocess.TimeoutExpired:
+                    calls, scan_position, carry = _new_protocol_calls(
+                        transcript_path, scan_position, carry)
+                    detected_calls.extend(calls)
+                    if len(detected_calls) >= MAX_UNSUPPORTED_CALLS_PER_AGENT_TURN:
+                        protocol_aborted = True
+                        termination_reason = "unsupported_tool_loop"
+                        returncode = _stop_process(proc, hard=False)
+                        names = ",".join(sorted(set(detected_calls)))
+                        stream.write(
+                            "\n[harness] PROTOCOL_ABORT: killed after "
+                            f"{len(detected_calls)} unsupported tool calls ({names})\n")
+                        break
         transcript = transcript_path.read_text(encoding="utf-8", errors="replace")
         content = (last_path.read_text(encoding="utf-8", errors="replace")
                    if last_path.exists() else "")
@@ -325,6 +385,9 @@ class CodexBackend(Backend):
             "wall": round(time.time() - started, 3),
             "tokens": int(tokens[-1].replace(",", "")) if tokens else None,
             "timed_out": timed_out,
+            "protocol_aborted": protocol_aborted,
+            "termination_reason": termination_reason,
+            "protocol_abort_tool_names": sorted(set(detected_calls)),
             "returncode": returncode,
             "sandbox": sandbox,
         }

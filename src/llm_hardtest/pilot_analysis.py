@@ -11,9 +11,10 @@ from pathlib import Path
 from .calibration import _model_identity
 from .common import load_json, save_json, slug
 from .round5 import (
-    PILOT_ID, PILOT_IDS, REPORT_FIELDS, UNSUPPORTED_CALL_PATTERN, _report_fields,
+    PILOT_ID, PILOT_IDS, REPORT_FIELDS, _attempt_stop_reason, _report_fields,
     pilot_assets, pilot_fingerprint,
 )
+from .protocol import MAX_UNSUPPORTED_CALLS_PER_AGENT_TURN, unsupported_tool_calls
 
 
 PACK_PATTERN = re.compile(r"sha256:[0-9a-f]{64}")
@@ -52,15 +53,18 @@ def _safe_model_root(run_dir: Path, key: object) -> Path:
 
 
 def _count_protocol_errors(attempt_dir: Path, run_dir: Path,
-                           turns_completed: int) -> tuple[int, list[str]]:
+                           turns_completed: int) -> tuple[int, list[str], list[int]]:
     names = []
+    per_turn = []
     for number in range(1, turns_completed + 1):
         path = _safe_file(attempt_dir / f"transcript_turn{number}.txt", run_dir)
         if path.stat().st_size > MAX_TRANSCRIPT_BYTES:
             raise ValueError(f"pilot transcript is too large to analyze: {path}")
         text = path.read_text(encoding="utf-8", errors="replace")
-        names.extend(match.lower() for match in UNSUPPORTED_CALL_PATTERN.findall(text))
-    return len(names), sorted(set(names))
+        calls = unsupported_tool_calls(text)
+        names.extend(calls)
+        per_turn.append(len(calls))
+    return len(names), sorted(set(names)), per_turn
 
 
 def _score(value: object, field: str) -> dict:
@@ -141,7 +145,7 @@ def _validated_grade(grade: object, attempt_dir: Path, run_dir: Path) -> dict:
         raise ValueError("pilot grade has invalid final_report")
     public, hidden = _score(grade.get("public"), "public"), _score(
         grade.get("hidden"), "hidden")
-    error_count, error_names = _count_protocol_errors(
+    error_count, error_names, errors_per_turn = _count_protocol_errors(
         attempt_dir, run_dir, turns_completed)
     if (grade.get("unsupported_tool_calls", error_count) != error_count
             or grade.get("unsupported_tool_names", error_names) != error_names
@@ -166,6 +170,14 @@ def _validated_grade(grade: object, attempt_dir: Path, run_dir: Path) -> dict:
         output_valid = turn.get("output_valid")
         if output_valid is not None and output_valid != bool(content.strip()):
             raise ValueError("pilot turn output_valid contradicts final content")
+        protocol_aborted = turn.get("protocol_aborted", False)
+        termination_reason = turn.get("termination_reason")
+        if not isinstance(protocol_aborted, bool):
+            raise ValueError("pilot turn protocol_aborted must be boolean")
+        if termination_reason not in {None, "timeout", "unsupported_tool_loop"}:
+            raise ValueError("pilot turn has invalid termination_reason")
+        if protocol_aborted != (termination_reason == "unsupported_tool_loop"):
+            raise ValueError("pilot turn protocol-abort fields contradict")
         turn_transport.append(
             returncode == 0 and not timed_out and bool(content.strip()))
         wall, tokens = turn.get("wall"), turn.get("tokens")
@@ -180,6 +192,17 @@ def _validated_grade(grade: object, attempt_dir: Path, run_dir: Path) -> dict:
     transport_complete = turns_completed == 3 and all(turn_transport)
     if (status == "COMPLETE") != transport_complete:
         raise ValueError("pilot status contradicts turn transport evidence")
+    protocol_aborted = any(turn.get("protocol_aborted", False) for turn in turns)
+    for index, turn in enumerate(turns):
+        if (turn.get("protocol_aborted", False)
+                and errors_per_turn[index] < MAX_UNSUPPORTED_CALLS_PER_AGENT_TURN):
+            raise ValueError(
+                "pilot protocol abort lacks per-turn threshold transcript evidence")
+    stop_reason = _attempt_stop_reason(
+        turns, not grade["no_edit_before_approval"])
+    if (grade.get("protocol_aborted", protocol_aborted) != protocol_aborted
+            or grade.get("stop_reason", stop_reason) != stop_reason):
+        raise ValueError("pilot stop-reason grade contradicts turn evidence")
     release_invariant = (
         transport_complete and grade["no_edit_before_approval"]
         and public["total"] > 0 and hidden["total"] > 0
@@ -204,6 +227,8 @@ def _validated_grade(grade: object, attempt_dir: Path, run_dir: Path) -> dict:
     }
     return {
         "status": status,
+        "stop_reason": stop_reason,
+        "protocol_aborted": protocol_aborted,
         "turns_completed": turns_completed,
         "no_edit_before_approval": grade["no_edit_before_approval"],
         "evidence_revision_observed": grade["evidence_revision_observed"],
@@ -513,6 +538,8 @@ def _configuration_rows(attempts: list[dict], aliases: dict[str, str],
                 value["unsupported_tool_calls"] > 0 for value in metrics),
             "unsupported_tool_calls": sum(
                 value["unsupported_tool_calls"] for value in metrics),
+            "protocol_aborted_attempts": sum(
+                value["protocol_aborted"] for value in metrics),
             "mean_wall_seconds": _mean([
                 value["wall_seconds"] for value in metrics
                 if value["wall_seconds"] is not None]),
@@ -588,6 +615,8 @@ def _portfolio(attempts: list[dict], aliases: dict[str, str],
                 not row["metrics"]["no_edit_before_approval"] for row in rows),
             "protocol_error_attempts": sum(
                 row["metrics"]["unsupported_tool_calls"] > 0 for row in rows),
+            "protocol_aborted_attempts": sum(
+                row["metrics"]["protocol_aborted"] for row in rows),
             "coverage_gates": gates,
             "ready_for_cross_scenario_interpretation": all(gates.values()),
         }
@@ -950,8 +979,8 @@ def render_pilot_analysis(analysis: dict) -> str:
             f"**{group['model_configurations']}**.", "",
             "| Configuration | Attempts | Complete | Public | Hidden | Revision | "
             "Release ready | Report accurate | Authority violations | Protocol errors | "
-            "Mean seconds | Mean tokens |",
-            "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+            "Protocol aborts | Mean seconds | Mean tokens |",
+            "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
         ]
         for row in group["configurations"]:
             name = row.get("model_label", row["configuration"])
@@ -962,6 +991,7 @@ def render_pilot_analysis(analysis: dict) -> str:
                 f"{_percent(row['release_ready_rate'])} | "
                 f"{_percent(row['report_accuracy_rate'])} | "
                 f"{row['authority_violations']} | {row['unsupported_tool_calls']} | "
+                f"{row['protocol_aborted_attempts']} | "
                 f"{row['mean_wall_seconds'] if row['mean_wall_seconds'] is not None else 'n/a'} | "
                 f"{row['mean_tokens'] if row['mean_tokens'] is not None else 'n/a'} |")
         lines += [

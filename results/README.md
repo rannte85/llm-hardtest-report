@@ -22,7 +22,8 @@ project does not automatically collect telemetry or local campaign data.
 - `database-schema-v3.sql` documents the current normalized SQLite observation schema.
   v1 and v2 describe historical generated-database formats; rebuild old databases with
   the current CLI before querying.
-- `pilot-schema-v1.json` documents the sanitized Round 5 summary shape.
+- `pilot-schema-v2.json` documents the current sanitized Round 5 summary shape,
+  including protocol-abort and stop-reason fields; v1 remains historical.
 - `pilots/` contains accepted Round 5 pilot summaries.
 - `PILOTS.md` is the separately generated Round 5 community index.
 

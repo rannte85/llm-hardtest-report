@@ -134,7 +134,13 @@ Before calculation, the analyzer:
 - requires the run summary and raw grade to match exactly;
 - recomputes transport completion and release readiness from lower-level evidence;
 - rescans bounded-size transcripts for unsupported tool calls;
+- recomputes incomplete-attempt stop reasons and requires at least three transcript
+  errors for a claimed `unsupported_tool_loop` abort;
 - rejects contradictory or malformed status, timing, token, score, and sandbox data.
+
+Configuration tables separately report protocol-error calls and circuit-breaker
+aborts. A single recoverable error therefore remains visible without being confused
+with an automatically terminated runaway turn.
 
 Scenario fingerprints cover only that task's contract, verifier, candidate repository,
 and held-back grader assets. Adding a new scenario therefore does not relabel unchanged

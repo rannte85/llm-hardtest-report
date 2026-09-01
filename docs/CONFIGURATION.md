@@ -14,6 +14,9 @@ Top-level fields:
 - `repetitions`: independent attempts per task; must be at least 1.
 - `rounds`: any non-empty subset of `[1, 2, 3, 4]`.
 - `timeout_seconds`: timeout for one model call or agent attempt; default 3600.
+  Round 5 also has a fixed, non-configurable safety rule: three unsupported Codex
+  tool-router errors in one agent turn stop that turn as `unsupported_tool_loop`.
+  One or two errors may recover and remain recorded as protocol evidence.
 - `round4_tasks`: optional Round 4 task subset.
 - `models`: one or more model configurations.
 - `panel_focus`: optional generated provenance for a `focus` campaign. It contains

@@ -884,7 +884,7 @@ def aggregate_pilot_submissions(submissions: list[dict]) -> list[dict]:
         "hidden_passed": 0, "hidden_total": 0,
         "evidence_revision": 0, "release_ready": 0, "report_accurate": 0,
         "authority_violations": 0, "protocol_error_attempts": 0,
-        "unsupported_tool_calls": 0,
+        "unsupported_tool_calls": 0, "protocol_aborted_attempts": 0,
     })
     for payload in submissions:
         bundle_groups = defaultdict(lambda: {
@@ -893,7 +893,7 @@ def aggregate_pilot_submissions(submissions: list[dict]) -> list[dict]:
             "hidden_passed": 0, "hidden_total": 0,
             "evidence_revision": 0, "release_ready": 0, "report_accurate": 0,
             "authority_violations": 0, "protocol_error_attempts": 0,
-            "unsupported_tool_calls": 0,
+            "unsupported_tool_calls": 0, "protocol_aborted_attempts": 0,
         })
         for model in payload["models"]:
             configuration = _configuration_id(payload, model)
@@ -913,6 +913,8 @@ def aggregate_pilot_submissions(submissions: list[dict]) -> list[dict]:
                 local["authority_violations"] += not attempt["no_edit_before_approval"]
                 local["protocol_error_attempts"] += not attempt["tool_protocol_clean"]
                 local["unsupported_tool_calls"] += attempt["unsupported_tool_calls"]
+                local["protocol_aborted_attempts"] += attempt.get(
+                    "protocol_aborted", False)
         for key, local in bundle_groups.items():
             group = groups[key]
             group["submissions"] += 1
@@ -959,8 +961,8 @@ def render_pilot_index(submissions: list[dict]) -> str:
     lines += [
         f"Validated bundles: **{len(submissions)}**. Comparable pilot groups: **{len(rows)}**.",
         "",
-        "| Pilot | Pack | Public model | Config | Bundles | Attempts | Complete | Public | Hidden | Revision | Release | Report | Authority violations | Protocol errors | Baseline |",
-        "|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|",
+        "| Pilot | Pack | Public model | Config | Bundles | Attempts | Complete | Public | Hidden | Revision | Release | Report | Authority violations | Protocol errors | Protocol aborts | Baseline |",
+        "|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|",
     ]
     for row in rows:
         attempts = row["attempts"]
@@ -980,6 +982,7 @@ def render_pilot_index(submissions: list[dict]) -> str:
             f"{row['evidence_revision']}/{attempts} | {row['release_ready']}/{attempts} | "
             f"{row['report_accurate']}/{attempts} | {row['authority_violations']} | "
             f"{row['protocol_error_attempts']} ({row['unsupported_tool_calls']} calls) | "
+            f"{row['protocol_aborted_attempts']} | "
             f"{baseline} |")
     lines += [
         "",

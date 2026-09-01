@@ -1,4 +1,4 @@
-# Release Notes — 2.33.0
+# Release Notes — 2.34.0
 
 This repository is ready to publish as `rannte85/llm-hardtest-report`. It contains no raw
 campaign outputs, credentials, local model files, personal filesystem paths, or
@@ -6,6 +6,19 @@ generated Python caches. The included Luna result is the allowlist-only public b
 not its prompts, responses, transcripts, account details, or local run directory.
 
 The release validation now also covers:
+
+- a live transcript circuit breaker that permits up to two recoverable unsupported
+  tool calls but terminates the spawned Round 5 Codex process group on the third;
+- explicit timeout, agent-exit, session, output, authority, and protocol-loop stop
+  reasons that remain separate from public and held-back correctness;
+- independently revalidated protocol-abort evidence in local analysis and public
+  pilot schema v2, with historical schema-v1 bundle compatibility;
+- community aggregation that distinguishes recoverable protocol errors from attempts
+  actually terminated by the circuit breaker;
+- one live q36 E4B attempt that completed all three turns after two errors in turn 1
+  and two independent errors in turn 3, confirming per-turn reset and recovery while
+  retaining its 3/4 public, 3/10 held-back, non-release-ready outcome;
+- 227 passing source tests plus repository selftest;
 
 - `q36_jsonl_stream`, a fifth incident with arbitrary byte-boundary framing, split
   UTF-8, raw-byte limits, bounded malformed-frame recovery, EOF flush, and serial

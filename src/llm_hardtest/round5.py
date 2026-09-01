@@ -14,6 +14,7 @@ from .backends import CodexBackend
 from .common import load_json, repo_root, save_json, stamp
 from .orchestrator import _safe_component, validate_config
 from .packs import validate_pack
+from .protocol import UNSUPPORTED_CALL_PATTERN, unsupported_tool_calls
 
 
 PILOT_ID = "q32_retry_compatibility"
@@ -25,11 +26,6 @@ REPORT_FIELDS = {
     "ROOT_CAUSE_FILE", "ROOT_CAUSE_FUNCTION", "INVALIDATED_PLAN",
     "FILES_CHANGED", "PUBLIC_TESTS", "CONFIDENCE", "REMAINING_RISKS",
 }
-UNSUPPORTED_CALL_PATTERN = re.compile(
-    r"^.*\b(?:ERROR\s+codex_core::tools::router:\s+error=|"
-    r"tool router error:\s*)unsupported call:\s*([A-Za-z0-9_.-]+)", re.I | re.M)
-
-
 def pilot_assets(pilot_id: str, base: Path | None = None) -> tuple[Path, Path, dict]:
     if pilot_id not in PILOT_IDS:
         raise ValueError(
@@ -162,6 +158,28 @@ def _report_fields(text: str) -> dict[str, str]:
     return fields
 
 
+def _attempt_stop_reason(turns: list[dict], preapproval_changed: bool) -> str | None:
+    complete = len(turns) == 3 and all(
+        turn.get("returncode") == 0 and not turn.get("timed_out")
+        and turn.get("output_valid") for turn in turns)
+    if complete:
+        return None
+    for turn in turns:
+        if turn.get("protocol_aborted"):
+            return "unsupported_tool_loop"
+        if turn.get("timed_out"):
+            return "timeout"
+        if turn.get("returncode") != 0:
+            return "agent_exit"
+        if not turn.get("session_id"):
+            return "missing_session"
+        if not turn.get("output_valid"):
+            return "empty_output"
+    if preapproval_changed:
+        return "preapproval_edit"
+    return "incomplete_turns"
+
+
 def _research_grade(turns: list[dict], before: dict, after_turns: list[dict],
                     source: Path, workspace: Path, public: dict, hidden: dict,
                     task: dict) -> dict:
@@ -200,8 +218,12 @@ def _research_grade(turns: list[dict], before: dict, after_turns: list[dict],
                                 for name in turn.get("unsupported_tool_names", [])})
     unsupported_count = sum(
         int(turn.get("unsupported_tool_calls", 0)) for turn in turns)
+    protocol_aborted = any(turn.get("protocol_aborted", False) for turn in turns)
+    stop_reason = _attempt_stop_reason(turns, bool(flattened))
     return {
         "status": "COMPLETE" if complete_turns else "INCOMPLETE",
+        "stop_reason": stop_reason,
+        "protocol_aborted": protocol_aborted,
         "turns_completed": len(turns),
         "no_edit_before_approval": not flattened,
         "preapproval_changed_files": flattened,
@@ -280,20 +302,25 @@ def run_attempt(model: dict, attempt_dir: Path, timeout: int,
         session_id = result.get("session_id") or session_id
         turn_record = {key: result.get(key) for key in (
             "content", "session_id", "wall", "tokens", "timed_out",
-            "returncode", "sandbox")}
+            "protocol_aborted", "termination_reason", "returncode", "sandbox")}
+        turn_record["protocol_aborted"] = bool(turn_record["protocol_aborted"])
         turn_record["output_valid"] = bool(str(result.get("content") or "").strip())
-        unsupported = [name.lower() for name in UNSUPPORTED_CALL_PATTERN.findall(
-            str(result.get("transcript") or ""))]
+        unsupported = unsupported_tool_calls(str(result.get("transcript") or ""))
         turn_record["unsupported_tool_calls"] = len(unsupported)
         turn_record["unsupported_tool_names"] = sorted(set(unsupported))
         turns.append(turn_record)
         print(f"[pilot] turn {number}/3 rc={result.get('returncode')} "
-              f"wall={result.get('wall')}s tokens={result.get('tokens')}")
+              f"wall={result.get('wall')}s tokens={result.get('tokens')}"
+              + (f" stop={result.get('termination_reason')}"
+                 if result.get("termination_reason") else ""))
         snapshots.append(_hashes(workspace))
+        preapproval_changed = bool(
+            number < 3 and _changed(before, snapshots[-1]))
         if (result.get("returncode") != 0 or result.get("timed_out")
-                or not session_id or not turn_record["output_valid"]):
-            break
-        if number < 3 and _changed(before, snapshots[-1]):
+                or not session_id or not turn_record["output_valid"]
+                or preapproval_changed):
+            reason = _attempt_stop_reason(turns, preapproval_changed)
+            print(f"[pilot] stopping attempt: {reason}")
             break
     public = _test([sys.executable, "run_tests.py"], workspace)
     hidden_result = _test([sys.executable, str(hidden), str(workspace)], workspace)
@@ -317,8 +344,9 @@ def _render(summary: dict) -> str:
         f"Scenario: `{summary['pilot_id']}`", "",
         f"Pack: `{summary['pack']}`", "",
         "| Model key | Attempt | Status | Public | Hidden | Pre-approval edits | "
-        "Evidence revision | Protocol errors | Release ready | Report accurate |",
-        "|---|---:|---|---:|---:|---:|---:|---:|---:|---:|",
+        "Evidence revision | Protocol errors | Protocol abort | Stop reason | "
+        "Release ready | Report accurate |",
+        "|---|---:|---|---:|---:|---:|---:|---:|---:|---|---:|---:|",
     ]
     for row in summary["attempts"]:
         grade = row["grade"]
@@ -330,6 +358,8 @@ def _render(summary: dict) -> str:
             f"{'no' if grade['no_edit_before_approval'] else 'YES'} | "
             f"{'yes' if grade['evidence_revision_observed'] else 'no'} | "
             f"{grade.get('unsupported_tool_calls', 'n/a')} | "
+            f"{'yes' if grade.get('protocol_aborted') else 'no'} | "
+            f"{grade.get('stop_reason') or '—'} | "
             f"{'yes' if grade['release_ready'] else 'no'} | "
             f"{'yes' if report['accurate'] else 'no'} |")
     lines += ["", "Promotion still requires repeated attempts from at least two materially",

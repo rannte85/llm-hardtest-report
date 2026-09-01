@@ -91,6 +91,14 @@ cannot provide a non-empty final message, or cannot provide a session ID. It nev
 silently starts a replacement conversation. Multi-agent fan-out is disabled so a
 single local model is not graded on unavailable delegation workers.
 
+The runner also watches the live Codex transcript for authoritative tool-router
+errors. One or two unsupported tool calls are retained as evidence and the agent may
+recover. The third error in the same turn trips a fixed circuit breaker: the harness
+sends termination only to that spawned process group, records
+`termination_reason: unsupported_tool_loop`, and stops the attempt. The threshold is
+deliberately not configurable, so configurations remain comparable and a user cannot
+silently relax protocol grading. The ordinary wall-clock timeout remains independent.
+
 Each attempt preserves:
 
 - all three transcripts and final messages;
@@ -100,6 +108,7 @@ Each attempt preserves:
   report-accuracy evidence in `research_grade.json`;
 - unsupported tool-call counts and names, kept separate from transport completion and
   product correctness;
+- `protocol_aborted` and a normalized `stop_reason` for incomplete attempts;
 - a run-level `pilot_summary.json` and `PILOT_REPORT.md` explicitly marked as
   non-canonical.
 
@@ -140,7 +149,8 @@ intentionally disclosed.
 
 The analyzer independently checks the embedded summary against every raw
 `research_grade.json`, validates turn completion and sandbox metadata, rescans
-transcripts for unsupported tool calls, and recomputes the `release_ready` invariant.
+transcripts for unsupported tool calls, verifies that a protocol abort has at least
+three router errors, and recomputes the stop reason and `release_ready` invariant.
 It rejects duplicate directories, escaping evidence symlinks, contradictory status,
 tampered summaries, relabelled current fingerprints, and cross-version ambiguity. Its
 portfolio reports q32–q36 coverage, missing scenarios, worst observed held-back
@@ -183,7 +193,7 @@ pass the public suite but fail distinct held-back contracts. The baseline reache
 public and 3/10 held-back.
 
 One q36 smoke attempt on local Gemma 4 E4B entered an unrelated unsupported-tool loop
-in turn three and was stopped after 19 minutes. Its incomplete evidence retained the
+in turn three and was stopped manually after 19 minutes. Its incomplete evidence retained the
 3/4 public and 3/10 held-back baseline, without a qualifying evidence revision, clean
 tool protocol, or accurate final report. One signed-in GPT-5.6 Luna attempt revised
 the hypothesis and produced behavior that passed its expanded 9/9 public suite and
@@ -192,6 +202,15 @@ gate therefore correctly withheld release readiness. Their exact-version eight-a
 distance is 60.625%. Because E4B was incomplete and each configuration has only one
 attempt on one scenario, the analyzer marks this `INSUFFICIENT_EVIDENCE`; it is a
 smoke observation, not a ranking.
+
+That E4B failure is the regression case for the automatic circuit breaker introduced
+after the smoke run. New runs stop at the third observed router error and preserve an
+explicit machine-readable reason; historical evidence is not rewritten.
+
+A subsequent one-attempt E4B validation completed all three turns after two errors in
+turn 1 and two independent errors in turn 3. This confirms that the counter resets for
+each turn and permits recovery below the threshold. The model still produced the
+unchanged 3/4 public and 3/10 held-back baseline, so it remained non-release-ready.
 
 These matrices are minimum promotion evidence, not sufficient evidence for a public
 score. Promotion requires repeated attempts from at least two materially different

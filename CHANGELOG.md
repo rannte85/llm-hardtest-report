@@ -5,6 +5,27 @@ out separately from harness features.
 
 ## Unreleased
 
+## 2.34.0 — 2026-09-01
+
+- Added a streaming Round 5 Codex transcript circuit breaker. One or two unsupported
+  tool-router errors may recover; the third error in one agent turn terminates only
+  that spawned process group instead of waiting for the full timeout.
+- Added explicit `protocol_aborted` and normalized `stop_reason` evidence to raw
+  grades, terminal progress, analysis tables, public exports, and community indexes.
+- Added public pilot schema v2 while retaining validation and aggregation support for
+  historical v1 bundles.
+- Hardened offline analysis against forged abort claims by rescanning bounded raw
+  transcripts and requiring the same three-error threshold evidence.
+- Added adversarial coverage for ordinary completion, recovery after one error,
+  repeated-error termination, persistent-session resume, stop propagation, legacy
+  export compatibility, and semantic public-bundle tampering.
+- Live-tested one q36 E4B attempt: turn 1 recovered after two router errors, turn 3
+  independently recovered after two more, and all three turns completed. This confirms
+  the threshold resets per turn; the unchanged model result remained 3/4 public and
+  3/10 held-back and was not release-ready.
+- All 227 source tests and repository selftest pass; raw live-run evidence remains
+  ignored and uncommitted.
+
 ## 2.33.0 — 2026-09-01
 
 - Added `q36_jsonl_stream`, a fifth Round 5 scenario for arbitrary byte-boundary

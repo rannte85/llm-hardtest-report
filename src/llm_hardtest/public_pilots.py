@@ -9,6 +9,7 @@ from pathlib import Path
 from . import __version__
 from .common import load_json
 from .pilot_analysis import collect_pilot_attempts
+from .protocol import MAX_UNSUPPORTED_CALLS_PER_AGENT_TURN
 from .public_results import (
     FINGERPRINT, FORBIDDEN_KEYS, MODEL_PARAMETER_FIELDS, PRIVATE_STRING,
     PUBLIC_METADATA_FIELDS, PUBLIC_METADATA_NUMERIC_FIELDS, SECRET_STRING,
@@ -16,11 +17,16 @@ from .public_results import (
 )
 
 
-PUBLIC_PILOT_SCHEMA_VERSION = 1
-ATTEMPT_FIELDS = {
+PUBLIC_PILOT_SCHEMA_VERSION = 2
+ATTEMPT_FIELDS_V1 = {
     "attempt", "status", "turns_completed", "no_edit_before_approval",
     "evidence_revision_observed", "tool_protocol_clean", "unsupported_tool_calls",
     "public", "hidden", "release_ready", "report_accurate", "wall_seconds", "tokens",
+}
+ATTEMPT_FIELDS_V2 = ATTEMPT_FIELDS_V1 | {"protocol_aborted", "stop_reason"}
+STOP_REASONS = {
+    "unsupported_tool_loop", "timeout", "agent_exit", "missing_session",
+    "empty_output", "preapproval_edit", "incomplete_turns",
 }
 SCORE_FIELDS = {"passed", "total", "timed_out"}
 
@@ -70,6 +76,8 @@ def build_public_pilot_result(run_dir: Path) -> tuple[dict, list[str]]:
                 "evidence_revision_observed": metrics["evidence_revision_observed"],
                 "tool_protocol_clean": metrics["unsupported_tool_calls"] == 0,
                 "unsupported_tool_calls": metrics["unsupported_tool_calls"],
+                "protocol_aborted": metrics["protocol_aborted"],
+                "stop_reason": metrics["stop_reason"],
                 "public": metrics["public"],
                 "hidden": metrics["hidden"],
                 "release_ready": metrics["release_ready"],
@@ -158,7 +166,8 @@ def validate_public_pilot_result(payload: dict) -> dict:
         raise ValueError("public pilot result must be a JSON object")
     required = {"schema_version", "bundle_id", "tool", "pilot",
                 "environment", "models", "privacy"}
-    if set(payload) != required or payload.get("schema_version") != 1:
+    schema_version = payload.get("schema_version")
+    if set(payload) != required or schema_version not in {1, 2}:
         raise ValueError("public pilot result has unexpected top-level fields")
     without_id = {key: value for key, value in payload.items() if key != "bundle_id"}
     if (not isinstance(payload.get("bundle_id"), str)
@@ -199,7 +208,9 @@ def validate_public_pilot_result(payload: dict) -> dict:
             raise ValueError(f"public pilot model {index} requires attempts")
         seen = set()
         for row in attempts:
-            if not isinstance(row, dict) or set(row) != ATTEMPT_FIELDS:
+            expected_attempt = (ATTEMPT_FIELDS_V2 if schema_version >= 2
+                                else ATTEMPT_FIELDS_V1)
+            if not isinstance(row, dict) or set(row) != expected_attempt:
                 raise ValueError(f"public pilot model {index} has an invalid attempt row")
             attempt = row["attempt"]
             if not _valid_nonnegative(attempt, integer=True) or attempt < 1 or attempt in seen:
@@ -220,6 +231,21 @@ def validate_public_pilot_result(payload: dict) -> dict:
                 raise ValueError("public pilot unsupported_tool_calls is invalid")
             if row["tool_protocol_clean"] != (row["unsupported_tool_calls"] == 0):
                 raise ValueError("public pilot tool protocol fields contradict")
+            if schema_version >= 2:
+                if not isinstance(row["protocol_aborted"], bool):
+                    raise ValueError("public pilot protocol_aborted must be boolean")
+                if row["stop_reason"] is not None and row["stop_reason"] not in STOP_REASONS:
+                    raise ValueError("public pilot stop_reason is invalid")
+                if row["protocol_aborted"] != (
+                        row["stop_reason"] == "unsupported_tool_loop"):
+                    raise ValueError("public pilot protocol-abort fields contradict")
+                if (row["protocol_aborted"] and row["unsupported_tool_calls"]
+                        < MAX_UNSUPPORTED_CALLS_PER_AGENT_TURN):
+                    raise ValueError("public pilot protocol abort lacks threshold evidence")
+                if row["status"] == "COMPLETE" and row["stop_reason"] is not None:
+                    raise ValueError("complete public pilot cannot have a stop_reason")
+                if row["status"] == "INCOMPLETE" and row["stop_reason"] is None:
+                    raise ValueError("incomplete public pilot requires a stop_reason")
             _validate_score(row["public"], "public")
             _validate_score(row["hidden"], "hidden")
             release = (row["status"] == "COMPLETE"

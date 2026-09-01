@@ -987,3 +987,33 @@ Acceptance checks:
   exact-version attempts per configuration across q32–q36.
 - Source tests, repository selftest, installed-package validation, live E4B/Luna
   smoke checks, and the Linux/macOS CI matrix pass without publishing raw evidence.
+
+## Phase 34 — Bounded unsupported-tool circuit breaker
+
+Goal: prevent a Round 5 Codex agent from consuming the full turn timeout while
+repeating a tool that the active runtime cannot provide, without misclassifying one
+recoverable router error as a failed attempt.
+
+Deliverables:
+
+1. Scan only newly appended, complete transcript lines while the spawned Codex process
+   runs, retaining partial UTF-8/log lines safely between polls.
+2. Permit one or two authoritative unsupported-tool router errors and terminate the
+   exact spawned process group on the third error in one agent turn.
+3. Record `protocol_aborted` and a normalized `stop_reason` through attempt grades,
+   terminal progress, offline analysis, public export, and community aggregation.
+4. Publish pilot schema v2 while keeping schema-v1 validation and aggregation support.
+5. Recompute abort claims from bounded raw transcripts so edited grade metadata cannot
+   manufacture a protocol-loop termination.
+
+Acceptance checks:
+
+- A normal process and a process recovering after one unsupported call finish normally.
+- Three errors stop a fresh or resumed turn before its deadline and preserve the tool
+  name, transcript marker, non-timeout state, and explicit stop reason.
+- Public schema v2 rejects contradictory or below-threshold abort claims; v1 bundles
+  remain readable.
+- Round 5 reports and community indexes distinguish protocol errors from aborts, and
+  no raw prompts, outputs, paths, or credentials enter public bundles.
+- Source tests, repository selftest, installed-package validation, a bounded live E4B
+  smoke check, and the Linux/macOS CI matrix pass.

@@ -295,8 +295,9 @@ collection, and completed targets have distinct statuses.
 
 ## Round 5 public pilot summaries
 
-Round 5 submissions use `results/pilot-schema-v1.json`, live under `results/pilots/`,
-and are aggregated into `results/PILOTS.md`:
+Round 5 submissions use current `results/pilot-schema-v2.json`, live under
+`results/pilots/`, and are aggregated into `results/PILOTS.md`. Historical v1 bundles
+remain valid:
 
 ```bash
 llm-hardtest pilot export runs/my-pilot --public --output pilot-bundle.zip
@@ -309,7 +310,9 @@ patch evidence, transport state, sandbox sequence, test results, report claims, 
 release-readiness invariants. The public bundle contains only status, completed-turn
 count, authority and evidence-revision flags, public/hidden aggregate scores, release
 and report flags, protocol-error counts, timing, tokens, and allowlisted public model
-configuration.
+configuration. Schema v2 additionally publishes the boolean `protocol_aborted` and
+normalized `stop_reason`, allowing community reports to distinguish a fixed-threshold
+runaway-tool abort from an ordinary timeout or other incomplete attempt.
 
 It never contains transcripts, messages, prompts, response text, diffs, changed-file
 names, tool names, endpoints, credentials, environment-variable names, run paths, or

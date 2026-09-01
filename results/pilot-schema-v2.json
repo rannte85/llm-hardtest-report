@@ -1,0 +1,136 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "LLM Hardtest public Round 5 pilot result v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "bundle_id", "tool", "pilot", "environment", "models", "privacy"],
+  "properties": {
+    "schema_version": {"const": 2},
+    "bundle_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "tool": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version"],
+      "properties": {
+        "name": {"const": "llm-hardtest-report"},
+        "version": {"type": "string", "minLength": 1, "maxLength": 32}
+      }
+    },
+    "pilot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "pack", "canonical_score"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1, "maxLength": 80},
+        "pack": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "canonical_score": {"const": false}
+      }
+    },
+    "environment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["os", "architecture", "python"],
+      "properties": {
+        "os": {"enum": ["Linux", "Darwin", "Windows", "Other"]},
+        "architecture": {"type": "string", "minLength": 1, "maxLength": 32},
+        "python": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+$"}
+      }
+    },
+    "models": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/model"}
+    },
+    "privacy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["raw_artifacts_included", "credentials_included", "local_paths_included", "submission_mode"],
+      "properties": {
+        "raw_artifacts_included": {"const": false},
+        "credentials_included": {"const": false},
+        "local_paths_included": {"const": false},
+        "submission_mode": {"const": "explicit-opt-in"}
+      }
+    }
+  },
+  "$defs": {
+    "score": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["passed", "total", "timed_out"],
+      "properties": {
+        "passed": {"type": "integer", "minimum": 0},
+        "total": {"type": "integer", "minimum": 0},
+        "timed_out": {"type": "boolean"}
+      }
+    },
+    "attempt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["attempt", "status", "turns_completed", "no_edit_before_approval", "evidence_revision_observed", "tool_protocol_clean", "unsupported_tool_calls", "protocol_aborted", "stop_reason", "public", "hidden", "release_ready", "report_accurate", "wall_seconds", "tokens"],
+      "properties": {
+        "attempt": {"type": "integer", "minimum": 1},
+        "status": {"enum": ["COMPLETE", "INCOMPLETE"]},
+        "turns_completed": {"type": "integer", "minimum": 0, "maximum": 3},
+        "no_edit_before_approval": {"type": "boolean"},
+        "evidence_revision_observed": {"type": "boolean"},
+        "tool_protocol_clean": {"type": "boolean"},
+        "unsupported_tool_calls": {"type": "integer", "minimum": 0},
+        "protocol_aborted": {"type": "boolean"},
+        "stop_reason": {
+          "type": ["string", "null"],
+          "enum": [null, "unsupported_tool_loop", "timeout", "agent_exit", "missing_session", "empty_output", "preapproval_edit", "incomplete_turns"]
+        },
+        "public": {"$ref": "#/$defs/score"},
+        "hidden": {"$ref": "#/$defs/score"},
+        "release_ready": {"type": "boolean"},
+        "report_accurate": {"type": "boolean"},
+        "wall_seconds": {"type": ["number", "null"], "minimum": 0},
+        "tokens": {"type": ["integer", "null"], "minimum": 0}
+      }
+    },
+    "model": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["public_name", "transport", "parameters", "public_metadata", "attempts"],
+      "properties": {
+        "public_name": {"type": "string", "minLength": 1, "maxLength": 160},
+        "transport": {"const": "codex_cli"},
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "reasoning_effort": {"type": "string", "minLength": 1, "maxLength": 32},
+            "temperature": {"type": "number", "minimum": 0},
+            "top_p": {"type": "number", "minimum": 0},
+            "top_k": {"type": "number", "minimum": 0},
+            "min_p": {"type": "number", "minimum": 0},
+            "max_tokens": {"type": "number", "minimum": 0},
+            "context_window": {"type": "number", "minimum": 0}
+          }
+        },
+        "public_metadata": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "model_revision": {"type": "string"},
+            "quantization": {"type": "string"},
+            "model_format": {"type": "string"},
+            "parameter_count_b": {"type": "number", "exclusiveMinimum": 0},
+            "server": {"type": "string"},
+            "server_version": {"type": "string"},
+            "accelerator": {"type": "string"},
+            "accelerator_count": {"type": "number", "exclusiveMinimum": 0},
+            "memory_gb": {"type": "number", "exclusiveMinimum": 0},
+            "system_memory_gb": {"type": "number", "exclusiveMinimum": 0}
+          }
+        },
+        "attempts": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/attempt"}
+        }
+      }
+    }
+  }
+}

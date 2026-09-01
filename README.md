@@ -4,10 +4,10 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-**Current release: 2.33.0** — adds a fifth Round 5 incident for byte-stream JSONL
-framing, bounded recovery, EOF handling, and reentrant callback ordering. Its hidden
-grader separates seven plausible public-green partial fixes while preserving
-scenario-scoped evidence and non-canonical cross-scenario analysis.
+**Current release: 2.34.0** — adds a bounded Round 5 protocol circuit breaker. One or
+two unsupported Codex tool calls may recover, while a third in the same agent turn
+terminates only that spawned process group and records an explicit, analyzable stop
+reason instead of consuming the full timeout.
 
 LLM Hardtest Report is a local-first command-line benchmark for comparing language
 models as reasoners, coding workers, and safe handoff agents. Point it at one or more
@@ -55,6 +55,8 @@ without presenting it as a leaderboard score. See
 In pilot reports, `COMPLETE` means that all three agent turns produced usable final
 messages without a transport failure. It does **not** mean the task passed; use the
 public/hidden results, report accuracy, and `release_ready` together.
+`stop_reason: unsupported_tool_loop` means the fixed three-error circuit breaker
+stopped a runaway turn; it is separate from model correctness and ordinary timeouts.
 
 Q30v1 is intentionally excluded because its original grading contract conflicted
 with visible repository authority. Q30v2 accepts either a safe blocked handoff or a
@@ -240,8 +242,9 @@ llm-hardtest submit result-bundle.zip --open-pr --yes
 
 Round 5 uses a separate schema and repository index. The exporter first revalidates
 the local raw grades, transcripts, and patch evidence, then emits only allowlisted
-summary fields. The published summary cannot reconstruct or independently reproduce
-the withheld raw evidence.
+summary fields. Public pilot schema v2 includes `protocol_aborted` and `stop_reason`;
+the validator still accepts historical v1 bundles. The published summary cannot
+reconstruct or independently reproduce the withheld raw evidence.
 
 ```bash
 llm-hardtest pilot export runs/my-round5-pilot --public --output pilot-bundle.zip

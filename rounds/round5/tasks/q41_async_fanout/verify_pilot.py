@@ -191,6 +191,24 @@ def _run(command: list[str], cwd: Path) -> tuple[int, int, str]:
     return int(match.group(1)), int(match.group(2)), output
 
 
+def _run_expected_green(command: list[str], cwd: Path,
+                        attempts: int = 3) -> tuple[int, int, str]:
+    """Retry only controls whose contract requires a completely green run.
+
+    q41 intentionally uses real asyncio deadlines to distinguish queue time from
+    worker time. A heavily suspended CI runner can occasionally consume an entire
+    per-worker budget even though the implementation is correct. Requiring a green
+    rerun preserves the semantic assertion; consistently failing controls still fail.
+    """
+    history = []
+    for attempt in range(1, attempts + 1):
+        result = _run(command, cwd)
+        history.append(f"attempt {attempt}/{attempts}\n{result[2]}")
+        if result[1] > 0 and result[0] == result[1]:
+            return result[0], result[1], "\n".join(history)
+    return result[0], result[1], "\n".join(history)
+
+
 def main() -> int:
     states = (
         "baseline", "correct", "bool_limits", "infinite_timeout", "lazy_items",
@@ -206,8 +224,12 @@ def main() -> int:
             repo = Path(tmp) / state
             shutil.copytree(SOURCE, repo)
             _apply(state, repo)
-            public = _run([sys.executable, "run_tests.py"], repo)
-            hidden = _run([sys.executable, str(HIDDEN), str(repo)], repo)
+            public_command = [sys.executable, "run_tests.py"]
+            hidden_command = [sys.executable, str(HIDDEN), str(repo)]
+            public = (_run(public_command, repo) if state == "baseline" else
+                      _run_expected_green(public_command, repo))
+            hidden = (_run_expected_green(hidden_command, repo) if state == "correct"
+                      else _run(hidden_command, repo))
             results[state] = (public[:2], hidden[:2])
             if state != "baseline" and public[0] != public[1]:
                 diagnostics.append(

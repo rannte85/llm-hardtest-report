@@ -5,6 +5,19 @@ out separately from harness features.
 
 ## Unreleased
 
+## 2.48.1 — 2026-09-01
+
+- Hardened q41's release selftest after an overloaded tag-only macOS runner exhausted
+  one otherwise-correct asynchronous worker deadline.
+- Green-required q41 control runs now receive up to three independent attempts; the
+  incomplete baseline remains single-shot, hidden-negative mutations remain
+  single-shot, and a control is accepted only after a complete green result.
+- Added a regression proving one transient timeout can recover while three consecutive
+  incomplete results still fail, and rotated the exact q41 fingerprint to
+  `sha256:4e9542cddd87a1021ec6602f14655a91f515b8d8a2602dd279259f8efb64d3b8`.
+- Preserved the v2.45.1–v2.48.0 q41 fingerprint as historical evidence instead of
+  relabelling prior results.
+
 ## 2.48.0 — 2026-09-01
 
 - Added objective-specific minimum practical effects to paired exact-configuration

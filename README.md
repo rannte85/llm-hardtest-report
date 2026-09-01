@@ -4,7 +4,7 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-**Current release: 2.48.0** — adds declared practical-effect floors to paired serving
+**Current release: 2.48.1** — adds declared practical-effect floors to paired serving
 comparisons so statistically detectable but operationally small differences are not
 reported as configuration wins.
 

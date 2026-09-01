@@ -1,4 +1,23 @@
-# Release Notes — 2.48.0
+# Release Notes — 2.48.1
+
+This patch hardens the release selftest without weakening q41's discrimination:
+
+- only q41 controls whose contract requires a fully green result may retry, up to
+  three independent attempts;
+- the intentionally incomplete baseline and every mutation expected to fail held-back
+  checks remain single-shot;
+- a green result is still mandatory, and three consecutive incomplete runs fail;
+- the exact q41 fingerprint is now
+  `sha256:4e9542cddd87a1021ec6602f14655a91f515b8d8a2602dd279259f8efb64d3b8`,
+  while the v2.45.1–v2.48.0 fingerprint remains historical;
+- the source suite contains 262 tests, including explicit retry/fail-closed coverage.
+
+## Previous release: 2.48.0
+
+The previous release made head-to-head serving comparisons operationally
+interpretable.
+
+# Historical release notes — 2.48.0
 
 This release makes head-to-head serving comparisons operationally interpretable:
 

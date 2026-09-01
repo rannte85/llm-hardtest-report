@@ -1444,6 +1444,31 @@ class PackTests(unittest.TestCase):
                 pilot_fingerprint("q33_batch_delivery", root),
                 before["q33_batch_delivery"])
 
+    def test_q41_control_retry_still_requires_a_fully_green_run(self):
+        verifier = runpy.run_path(str(
+            repo_root() / "rounds/round5/tasks/q41_async_fanout/verify_pilot.py"))
+        outcomes = [
+            subprocess.CompletedProcess(
+                ["control"], 1, stdout="PUBLIC: 3/4\n", stderr="TimeoutError\n"),
+            subprocess.CompletedProcess(
+                ["control"], 0, stdout="PUBLIC: 4/4\n", stderr=""),
+        ]
+        with patch("subprocess.run", side_effect=outcomes) as mocked:
+            recovered = verifier["_run_expected_green"](
+                ["control"], repo_root(), attempts=3)
+        self.assertEqual(recovered[:2], (4, 4))
+        self.assertEqual(mocked.call_count, 2)
+        self.assertIn("attempt 1/3", recovered[2])
+        self.assertIn("attempt 2/3", recovered[2])
+
+        always_red = subprocess.CompletedProcess(
+            ["control"], 1, stdout="PUBLIC: 3/4\n", stderr="TimeoutError\n")
+        with patch("subprocess.run", return_value=always_red) as mocked:
+            failed = verifier["_run_expected_green"](
+                ["control"], repo_root(), attempts=3)
+        self.assertEqual(failed[:2], (3, 4))
+        self.assertEqual(mocked.call_count, 3)
+
 
 class RoundFiveResearchTests(unittest.TestCase):
     def _config(self, transport="codex_cli"):

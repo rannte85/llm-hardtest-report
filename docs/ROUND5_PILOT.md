@@ -37,7 +37,9 @@ the smallest product fix. Eleven scenarios are bundled:
   pinning with Host/SNI, credential stripping, response grammar, and bounded streaming.
 - `q41_async_fanout`: a structured asynchronous concurrency incident covering
   queue-neutral per-item timeouts, ordered duplicates, fail-fast worker errors, caller
-  cancellation, awaited cleanup, and independent or nested batch coordination.
+  cancellation, awaited cleanup, and independent or nested batch coordination. Its
+  real-deadline control verifier retries only expected-green checks up to three times;
+  the incomplete baseline and hidden-negative mutations remain single-shot.
 - `q42_shared_http_cache`: a shared HTTP cache incident covering sensitive-request
   bypass, case-insensitive `Vary` variants, `Age` and freshness boundaries, validator
   revalidation, 304 metadata transitions, bounded stale fallback, and exact-request

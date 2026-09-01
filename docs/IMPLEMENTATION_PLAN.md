@@ -1534,3 +1534,25 @@ Acceptance:
   and intervals while swapping directional labels without changing p-values or floors.
 - Negative, non-finite, boolean, over-one rate, unknown, and unselected-axis floors fail
   validation; JSON, SQLite, and CLI outputs remain identical.
+
+## Phase 52 — q41 control-matrix scheduling resilience (completed)
+
+Goal: keep q41's real-deadline discrimination while preventing a single externally
+suspended CI interval from invalidating an otherwise-correct release selftest.
+
+Deliverables:
+
+1. Retry only public controls and the complete hidden control whose contract requires a
+   fully green result, with a fixed maximum of three independent attempts.
+2. Keep the incomplete baseline and all hidden-negative mutation checks single-shot.
+3. Require a complete score on at least one attempt; retain all attempted output for
+   diagnostics and fail after three incomplete results.
+4. Preserve the prior q41 fingerprint through v2.48.0 and register the changed control
+   verifier under a new exact fingerprint.
+
+Acceptance:
+
+- A simulated transient 3/4 result followed by 4/4 recovers on attempt two.
+- Three consecutive 3/4 results remain a hard failure.
+- The complete 14-state q41 matrix still separates the incomplete baseline and every
+  hidden-negative mutation from the complete control.

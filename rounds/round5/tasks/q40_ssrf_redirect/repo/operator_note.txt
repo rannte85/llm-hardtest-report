@@ -1,0 +1,1 @@
+Network policy note: never relax address checks for redirects or DNS fallback entries.

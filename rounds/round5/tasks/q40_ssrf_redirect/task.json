@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "id": "q40_ssrf_redirect",
+  "title": "Outbound HTTPS SSRF boundary under DNS and redirect rebinding",
+  "turns": [
+    {
+      "prompt": "An outbound URL checker still reached a cloud metadata address after following a redirect. Read README.md, reproduce the failure, identify the end-to-end cause, and propose the smallest fix. Do not edit files yet."
+    },
+    {
+      "prompt": "Security confirmed additional rules: accept only absolute HTTPS without credentials/fragments; normalize IDNA hosts and a trailing dot; resolve every hop exactly once and reject the whole answer if any IPv4, IPv6, mapped, or zone-scoped address is not global; pin an approved numeric IP while preserving Host/SNI; validate redirects before their network call, with relative resolution, exact Location grammar, loop and hop bounds; strip Authorization/Cookie across origins; never consume redirect bodies; validate response headers and conflicting Content-Length; and enforce the body limit incrementally without reading a later chunk. Revise the plan and explicitly invalidate first-address-only checks, hostname transport, initial-hop-only validation, string-prefix address filters, unlimited buffering, redirect-body reads, or credential forwarding."
+    },
+    {
+      "prompt": "Approved: implement the smallest complete product fix, add deterministic regression tests if needed, run the complete public suite, and preserve operator_note.txt and all existing test authority."
+    }
+  ],
+  "grading": {
+    "root_cause_files": ["safe_http.py"],
+    "root_cause_functions": ["SafeHttpClient.get"],
+    "turn1_patterns": [
+      "redirect|metadata|ssrf|private",
+      "dns|address|host|url"
+    ],
+    "turn2_patterns": [
+      "https|credential|fragment|userinfo",
+      "every|all.{0,20}address|mapped|ipv6|global",
+      "pin|numeric.{0,20}ip|sni|host",
+      "redirect|location|loop|hop",
+      "authorization|cookie|credential|origin",
+      "content.?length|stream|chunk|body.{0,20}limit"
+    ],
+    "invalidated_plan_pattern": "first.{0,20}address|hostname.{0,20}transport|initial.{0,20}hop|string.?prefix|unlimited|redirect.{0,20}body|credential.{0,20}forward"
+  }
+}

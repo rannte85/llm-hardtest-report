@@ -1,4 +1,4 @@
-# Release Notes — 2.39.0
+# Release Notes — 2.40.0
 
 This repository is ready to publish as `rannte85/llm-hardtest-report`. It contains no raw
 campaign outputs, credentials, local model files, personal filesystem paths, or
@@ -6,6 +6,26 @@ generated Python caches. The included Luna result is the allowlist-only public b
 not its prompts, responses, transcripts, account details, or local run directory.
 
 The release validation now also covers:
+
+- `q40_ssrf_redirect`, a ninth long-horizon incident for outbound network authority;
+- whole-answer per-hop DNS validation, mapped/zone IPv6 rejection, numeric-IP
+  connection pinning, normalized Host/SNI, and full redirect revalidation;
+- exact Location and response-header grammar, origin-scoped credential stripping,
+  non-consumption of redirect bodies, and fail-fast bounded body streaming;
+- a seventeen-state control matrix where the complete implementation reaches 4/4
+  public and 10/10 held-back, the baseline reaches 2/4 and 0/10, and fifteen partial
+  or adversarial implementations remain public-green but fail held-back evidence;
+- q40 fingerprints and q32–q40 portfolio coverage through execution, analysis,
+  voluntary export, installed-package selftest, and CI;
+- exact-final-fingerprint smoke evidence where local E4B hit the three-error turn-1
+  circuit breaker at the baseline, while GPT-5.6 Luna completed cleanly but reached
+  only 4/4 public and 4/10 held-back;
+- a 61.3% descriptive eight-axis distance that remains `INSUFFICIENT_EVIDENCE`
+  because there is one attempt per configuration on one of nine required scenarios;
+- 246 passing source tests, five consecutive q40 matrix runs, repository selftest,
+  and wheel/sdist installed-package verification;
+
+## Previous release: 2.39.0
 
 - `q39_job_lease`, an eighth long-horizon incident for durable cross-instance job
   ownership in SQLite;

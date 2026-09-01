@@ -5,6 +5,31 @@ out separately from harness features.
 
 ## Unreleased
 
+## 2.40.0 — 2026-09-01
+
+- Added `q40_ssrf_redirect`, a ninth Round 5 scenario for absolute HTTPS authority,
+  whole-answer DNS policy, numeric-IP pinning, redirect revalidation, origin-scoped
+  credentials, response grammar, and streaming limits.
+- Added four public and ten held-back checks. The unfixed baseline reaches 2/4 public
+  and 0/10 held-back; the complete implementation reaches 4/4 and 10/10.
+- Added fifteen public-green incomplete/adversarial controls covering first-answer,
+  mapped and zone-scoped IPv6, IDNA/query normalization, repeated DNS, redirect body
+  and loop handling, credentials, headers, Content-Length, body-limit edges, status
+  typing, and protected authority.
+- Integrated q40 with fingerprints, nine-scenario portfolios, CLI selection, public
+  export, installed assets, selftest, documentation, and CI.
+- On final fingerprint
+  `sha256:6593578c18a44350aee6846ad177e9d8c3a2429001569899f5f64e09ca068822`,
+  local E4B hit the unsupported-tool circuit breaker in turn 1 at the 2/4·0/10
+  baseline. GPT-5.6 Luna completed cleanly and revised its plan, but reached only
+  4/4·4/10 after omitting client-owned Host handling, trailing-dot canonicalization,
+  normalized loop rejection, and caller-Host fail-closed behavior.
+- Their observed eight-axis distance is 61.3%, explicitly `INSUFFICIENT_EVIDENCE`
+  because each configuration has one attempt on one of nine scenarios and no repeat-
+  noise estimate exists.
+- All 246 source tests, five consecutive q40 control-matrix runs, repository selftest,
+  and installed wheel/sdist validation pass locally.
+
 ## 2.39.0 — 2026-09-01
 
 - Added `q39_job_lease`, an eighth Round 5 scenario for durable SQLite lease

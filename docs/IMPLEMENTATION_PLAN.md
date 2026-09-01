@@ -1162,3 +1162,35 @@ Acceptance checks:
 - Final live evidence shares fingerprint
   `sha256:3a7b4f3f8d1bdd9bbd03090f173f59cf7a8759efc2981faabd734b1bc84ab20b`;
   its 65% one-attempt distance remains `INSUFFICIENT_EVIDENCE`.
+
+## Phase 39 — Per-hop SSRF and redirect authority hard test
+
+Goal: add an orthogonal network-authority axis that distinguishes URL-string filters
+from fail-closed resolution, connection pinning, and redirect processing.
+
+Deliverables:
+
+1. Add `q40_ssrf_redirect` with an initial metadata-redirect incident and late
+   absolute-HTTPS, IDNA, DNS-answer, mapped/zone IPv6, redirect, credential, header,
+   and streaming constraints.
+2. Require exactly one resolution per hop, reject the whole answer on any non-global
+   address, and pass only an approved numeric IP while preserving normalized Host/SNI.
+3. Build baseline, correct, first-answer, mapped/zone, normalization/query, repeated-
+   resolution, redirect-body/loop, credential, header, length, body-limit, status, and
+   authority-tamper controls.
+4. Integrate q40 with isolated fingerprints, nine-scenario portfolios, voluntary
+   public export, package data, selftest, documentation, and CI.
+5. Run one exact-fingerprint attempt each with local E4B and signed-in GPT-5.6 Luna,
+   retaining raw evidence locally and treating the pair as a smoke observation only.
+
+Acceptance checks:
+
+- The baseline reaches 2/4 public and 0/10 held-back; the complete implementation
+  reaches 4/4 and 10/10.
+- All fifteen incomplete/adversarial implementations stay 4/4 public while failing at
+  least one distinct held-back DNS, authority, redirect, credential, header, streaming,
+  response-shape, or protected-evidence contract.
+- Five consecutive matrix runs preserve the same public/held-back separation.
+- Final live evidence shares fingerprint
+  `sha256:6593578c18a44350aee6846ad177e9d8c3a2429001569899f5f64e09ca068822`;
+  its 61.3% one-attempt distance remains `INSUFFICIENT_EVIDENCE`.

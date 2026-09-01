@@ -4,7 +4,7 @@
   "title": "Evolving multi-incident and compatibility pilots",
   "runner_kind": "coding_agent",
   "capabilities": ["responses", "filesystem", "multi_turn"],
-  "unit_count": 8,
+  "unit_count": 9,
   "time_limit_seconds": 3600,
   "result_schema": "llm-hardtest.round5-pilot.v1",
   "assets": [
@@ -54,6 +54,11 @@
       "id": "job-lease-control-matrix",
       "kind": "positive",
       "command": ["python3", "tasks/q39_job_lease/verify_pilot.py"]
+    },
+    {
+      "id": "ssrf-redirect-control-matrix",
+      "kind": "positive",
+      "command": ["python3", "tasks/q40_ssrf_redirect/verify_pilot.py"]
     }
   ]
 }

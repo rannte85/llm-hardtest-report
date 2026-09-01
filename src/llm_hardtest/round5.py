@@ -21,7 +21,7 @@ PILOT_ID = "q32_retry_compatibility"
 PILOT_IDS = (
     PILOT_ID, "q33_batch_delivery", "q34_config_overlay", "q35_snapshot_race",
     "q36_jsonl_stream", "q37_archive_boundary", "q38_webhook_replay",
-    "q39_job_lease",
+    "q39_job_lease", "q40_ssrf_redirect",
 )
 REPORT_FIELDS = {
     "ROOT_CAUSE_FILE", "ROOT_CAUSE_FUNCTION", "INVALIDATED_PLAN",

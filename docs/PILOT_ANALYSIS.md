@@ -46,7 +46,7 @@ is statistically supported.
 
 Analysis schema 2 adds one portfolio row per exact inference configuration. It shows:
 
-- which required q32–q34 scenarios were observed and which remain missing;
+- which required q32–q35 scenarios were observed and which remain missing;
 - whether one scenario ID was mixed across multiple fingerprints;
 - attempts and transport-complete attempts;
 - scenario-weighted mean public, held-back, and release-ready rates;
@@ -92,7 +92,7 @@ Before calculation, the analyzer:
 
 Scenario fingerprints cover only that task's contract, verifier, candidate repository,
 and held-back grader assets. Adding a new scenario therefore does not relabel unchanged
-q32–q34 evidence. Schema-1 legacy summaries remain readable but retain their historical
+q32–q35 evidence. Schema-1 legacy summaries remain readable but retain their historical
 opaque pack identity; exact-version grouping still prevents them from being silently
 pooled with current evidence. Analyze schema-2 evidence with the matching installed
 release so its asset fingerprint can be verified.

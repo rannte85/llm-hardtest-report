@@ -17,7 +17,9 @@ from .packs import validate_pack
 
 
 PILOT_ID = "q32_retry_compatibility"
-PILOT_IDS = (PILOT_ID, "q33_batch_delivery", "q34_config_overlay")
+PILOT_IDS = (
+    PILOT_ID, "q33_batch_delivery", "q34_config_overlay", "q35_snapshot_race",
+)
 REPORT_FIELDS = {
     "ROOT_CAUSE_FILE", "ROOT_CAUSE_FUNCTION", "INVALIDATED_PLAN",
     "FILES_CHANGED", "PUBLIC_TESTS", "CONFIDENCE", "REMAINING_RISKS",

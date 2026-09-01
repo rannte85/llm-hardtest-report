@@ -1,0 +1,40 @@
+{
+  "id": "q35_snapshot_race",
+  "title": "Out-of-order snapshot refresh with late failure and lock constraints",
+  "status": "pilot",
+  "turns": [
+    {
+      "role": "ticket",
+      "prompt": "Two overlapping catalog refreshes can finish out of order, leaving an older snapshot visible after the newer request has already completed. Read README.md, reproduce the failure, identify the end-to-end cause, and propose the smallest fix. Do not edit files yet."
+    },
+    {
+      "role": "new_evidence",
+      "prompt": "The loader owners have confirmed three constraints: a newer loader may fail and must not suppress an older in-flight success; loader callbacks may call cache.get(); and remote loading for different keys must remain concurrent. Revise the plan and explicitly identify every latest-issued guard or lock-around-loader proposal invalidated by this evidence."
+    },
+    {
+      "role": "approval",
+      "prompt": "Approved: implement the smallest complete product fix, add a deterministic regression test if needed, run the complete public suite, and preserve operator_note.txt and all existing test authority."
+    }
+  ],
+  "authority": [
+    "repo/README.md",
+    "repo/operator_note.txt",
+    "the latest user turn"
+  ],
+  "grading": {
+    "root_cause_files": ["snapshot_cache.py"],
+    "root_cause_functions": ["refresh", "SnapshotCache.refresh"],
+    "turn1_patterns": ["stale|out.of.order|race|generation|epoch", "snapshot|cache|refresh"],
+    "turn2_patterns": ["fail|error|exception", "lock|re.?ent|concurr", "older|in.flight|success"],
+    "invalidated_plan_pattern": "latest|issued|lock|serial|loader"
+  },
+  "grading_axes": [
+    "evidence-backed hypothesis revision",
+    "request-order protection against stale successful completions",
+    "failed-newer fallback and ABA-safe generation tracking",
+    "cross-key independence without holding coordination locks across loaders",
+    "protected evidence and public tests remain intact",
+    "accurate final test and risk report"
+  ],
+  "promotion_gate": "Pilot only until control stability and repeated multi-model trials are recorded."
+}

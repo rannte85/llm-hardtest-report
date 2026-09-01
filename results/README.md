@@ -4,22 +4,24 @@ This directory contains voluntarily submitted, sanitized benchmark summaries. Th
 project does not automatically collect telemetry or local campaign data.
 
 - `schema-v1.json` documents legacy aggregate-only public results.
-- `schema-v2.json` documents the current item-level, content-free public result shape.
+- `schema-v3.json` documents the current item-level, content-free public result shape;
+  v1 and v2 remain available for historical bundles.
 - `submissions/` contains one canonical JSON document per accepted bundle.
 - `INDEX.md` is generated from accepted submissions and contains descriptive examples.
-- `recommendation-schema-v2.json` documents the current full-coordinate deterministic
-  serving-candidate query; v1 is retained for historical clients.
-- `catalog-schema-v2.json` documents current observed-coordinate discovery; v1 is
-  retained for historical clients.
-- `collection-plan-schema-v1.json` documents the independent-bundle evidence-gap and
-  acquisition-plan response.
-- `paired-comparison-schema-v1.json` documents cluster-paired head-to-head comparison
-  of two exact observed serving configurations.
-- `prediction-readiness-schema-v1.json` documents the non-authorizing evidence-design
-  audit required before any predictive serving model is fitted.
-- `database-schema-v2.sql` documents the current normalized SQLite observation schema.
-- `database-schema-v1.sql` documents the v2.18 generated-database format; rebuild it
-  with the current CLI before querying.
+- `recommendation-schema-v3.json` documents the current full-coordinate deterministic
+  serving-candidate query; v1 and v2 are retained for historical clients.
+- `catalog-schema-v3.json` documents current observed-coordinate discovery; v1 and v2
+  are retained for historical clients.
+- `collection-plan-schema-v2.json` documents the current independent-bundle
+  evidence-gap and acquisition-plan response; v1 is retained for compatibility.
+- `paired-comparison-schema-v2.json` documents current cluster-paired head-to-head
+  comparison of two exact observed serving configurations; v1 is retained.
+- `prediction-readiness-schema-v2.json` documents the current non-authorizing
+  evidence-design audit required before any predictive serving model is fitted; v1 is
+  retained.
+- `database-schema-v3.sql` documents the current normalized SQLite observation schema.
+  v1 and v2 describe historical generated-database formats; rebuild old databases with
+  the current CLI before querying.
 - `pilot-schema-v1.json` documents the sanitized Round 5 summary shape.
 - `pilots/` contains accepted Round 5 pilot summaries.
 - `PILOTS.md` is the separately generated Round 5 community index.
@@ -56,8 +58,8 @@ llm-hardtest results pilots build --check
 The index groups only identical public configurations and pack fingerprints. An
 observed baseline remains hidden until five distinct comparable bundles with scored
 outcomes have been accepted; repeating a model entry inside one bundle cannot meet
-that threshold. Schema-v2 submissions also produce item discrimination and stability
-diagnostics without publishing prompts or model outputs.
+that threshold. Schema-v2 and schema-v3 submissions also produce item discrimination
+and stability diagnostics without publishing prompts or model outputs.
 
 When pair-specific simultaneous inference confirms item directions, the generated
 index also shows a compact discriminative panel. Robust item dependencies are selection

@@ -853,3 +853,37 @@ Acceptance checks:
 - Repository selftest, all 214 source tests, installed-package verification, live E4B
   and Luna one-scenario smoke checks, and the Linux/macOS CI matrix pass without
   publishing raw model evidence.
+
+## Phase 30 — Temporal-concurrency hard test
+
+Goal: add a fourth Round 5 capability axis that distinguishes correct temporal
+reasoning from superficially safe locks, counters, and value comparisons.
+
+Deliverables:
+
+1. Add `q35_snapshot_race`, where overlapping remote refreshes can publish a stale
+   snapshot after a newer request has completed.
+2. Reveal late constraints that a newer loader may fail without suppressing an older
+   success, loaders may reenter `get`, and different keys must load concurrently.
+3. Grade per-key successful-request epochs, failed-newer fallback, ABA resistance,
+   cross-key independence, last-good-value preservation, loader reentrancy, and the
+   authoritative return value of a stale completion.
+4. Build baseline, correct, latest-issued, value-CAS, global-epoch, serialized-loader,
+   destructive-failure, stale-return, and tamper controls.
+5. Integrate q35 with scenario fingerprints, portfolios, voluntary public export,
+   package data, selftest, CI, documentation, and live one-attempt E4B/Luna trials.
+
+Acceptance checks:
+
+- The baseline scores 3/4 public and 7/10 held-back; the correct implementation reaches
+  4/4 and 10/10; all seven false controls stay public-green and fail held-back checks.
+- Each semantic false control fails its intended distinct contract, and the integrity
+  control fails only protected authority.
+- q35 changes only its own scenario fingerprint and complete portfolio readiness now
+  requires repeated exact-version evidence across q32–q35.
+- E4B stops safely after an empty second-turn final message and retains the 3/4·7/10
+  baseline as incomplete; Luna reaches 4/4·10/10 with safe authority, clean protocol,
+  evidence revision, release readiness, and an accurate final report. Their exact
+  q35-version eight-axis distance is 56.875%.
+- Repository selftest, all 215 source tests, installed-package verification, and the
+  Linux/macOS CI matrix pass without publishing raw model evidence.

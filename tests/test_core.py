@@ -71,7 +71,7 @@ from llm_hardtest.public_pilots import (
     build_public_pilot_result, export_public_pilot_bundle,
     load_public_pilot_bundle, validate_public_pilot_result,
 )
-from llm_hardtest.round5 import pilot_fingerprint, run_pilot
+from llm_hardtest.round5 import PILOT_IDS, pilot_fingerprint, run_pilot
 from llm_hardtest.round12 import run as run_round12
 from llm_hardtest.round3 import _fields, _grade
 from llm_hardtest.round4 import run as run_round4
@@ -910,7 +910,7 @@ class PackTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[1]
         metadata = [validate_pack(root / "rounds" / f"round{number}")
                     for number in (1, 2, 3, 4, 5)]
-        self.assertEqual([item["unit_count"] for item in metadata], [20, 20, 5, 6, 3])
+        self.assertEqual([item["unit_count"] for item in metadata], [20, 20, 5, 6, 4])
 
     def test_round_five_scenario_fingerprints_are_isolated(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -919,8 +919,7 @@ class PackTests(unittest.TestCase):
             shutil.copytree(source, root)
             before = {
                 pilot: pilot_fingerprint(pilot, root)
-                for pilot in ("q32_retry_compatibility", "q33_batch_delivery",
-                              "q34_config_overlay")
+                for pilot in PILOT_IDS
             }
             q34 = root / "tasks/q34_config_overlay/repo/config_merge.py"
             q34.write_text(q34.read_text(encoding="utf-8") + "\n# q34 drift\n",
@@ -934,6 +933,9 @@ class PackTests(unittest.TestCase):
             self.assertNotEqual(
                 pilot_fingerprint("q34_config_overlay", root),
                 before["q34_config_overlay"])
+            self.assertEqual(
+                pilot_fingerprint("q35_snapshot_race", root),
+                before["q35_snapshot_race"])
             cache = root / "tasks/q33_batch_delivery/repo/__pycache__/ignored.pyc"
             cache.parent.mkdir(exist_ok=True)
             cache.write_bytes(b"generated")
@@ -969,6 +971,7 @@ class RoundFiveResearchTests(unittest.TestCase):
                     "q32_retry_compatibility": "sessions.py",
                     "q33_batch_delivery": "deliveries.py",
                     "q34_config_overlay": "config_merge.py",
+                    "q35_snapshot_race": "snapshot_cache.py",
                 }
                 filename = filenames[self.pilot_id]
                 path = workdir / filename
@@ -985,7 +988,7 @@ class RoundFiveResearchTests(unittest.TestCase):
                     text = text.replace(
                         "send_operation = uuid.uuid4().hex",
                         'send_operation = (batch_id, request_id, delivery_id, "send")')
-                else:
+                elif self.pilot_id == "q34_config_overlay":
                     text = '''"""Correct layered configuration merge."""
 
 from __future__ import annotations
@@ -1006,11 +1009,44 @@ def merge_config(base, overlay):
             result[key] = copy.deepcopy(value)
     return result
 '''
+                else:
+                    text = '''"""Correct generation-ordered snapshot cache."""
+
+from __future__ import annotations
+
+import threading
+
+
+class SnapshotCache:
+    def __init__(self, initial=None):
+        self._values = dict(initial or {})
+        self._lock = threading.RLock()
+        self._next_epoch = {}
+        self._committed_epoch = {}
+
+    def get(self, key):
+        with self._lock:
+            return self._values.get(key)
+
+    def refresh(self, key, loader):
+        with self._lock:
+            epoch = self._next_epoch.get(key, 0) + 1
+            self._next_epoch[key] = epoch
+        value = loader()
+        with self._lock:
+            if epoch > self._committed_epoch.get(key, 0):
+                self._values[key] = value
+                self._committed_epoch[key] = epoch
+            return self._values.get(key)
+'''
                 path.write_text(text, encoding="utf-8")
             if turn == 1:
                 if self.pilot_id == "q34_config_overlay":
                     content = ("The config overlay merge uses a falsy not-value test, so false "
                                "is skipped instead of replacing the inherited value.")
+                elif self.pilot_id == "q35_snapshot_race":
+                    content = ("The snapshot cache has an out-of-order refresh race: an older "
+                               "stale loader can overwrite a newer generation or epoch.")
                 else:
                     subject = ("session retry"
                                if self.pilot_id == "q32_retry_compatibility"
@@ -1022,6 +1058,10 @@ def merge_config(base, overlay):
                     content = ("Null is a tombstone that deletes at every depth, while each "
                                "array or list must replace rather than append or merge; this "
                                "invalidates falsy fallback and shallow update plans.")
+                elif self.pilot_id == "q35_snapshot_race":
+                    content = ("A newer loader can fail while an older in-flight success must "
+                               "still commit; loader re-entry and concurrent keys invalidate "
+                               "a latest-issued guard and any lock around the loader.")
                 else:
                     content = ("Version-1 old clients reject unknown fields, so any new response "
                                "schema field is invalid and must be omitted.")
@@ -1030,16 +1070,21 @@ def merge_config(base, overlay):
                     "q32_retry_compatibility": "sessions.py",
                     "q33_batch_delivery": "deliveries.py",
                     "q34_config_overlay": "config_merge.py",
+                    "q35_snapshot_race": "snapshot_cache.py",
                 }
                 functions = {
                     "q32_retry_compatibility": "SessionService.refresh",
                     "q33_batch_delivery": "BatchDeliveryService.retry_batch",
                     "q34_config_overlay": "merge_config",
+                    "q35_snapshot_race": "SnapshotCache.refresh",
                 }
                 filename, function = filenames[self.pilot_id], functions[self.pilot_id]
-                invalidated = ("using falsy fallback and shallow update merge"
-                               if self.pilot_id == "q34_config_overlay"
-                               else "adding a response field")
+                invalidated = {
+                    "q32_retry_compatibility": "adding a response field",
+                    "q33_batch_delivery": "adding a response field",
+                    "q34_config_overlay": "using falsy fallback and shallow update merge",
+                    "q35_snapshot_race": "a latest-issued guard and lock around loader",
+                }[self.pilot_id]
                 content = (
                     "=== PILOT REPORT ===\n"
                     f"ROOT_CAUSE_FILE: {filename}\n"
@@ -1138,6 +1183,31 @@ def merge_config(base, overlay):
         self.assertEqual(public["models"][0]["attempts"][0]["hidden"]["passed"], 10)
         self.assertEqual(warnings, [])
 
+    def test_round_five_snapshot_race_scenario_is_selectable_and_graded(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            agent = self.FakeAgent(pilot_id="q35_snapshot_race")
+            root = run_pilot(
+                self._config(), Path(tmp), ["m"], 1,
+                agent_factory=lambda model, run: agent,
+                pilot_id="q35_snapshot_race")
+            summary = load_json(root / "pilot_summary.json")
+            grade = summary["attempts"][0]["grade"]
+            attempt_exists = (root / "m/round5/q35_snapshot_race/attempt-1"
+                              / "research_grade.json").is_file()
+            analysis = analyze_pilots([root])
+            public, warnings = build_public_pilot_result(root)
+        self.assertTrue(attempt_exists)
+        self.assertEqual(summary["pilot_id"], "q35_snapshot_race")
+        self.assertEqual(grade["public"], {"passed": 4, "total": 4, "timed_out": False})
+        self.assertEqual(grade["hidden"], {"passed": 10, "total": 10, "timed_out": False})
+        self.assertTrue(grade["evidence_revision_observed"])
+        self.assertTrue(grade["release_ready"])
+        self.assertTrue(grade["final_report"]["accurate"])
+        self.assertEqual(analysis["groups"][0]["pilot_id"], "q35_snapshot_race")
+        self.assertEqual(public["pilot"]["id"], "q35_snapshot_race")
+        self.assertEqual(public["models"][0]["attempts"][0]["hidden"]["passed"], 10)
+        self.assertEqual(warnings, [])
+
     def test_round_five_portfolio_requires_repeated_exact_scenario_coverage(self):
         with tempfile.TemporaryDirectory() as tmp:
             config = self._config()
@@ -1146,8 +1216,7 @@ def merge_config(base, overlay):
                 "key": "m2", "label": "M2", "model": "fake-model-2",
             })
             roots = []
-            for pilot_id in ("q32_retry_compatibility", "q33_batch_delivery",
-                             "q34_config_overlay"):
+            for pilot_id in PILOT_IDS:
                 roots.append(run_pilot(
                     config, Path(tmp), None, 2,
                     agent_factory=lambda model, run, selected=pilot_id: self.FakeAgent(
@@ -1158,17 +1227,18 @@ def merge_config(base, overlay):
         self.assertEqual(analysis["schema_version"], 2)
         self.assertEqual(portfolio["required_pilots"], [
             "q32_retry_compatibility", "q33_batch_delivery", "q34_config_overlay",
+            "q35_snapshot_race",
         ])
         self.assertEqual(len(portfolio["configurations"]), 2)
         for row in portfolio["configurations"]:
-            self.assertEqual(row["attempts"], 6)
+            self.assertEqual(row["attempts"], 8)
             self.assertEqual(row["missing_pilots"], [])
             self.assertEqual(row["pack_ambiguous_pilots"], [])
             self.assertEqual(row["worst_case_hidden_pass_rate"], 1.0)
             self.assertTrue(row["ready_for_cross_scenario_interpretation"])
         comparison = portfolio["pairwise"][0]
         self.assertEqual(comparison["shared_pilots"], portfolio["required_pilots"])
-        self.assertEqual(comparison["shared_scenario_versions"], 3)
+        self.assertEqual(comparison["shared_scenario_versions"], 4)
         self.assertEqual(comparison["mean_distance"], 0.0)
 
     def test_round_five_rejects_unknown_pilot_id(self):
@@ -1371,7 +1441,9 @@ class PilotAnalysisTests(unittest.TestCase):
         self.assertEqual(sum(row["unsupported_tool_calls"] for row in rows.values()), 2)
         for row in analysis["portfolio"]["configurations"]:
             self.assertEqual(
-                row["missing_pilots"], ["q33_batch_delivery", "q34_config_overlay"])
+                row["missing_pilots"], [
+                    "q33_batch_delivery", "q34_config_overlay", "q35_snapshot_race",
+                ])
             self.assertFalse(row["ready_for_cross_scenario_interpretation"])
 
     def test_cross_pilot_portfolio_marks_multiple_versions_as_ambiguous(self):

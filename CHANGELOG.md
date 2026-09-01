@@ -5,6 +5,33 @@ out separately from harness features.
 
 ## Unreleased
 
+## 2.30.0 — 2026-09-01
+
+- Added `q35_snapshot_race`, a fourth Round 5 scenario for out-of-order asynchronous
+  refreshes, failed-newer fallback, ABA-safe request generations, independent keys,
+  reentrant reads, and coordination that never holds a lock across remote loading.
+- Added a nine-state q35 control matrix. The complete implementation reaches 4/4
+  public and 10/10 held-back; the 3/4·7/10 baseline and seven public-green semantic or
+  authority failures are all separated by held-back evidence.
+- Proved targeted discrimination: latest-issued guards fail newer-error fallback,
+  value CAS fails ABA, global epochs couple keys, loader serialization breaks
+  concurrency, destructive error handling loses the last good snapshot, stale returns
+  violate the API result, and public-test tampering fails integrity.
+- Integrated q35 into scenario fingerprints, execution, anonymous cross-scenario
+  portfolios, voluntary public export, package data, selftest, and explicit CI controls.
+- Expanded complete portfolio readiness from q32–q34 to q32–q35 while retaining exact
+  version matching and treating missing q35 evidence as unavailable rather than zero.
+- Smoke-tested q35 once with local Gemma 4 E4B and once with signed-in GPT-5.6 Luna.
+  E4B safely stopped after an empty second-turn final message and retained the
+  3/4·7/10 baseline as `INCOMPLETE`; Luna revised its plan, implemented the complete
+  per-key successful-generation fix, and reached 4/4·10/10 with an accurate report.
+  Their exact-version eight-axis distance was 56.875%.
+- Repository selftest and all 215 source tests pass without committing either model's
+  raw transcripts, workspaces, local paths, or run identifiers.
+- Corrected the community-results guide so every current public, catalog,
+  recommendation, planning, comparison, readiness, and SQLite schema points to the
+  actual v3/v2 runtime contract instead of a retained historical file.
+
 ## 2.29.0 — 2026-09-01
 
 - Replaced the global Round 5 pack identity in new runs with deterministic

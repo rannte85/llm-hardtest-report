@@ -1,0 +1,2 @@
+Production loaders perform remote I/O. Keep coordination bounded and preserve the
+documented public API; do not replace the loader contract or edit test authority.

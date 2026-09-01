@@ -1,4 +1,4 @@
-# Release Notes — 2.29.0
+# Release Notes — 2.30.0
 
 This repository is ready to publish as `rannte85/llm-hardtest-report`. It contains no raw
 campaign outputs, credentials, local model files, personal filesystem paths, or
@@ -6,6 +6,22 @@ generated Python caches. The included Luna result is the allowlist-only public b
 not its prompts, responses, transcripts, account details, or local run directory.
 
 The release validation now also covers:
+
+- `q35_snapshot_race`, an orthogonal temporal-consistency incident with four public
+  and ten held-back checks for request-order commits, failed-newer fallback, ABA-safe
+  generations, independent keys, reentrant reads, and concurrent remote loading;
+- a nine-state q35 control matrix whose correct implementation reaches 4/4 public and
+  10/10 held-back while seven public-green incomplete or adversarial fixes fail at
+  4–9/10 held-back;
+- exact q35 scenario fingerprints and q32–q35 portfolio coverage through execution,
+  analysis, voluntary public export, installed-package selftest, and CI;
+- one q35 attempt each from local Gemma 4 E4B and signed-in GPT-5.6 Luna on the same
+  verified fingerprint. E4B stopped safely after an empty second-turn final message
+  at the 3/4·7/10 baseline; Luna completed safely, revised its plan, and reached
+  4/4·10/10 with an accurate final report. Their eight-axis distance was 56.875%;
+- 215 passing source tests plus deterministic package and control-matrix validation;
+- corrected community-results documentation that now points to the actual current
+  v3/v2 public, query, readiness, and database schemas rather than historical files;
 
 - deterministic scenario-scoped Round 5 fingerprints that isolate unchanged evidence
   from unrelated scenario additions or edits;

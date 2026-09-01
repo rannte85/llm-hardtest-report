@@ -4,11 +4,10 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-**Current release: 2.29.0** — makes Round 5 evidence reusable across benchmark growth.
-Each scenario now has an isolated fingerprint, and cross-scenario portfolio analysis
-reports exact coverage, missing scenarios, worst observed performance, version
-ambiguity, and same-scenario configuration distance without inventing an aggregate
-leaderboard score.
+**Current release: 2.30.0** — adds a fourth, orthogonal Round 5 incident for temporal
+consistency under overlapping asynchronous refreshes. It separates complete
+generation-order reasoning from public-green latest-issued guards, value CAS, global
+epochs, lock-held I/O, destructive failure handling, stale returns, and test tampering.
 
 LLM Hardtest Report is a local-first command-line benchmark for comparing language
 models as reasoners, coding workers, and safe handoff agents. Point it at one or more
@@ -44,13 +43,14 @@ rounds all use the **LLM Hardtest** name.
 | 3 | Structured diagnosis and multi-turn engineering | Deterministic checks for Q21–Q24; Q25 is queued for review | OpenAI-compatible chat or Codex CLI |
 | 4 | Six repository-based coding-agent tasks | Public/held-back tests, integrity gates, handoff and release signals | Codex CLI and a `/responses`-capable provider |
 
-Three selectable Round 5 research pilots are included for evolving incident evidence,
+Four selectable Round 5 research pilots are included for evolving incident evidence,
 retry idempotency, late compatibility constraints, and public-green partial fixes.
 They are deliberately excluded from canonical campaign scores until multi-model
 stability and grader-ambiguity reviews are complete. Use `pilot round5 --pilot-id`
 with `q32_retry_compatibility` (the default), `q33_batch_delivery`, or
-`q34_config_overlay` to collect three-turn research evidence without presenting it as
-a leaderboard score. See [Round 5 Pilot](docs/ROUND5_PILOT.md).
+`q34_config_overlay`, or `q35_snapshot_race` to collect three-turn research evidence
+without presenting it as a leaderboard score. See
+[Round 5 Pilot](docs/ROUND5_PILOT.md).
 
 In pilot reports, `COMPLETE` means that all three agent turns produced usable final
 messages without a transport failure. It does **not** mean the task passed; use the
@@ -208,7 +208,7 @@ llm-hardtest pilot analyze runs/pilot-a runs/pilot-b --output round5-analysis.md
 It compares repeated outcome distance within one configuration against distance
 between configurations across transport completion, authority safety, hypothesis
 revision, public and held-back tests, release readiness, report accuracy, and tool
-protocol compliance. It also builds a configuration portfolio across q32–q34, keeps
+protocol compliance. It also builds a configuration portfolio across q32–q35, keeps
 missing scenarios unobserved, exposes the worst observed held-back rate, and compares
 configurations only on an exact shared scenario fingerprint. Model labels remain
 anonymous unless `--include-model-labels` is explicitly supplied. See

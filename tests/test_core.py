@@ -71,6 +71,7 @@ from llm_hardtest.calibration import (
 )
 from llm_hardtest.panel_config import build_panel_config, write_panel_config
 from llm_hardtest.pilot_analysis import (
+    _directional_advantage, _directional_robustness,
     _evidence_collection_plan, _leave_one_out_robustness, analyze_pilots,
     write_pilot_analysis,
 )
@@ -2025,7 +2026,7 @@ class SnapshotCache:
                     summary_row["grade"] = missing_axis_grade
             save_json(missing_axis_summary_path, missing_axis_summary)
             missing_axis_comparison = analyze_pilots(roots)["portfolio"]["pairwise"][0]
-        self.assertEqual(analysis["schema_version"], 5)
+        self.assertEqual(analysis["schema_version"], 6)
         self.assertEqual(portfolio["required_pilots"], [
             "q32_retry_compatibility", "q33_batch_delivery", "q34_config_overlay",
             "q35_snapshot_race", "q36_jsonl_stream", "q37_archive_boundary",
@@ -2060,6 +2061,12 @@ class SnapshotCache:
             comparison["next_evidence"]["action"], "REVIEW_NO_STABLE_SEPARATION")
         self.assertEqual(
             comparison["single_scenario_robustness"]["status"], "NOT_APPLICABLE")
+        directional = comparison["directional_advantage"]
+        self.assertEqual(directional["status"], "NO_MATERIAL_ADVANTAGE")
+        self.assertEqual(directional["mean_left_advantage"], 0.0)
+        self.assertIsNone(directional["favored_configuration"])
+        self.assertEqual(directional["bootstrap_95"]["lower"], 0.0)
+        self.assertEqual(directional["bootstrap_95"]["upper"], 0.0)
         self.assertEqual(
             {row["axis"] for row in comparison["axis_attribution"]},
             {"transport_complete", "authority_safe", "evidence_revision",
@@ -2071,6 +2078,12 @@ class SnapshotCache:
                          "INSUFFICIENT_EVIDENCE")
         self.assertEqual(missing_axis_comparison["next_evidence"]["action"],
                          "REPEAT_UNOBSERVED_AXES")
+        self.assertEqual(
+            missing_axis_comparison["directional_advantage"]["status"],
+            "INSUFFICIENT_EVIDENCE")
+        self.assertIsNone(
+            missing_axis_comparison["directional_advantage"]
+            ["favored_configuration"])
 
     def test_round_five_portfolio_detects_repeat_adjusted_stable_separation(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -2102,6 +2115,86 @@ class SnapshotCache:
         self.assertAlmostEqual(sum(contributions.values()), 1.0, places=5)
         self.assertEqual(comparison["next_evidence"]["action"],
                          "MANUAL_AMBIGUITY_REVIEW")
+        directional = comparison["directional_advantage"]
+        self.assertIn(directional["status"], {
+            "STABLE_LEFT_ADVANTAGE", "STABLE_RIGHT_ADVANTAGE"})
+        self.assertIsNotNone(directional["favored_configuration"])
+        self.assertEqual(
+            directional["single_scenario_robustness"]["status"],
+            "ROBUST_TO_SINGLE_SCENARIO_REMOVAL")
+        self.assertEqual(
+            {row["axis"] for row in directional["axis_contrasts"]},
+            {"transport_complete", "authority_safe", "evidence_revision",
+             "public_rate", "hidden_rate", "release_ready", "report_accurate",
+             "tool_protocol_clean"})
+
+    def test_round_five_directional_advantage_is_symmetric_and_gated(self):
+        scenarios = [{
+            "pilot_id": pilot_id,
+            "pack": "sha256:" + str(index) * 64,
+            "left_attempt_values": [0.9, 0.9],
+            "right_attempt_values": [0.2, 0.2],
+        } for index, pilot_id in enumerate(PILOT_IDS[:4], 1)]
+        left = _directional_advantage(scenarios, True, "config-1", "config-2")
+        reversed_rows = [{
+            **row,
+            "left_attempt_values": row["right_attempt_values"],
+            "right_attempt_values": row["left_attempt_values"],
+        } for row in scenarios]
+        right = _directional_advantage(
+            reversed_rows, True, "config-1", "config-2")
+        gated = _directional_advantage(scenarios, False, "config-1", "config-2")
+        robustness = _directional_robustness(
+            scenarios, left["status"], True, "config-1", "config-2")
+        self.assertEqual(left["status"], "STABLE_LEFT_ADVANTAGE")
+        self.assertEqual(left["favored_configuration"], "config-1")
+        self.assertEqual(
+            left, _directional_advantage(
+                scenarios, True, "config-1", "config-2"))
+        self.assertEqual(right["status"], "STABLE_RIGHT_ADVANTAGE")
+        self.assertEqual(right["favored_configuration"], "config-2")
+        self.assertAlmostEqual(
+            left["mean_left_advantage"], -right["mean_left_advantage"])
+        self.assertEqual(
+            left["bootstrap_95"]["lower"], -right["bootstrap_95"]["upper"])
+        self.assertEqual(
+            left["bootstrap_95"]["upper"], -right["bootstrap_95"]["lower"])
+        self.assertEqual(gated["status"], "INSUFFICIENT_EVIDENCE")
+        self.assertIsNone(gated["bootstrap_95"])
+        self.assertEqual(
+            robustness["status"], "ROBUST_TO_SINGLE_SCENARIO_REMOVAL")
+
+    def test_round_five_directional_advantage_withholds_mixed_direction(self):
+        scenarios = []
+        for index, pilot_id in enumerate(PILOT_IDS[:4], 1):
+            left_wins = index <= 2
+            scenarios.append({
+                "pilot_id": pilot_id,
+                "pack": "sha256:" + str(index) * 64,
+                "left_attempt_values": [1.0 if left_wins else 0.0] * 2,
+                "right_attempt_values": [0.0 if left_wins else 1.0] * 2,
+            })
+        result = _directional_advantage(
+            scenarios, True, "config-1", "config-2")
+        self.assertEqual(result["status"], "INCONCLUSIVE")
+        self.assertIsNone(result["favored_configuration"])
+        self.assertLess(result["bootstrap_95"]["lower"], -0.05)
+        self.assertGreater(result["bootstrap_95"]["upper"], 0.05)
+
+    def test_round_five_directional_advantage_includes_repeat_uncertainty(self):
+        scenarios = [{
+            "pilot_id": pilot_id,
+            "pack": "sha256:" + str(index) * 64,
+            "left_attempt_values": [1.0, 0.0],
+            "right_attempt_values": [0.4, 0.4],
+        } for index, pilot_id in enumerate(PILOT_IDS[:4], 1)]
+        result = _directional_advantage(
+            scenarios, True, "config-1", "config-2")
+        self.assertEqual(result["mean_left_advantage"], 0.1)
+        self.assertEqual(result["status"], "INCONCLUSIVE")
+        self.assertIsNone(result["favored_configuration"])
+        self.assertLess(result["bootstrap_95"]["lower"], 0.05)
+        self.assertGreater(result["bootstrap_95"]["upper"], 0.05)
 
     def test_round_five_portfolio_detects_single_scenario_leverage(self):
         rows = [{
@@ -2467,6 +2560,7 @@ class PilotAnalysisTests(unittest.TestCase):
             machine_payload = json.loads(machine.read_text(encoding="utf-8"))
         self.assertEqual(machine_payload, analysis)
         self.assertIn("### Evidence collection plan", default_text)
+        self.assertIn("### Shared-scenario directional advantage", default_text)
         self.assertIn("Minimum additional complete attempts: **36**", default_text)
         for private in ("Private Strong", "Private Weak", "private/strong",
                         "private/weak", str(run)):

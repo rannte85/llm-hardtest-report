@@ -1,11 +1,29 @@
-# Release Notes — 2.42.1
+# Release Notes — 2.43.0
 
 This repository is ready to publish as `rannte85/llm-hardtest-report`. It contains no raw
 campaign outputs, credentials, local model files, personal filesystem paths, or
 generated Python caches. The included Luna result is the allowlist-only public bundle,
 not its prompts, responses, transcripts, account details, or local run directory.
 
-This maintenance release adds:
+This release adds:
+
+- Round 5 analysis schema 6 with separate unsigned discrimination and signed
+  observed-configuration advantage;
+- deterministic hierarchical resampling of scenarios and attempts within scenarios;
+- a five-percentage-point material-effect boundary plus the existing exact-version,
+  completion, authority, repeat, and complete-axis evidence gates;
+- stable-left, stable-right, no-material-advantage, inconclusive, and insufficient
+  classifications without turning them into a canonical leaderboard;
+- directional leave-one-scenario-out robustness and signed per-axis attribution in
+  both JSON and Markdown;
+- symmetric, reversed, equal, mixed-direction, repeat-instability, and missing-evidence
+  regression controls;
+- all 252 source tests, repository selftest, wheel/sdist builds, fresh installs, and
+  installed-package live q41 analysis passing locally.
+
+## Previous release: 2.42.1
+
+The previous maintenance release added:
 
 - exact-current-fingerprint q41 smoke evidence from local E4B and signed-in GPT-5.6
   Luna, retained locally rather than publishing raw transcripts;

@@ -1279,3 +1279,33 @@ Acceptance checks:
   scenario.
 - Pairwise and detailed collection-plan next actions both identify clean-cohort
   recovery rather than contradictory missing-scenario collection.
+
+## Phase 43 — Directional Round 5 configuration evidence
+
+Goal: distinguish “these configurations behave differently” from the narrower claim
+that one observed configuration performed materially better across shared Round 5
+scenarios, without turning research pilots into a leaderboard.
+
+Deliverables:
+
+1. Compute a signed left-minus-right contrast across the same eight equal-weight,
+   higher-is-better outcome axes only when every axis is observed.
+2. Average repeats inside exact configuration/scenario cells and use a deterministic
+   hierarchical bootstrap that resamples scenarios and attempts within scenarios.
+3. Reuse exact-version, minimum-scenario, complete-repeat, transport, authority, and
+   observed-axis gates before naming a favored configuration.
+4. Require the complete 95% interval to clear a five-percentage-point material-effect
+   boundary; distinguish stable-left, stable-right, no-material, inconclusive, and
+   insufficient evidence.
+5. Add signed axis contrasts and a directional leave-one-scenario-out audit to JSON
+   and Markdown while retaining anonymous aliases and `canonical_score: false`.
+
+Acceptance checks:
+
+- Symmetric strong/weak controls reverse the favored alias and effect sign exactly.
+- Identical configurations report `NO_MATERIAL_ADVANTAGE` with no favored alias.
+- Opposing scenario effects remain `INCONCLUSIVE` instead of selecting a winner.
+- Missing axes, incomplete transport, unsafe authority, insufficient repeats, or fewer
+  than three exact shared scenarios produce `INSUFFICIENT_EVIDENCE`.
+- A stable result over at least four scenarios reports whether every one-scenario
+  omission preserves the same direction.

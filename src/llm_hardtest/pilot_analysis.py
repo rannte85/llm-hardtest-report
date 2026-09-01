@@ -26,6 +26,7 @@ MAX_TRANSCRIPT_BYTES = 50 * 1024 * 1024
 MIN_SHARED_SCENARIOS = 3
 MIN_COMPLETE_REPEATS = 2
 MIN_ADJUSTED_SEPARATION = 0.05
+MIN_DIRECTIONAL_ADVANTAGE = 0.05
 BOOTSTRAP_SAMPLES = 5000
 
 
@@ -323,6 +324,43 @@ def _axis_distance(left_rows: list[dict], right_rows: list[dict]) -> dict[str, d
     return result
 
 
+def _axis_directional_contrasts(left_rows: list[dict],
+                                right_rows: list[dict]) -> dict[str, dict]:
+    result = {}
+    for axis in OUTCOME_AXES:
+        left_values = [row["metrics"]["vector"][axis] for row in left_rows
+                       if row["metrics"]["vector"][axis] is not None]
+        right_values = [row["metrics"]["vector"][axis] for row in right_rows
+                        if row["metrics"]["vector"][axis] is not None]
+        left_mean, right_mean = _mean(left_values), _mean(right_values)
+        result[axis] = {
+            "left_mean": left_mean,
+            "right_mean": right_mean,
+            "left_advantage": (
+                round(left_mean - right_mean, 6)
+                if left_mean is not None and right_mean is not None else None),
+        }
+    return result
+
+
+def _directional_axis_summary(scenario_rows: list[dict]) -> list[dict]:
+    rows = []
+    for axis in OUTCOME_AXES:
+        values = [row["axis_directional_contrasts"][axis]
+                  for row in scenario_rows]
+        observed = [row for row in values if row["left_advantage"] is not None]
+        rows.append({
+            "axis": axis,
+            "scenarios_observed": len(observed),
+            "mean_left": _mean([row["left_mean"] for row in observed]),
+            "mean_right": _mean([row["right_mean"] for row in observed]),
+            "mean_left_advantage": _mean([
+                row["left_advantage"] for row in observed]),
+        })
+    return sorted(rows, key=lambda row: (
+        -abs(row["mean_left_advantage"] or 0.0), row["axis"]))
+
+
 def _percentile(values: list[float], quantile: float) -> float:
     ordered = sorted(values)
     position = (len(ordered) - 1) * quantile
@@ -359,6 +397,110 @@ def _separation_status(values: list[float], eligible: bool) -> tuple[str, dict |
     if interval["upper"] <= MIN_ADJUSTED_SEPARATION:
         return "NO_STABLE_SEPARATION", interval
     return "INCONCLUSIVE", interval
+
+
+def _outcome_mean(attempt: dict) -> float | None:
+    """Return an equal-axis outcome mean only when every axis is observed."""
+    values = [attempt[axis] for axis in OUTCOME_AXES]
+    if any(value is None for value in values):
+        return None
+    return statistics.mean(values)
+
+
+def _directional_bootstrap(scenarios: list[dict]) -> dict | None:
+    """Resample scenarios and attempts within each selected scenario."""
+    if len(scenarios) < MIN_SHARED_SCENARIOS:
+        return None
+    rng = random.Random(730032)
+    draws = []
+    for _ in range(BOOTSTRAP_SAMPLES):
+        effects = []
+        for _ in scenarios:
+            scenario = rng.choice(scenarios)
+            left = scenario["left_attempt_values"]
+            right = scenario["right_attempt_values"]
+            left_mean = statistics.mean(rng.choice(left) for _ in left)
+            right_mean = statistics.mean(rng.choice(right) for _ in right)
+            effects.append(left_mean - right_mean)
+        draws.append(statistics.mean(effects))
+    return {
+        "method": "hierarchical-scenario-and-attempt-resampling",
+        "confidence": 0.95,
+        "samples": BOOTSTRAP_SAMPLES,
+        "lower": round(_percentile(draws, 0.025), 6),
+        "upper": round(_percentile(draws, 0.975), 6),
+    }
+
+
+def _directional_advantage(scenarios: list[dict], eligible: bool,
+                           left: str, right: str) -> dict:
+    effects = [
+        statistics.mean(row["left_attempt_values"])
+        - statistics.mean(row["right_attempt_values"])
+        for row in scenarios
+        if row["left_attempt_values"] and row["right_attempt_values"]
+    ]
+    interval = (_directional_bootstrap(scenarios)
+                if eligible and len(effects) == len(scenarios) else None)
+    status, favored = "INSUFFICIENT_EVIDENCE", None
+    if interval is not None:
+        if interval["lower"] > MIN_DIRECTIONAL_ADVANTAGE:
+            status, favored = "STABLE_LEFT_ADVANTAGE", left
+        elif interval["upper"] < -MIN_DIRECTIONAL_ADVANTAGE:
+            status, favored = "STABLE_RIGHT_ADVANTAGE", right
+        elif (interval["lower"] >= -MIN_DIRECTIONAL_ADVANTAGE
+              and interval["upper"] <= MIN_DIRECTIONAL_ADVANTAGE):
+            status = "NO_MATERIAL_ADVANTAGE"
+        else:
+            status = "INCONCLUSIVE"
+    return {
+        "status": status,
+        "effect_definition": "left_minus_right_equal_axis_outcome_mean",
+        "minimum_effect": MIN_DIRECTIONAL_ADVANTAGE,
+        "mean_left_advantage": _mean(effects),
+        "favored_configuration": favored,
+        "bootstrap_95": interval,
+    }
+
+
+def _directional_robustness(scenarios: list[dict], status: str,
+                            eligible: bool, left: str, right: str) -> dict:
+    stable = {"STABLE_LEFT_ADVANTAGE", "STABLE_RIGHT_ADVANTAGE"}
+    if not eligible or status not in stable:
+        return {
+            "status": "NOT_APPLICABLE",
+            "required_scenarios": MIN_SHARED_SCENARIOS + 1,
+            "cases": [],
+            "influential_pilot_ids": [],
+        }
+    if len(scenarios) <= MIN_SHARED_SCENARIOS:
+        return {
+            "status": "INSUFFICIENT_SCENARIOS",
+            "required_scenarios": MIN_SHARED_SCENARIOS + 1,
+            "cases": [],
+            "influential_pilot_ids": [],
+        }
+    cases = []
+    for omitted in scenarios:
+        remaining = [row for row in scenarios if row is not omitted]
+        result = _directional_advantage(remaining, True, left, right)
+        cases.append({
+            "omitted_pilot_id": omitted["pilot_id"],
+            "omitted_pack": omitted["pack"],
+            "remaining_scenarios": len(remaining),
+            "mean_left_advantage": result["mean_left_advantage"],
+            "status": result["status"],
+            "bootstrap_95": result["bootstrap_95"],
+        })
+    influential = sorted(
+        row["omitted_pilot_id"] for row in cases if row["status"] != status)
+    return {
+        "status": ("SENSITIVE_TO_SINGLE_SCENARIO" if influential
+                   else "ROBUST_TO_SINGLE_SCENARIO_REMOVAL"),
+        "required_scenarios": MIN_SHARED_SCENARIOS + 1,
+        "cases": cases,
+        "influential_pilot_ids": influential,
+    }
 
 
 def _axis_attribution(scenario_rows: list[dict]) -> list[dict]:
@@ -836,6 +978,7 @@ def _portfolio(attempts: list[dict], aliases: dict[str, str],
         right_keys = {(row["pilot_id"], row["pack"])
                       for row in by_identity[right]}
         versions = []
+        directional_inputs = []
         for pilot_id, pack in sorted(left_keys & right_keys):
             left_rows = by_identity_scenario[(left, pilot_id, pack)]
             right_rows = by_identity_scenario[(right, pilot_id, pack)]
@@ -848,6 +991,20 @@ def _portfolio(attempts: list[dict], aliases: dict[str, str],
                             if left_within is not None and right_within is not None
                             else None)
             between = _mean(distances)
+            left_outcomes = [
+                _outcome_mean(row["metrics"]["vector"]) for row in left_rows]
+            right_outcomes = [
+                _outcome_mean(row["metrics"]["vector"]) for row in right_rows]
+            observed_left = [value for value in left_outcomes if value is not None]
+            observed_right = [value for value in right_outcomes if value is not None]
+            left_outcome_mean, right_outcome_mean = (
+                _mean(observed_left), _mean(observed_right))
+            directional_inputs.append({
+                "pilot_id": pilot_id,
+                "pack": pack,
+                "left_attempt_values": observed_left,
+                "right_attempt_values": observed_right,
+            })
             versions.append({
                 "pilot_id": pilot_id,
                 "pack": pack,
@@ -868,6 +1025,17 @@ def _portfolio(attempts: list[dict], aliases: dict[str, str],
                     round(between - repeat_noise, 6)
                     if between is not None and repeat_noise is not None else None),
                 "axis_distances": _axis_distance(left_rows, right_rows),
+                "directional_contrast": {
+                    "effect_definition": "left_minus_right_equal_axis_outcome_mean",
+                    "left_mean": left_outcome_mean,
+                    "right_mean": right_outcome_mean,
+                    "left_advantage": (
+                        round(left_outcome_mean - right_outcome_mean, 6)
+                        if left_outcome_mean is not None
+                        and right_outcome_mean is not None else None),
+                },
+                "axis_directional_contrasts": _axis_directional_contrasts(
+                    left_rows, right_rows),
             })
         deficits = []
         invalid_pilots = []
@@ -919,6 +1087,11 @@ def _portfolio(attempts: list[dict], aliases: dict[str, str],
         eligible = all(gates.values()) and len(effects) == len(versions)
         status, interval = _separation_status(effects, eligible)
         robustness = _leave_one_out_robustness(versions, status, eligible)
+        directional = _directional_advantage(
+            directional_inputs, eligible, aliases[left], aliases[right])
+        directional_robustness = _directional_robustness(
+            directional_inputs, directional["status"], eligible,
+            aliases[left], aliases[right])
         comparisons.append({
             "left": aliases[left],
             "right": aliases[right],
@@ -943,6 +1116,11 @@ def _portfolio(attempts: list[dict], aliases: dict[str, str],
             },
             "axis_attribution": _axis_attribution(versions),
             "single_scenario_robustness": robustness,
+            "directional_advantage": {
+                **directional,
+                "axis_contrasts": _directional_axis_summary(versions),
+                "single_scenario_robustness": directional_robustness,
+            },
             "next_evidence": _next_pair_evidence(
                 missing_left=missing_left, missing_right=missing_right,
                 mismatched=mismatched, ambiguous=ambiguous, deficits=deficits,
@@ -1070,7 +1248,7 @@ def analyze_pilots(run_dirs: list[Path], include_model_labels: bool = False) -> 
             "canonical_promotion_ready": False,
         })
     return {
-        "schema_version": 5,
+        "schema_version": 6,
         "analysis_kind": "round5-research",
         "canonical_score": False,
         "source_runs": len(run_dirs),
@@ -1200,6 +1378,27 @@ def render_pilot_analysis(analysis: dict) -> str:
                 f"{interval_text} | {adjusted['status']} | "
                 f"{row['single_scenario_robustness']['status']} | "
                 f"{row['next_evidence']['action']} |")
+        lines += [
+            "", "### Shared-scenario directional advantage", "",
+            "Direction uses the signed left-minus-right mean across the same eight",
+            "higher-is-better outcome axes. The 95% interval resamples whole scenarios",
+            "and attempts within each selected scenario; no favored configuration is",
+            "reported unless the interval clears the material-effect boundary.", "",
+            "| Left | Right | Left advantage | 95% interval | Favored | Status | LOO robustness |",
+            "|---|---|---:|---|---|---|---|",
+        ]
+        for row in comparisons:
+            directional = row["directional_advantage"]
+            interval = directional["bootstrap_95"]
+            interval_text = ("n/a" if interval is None else
+                             f"{_percent(interval['lower'])}–{_percent(interval['upper'])}")
+            lines.append(
+                f"| {row['left']} | {row['right']} | "
+                f"{_percent(directional['mean_left_advantage'])} | "
+                f"{interval_text} | "
+                f"{directional['favored_configuration'] or 'none'} | "
+                f"{directional['status']} | "
+                f"{directional['single_scenario_robustness']['status']} |")
         lines += ["", "### Separation attribution", "",
                   "Axis rows explain observed distance but do not rank configurations;",
                   "all axes remain equally weighted in the aggregate distance.", ""]
@@ -1216,6 +1415,17 @@ def render_pilot_analysis(analysis: dict) -> str:
                     f"{_percent(axis['mean_repeat_noise'])} | "
                     f"{_percent(axis['mean_adjusted_separation'])} | "
                     f"{_percent(axis['positive_contribution_share'])} |")
+            lines += [
+                "", "Signed axis contrasts (positive favors left):", "",
+                "| Axis | Scenarios | Left | Right | Left advantage |",
+                "|---|---:|---:|---:|---:|",
+            ]
+            for axis in row["directional_advantage"]["axis_contrasts"]:
+                lines.append(
+                    f"| {axis['axis']} | {axis['scenarios_observed']} | "
+                    f"{_percent(axis['mean_left'])} | "
+                    f"{_percent(axis['mean_right'])} | "
+                    f"{_percent(axis['mean_left_advantage'])} |")
             robustness = row["single_scenario_robustness"]
             if robustness["influential_pilot_ids"]:
                 lines += ["", "Single-scenario-sensitive omissions: " + _escape(
@@ -1277,8 +1487,12 @@ def render_pilot_analysis(analysis: dict) -> str:
         f"  scenario versions and {MIN_COMPLETE_REPEATS} complete attempts per side/version.",
         f"  Its scenario-bootstrap interval must clear the {MIN_ADJUSTED_SEPARATION:.0%} minimum",
         "  effect to be called stable; this is not significance, causality, or canonical promotion.", "",
-        "- Axis attribution is unsigned and descriptive: it explains where distance came",
-        "  from but cannot declare either configuration better.",
+        "- Unsigned axis attribution explains where distance came from. Directional",
+        "  contrast is separate and uses signed higher-is-better axis differences.",
+        f"- Directional advantage uses a {_percent(MIN_DIRECTIONAL_ADVANTAGE)} material",
+        "  boundary and a hierarchical scenario-and-attempt bootstrap. It names a favored",
+        "  observed configuration only when the complete evidence gates pass and the",
+        "  interval clears that boundary; it is not a general model ranking.",
         "- Single-scenario robustness re-runs the complete separation decision after each",
         "  omission. Sensitivity requires more evidence before manual ambiguity review.", "",
     ]

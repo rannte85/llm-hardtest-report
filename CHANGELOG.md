@@ -5,6 +5,25 @@ out separately from harness features.
 
 ## Unreleased
 
+## 2.43.0 — 2026-09-01
+
+- Added Round 5 analysis schema 6 with a signed, equal-axis directional contrast for
+  exact shared scenario versions. Every axis remains higher-is-better and equally
+  weighted; positive values favor the anonymous left configuration.
+- Added a deterministic hierarchical 95% bootstrap that resamples whole scenarios and
+  repeated attempts within each selected scenario, preventing repeat attempts from
+  masquerading as independent incidents.
+- A configuration is favored only when all existing exact-version, completion,
+  authority, repeat, and observed-axis gates pass and the interval clears a five-point
+  material-effect boundary. Otherwise the result is explicitly insufficient,
+  inconclusive, or no material advantage.
+- Added signed per-axis contrasts and leave-one-scenario-out directional robustness,
+  with stable left, stable right, equal, mixed-direction, and gated regression controls.
+- All 252 source tests, repository selftest, wheel/sdist builds, fresh wheel/sdist
+  installs, and installed-package live q41 analysis pass locally.
+- Kept unsigned discrimination distance, acquisition planning, canonical scoring, and
+  automatic promotion behavior unchanged.
+
 ## 2.42.1 — 2026-09-01
 
 - Revalidated current q41 fingerprint

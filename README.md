@@ -4,9 +4,8 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-**Current release: 2.42.1** — validates the finite Round 5 collection planner on the
-current q41 fingerprint and keeps pairwise next-evidence guidance consistent with its
-clean-cohort-first acquisition priority.
+**Current release: 2.43.0** — adds evidence-gated directional Round 5 comparison with
+hierarchical scenario-and-attempt uncertainty and single-scenario robustness checks.
 
 LLM Hardtest Report is a local-first command-line benchmark for comparing language
 models as reasoners, coding workers, and safe handoff agents. Point it at one or more
@@ -222,15 +221,19 @@ missing scenarios unobserved, exposes the worst observed held-back rate, and com
 configurations only on an exact shared scenario fingerprint. Pairwise analysis subtracts
 within-configuration repeat noise and resamples whole scenarios for a deterministic 95%
 interval. It requires three shared exact versions and two complete attempts per side and
-labels evidence as stable, inconclusive, no stable separation, or insufficient. Analysis
-schema 5 also calculates the minimum additional complete attempts per configuration,
+labels evidence as stable, inconclusive, no stable separation, or insufficient.
+Analysis schema 6 also calculates the minimum additional complete attempts per
+configuration,
 prioritizes scenarios by attainable pair-coverage gain per attempt, and requires a fresh
 cohort when invalid history cannot be repaired by appending attempts. Axis attribution
-decomposes the unsigned distance,
-while leave-one-scenario-out
+decomposes the unsigned distance. A separate signed contrast reports an observed favored
+configuration only when its hierarchical 95% interval clears a five-percentage-point
+material-effect boundary after all evidence gates pass. It resamples scenarios and
+attempts within scenarios instead of treating repeats as independent incidents, while
+leave-one-scenario-out
 checks identify stable results that depend on one incident and redirect collection to
-the influential scenarios. This remains descriptive research evidence, not a directional
-ranking, significance test, or promotion.
+the influential scenarios. This remains descriptive observed-configuration evidence,
+not a general model ranking, significance test, or promotion.
 Model labels remain
 anonymous unless `--include-model-labels` is explicitly supplied. See
 [Round 5 Cross-Pilot Analysis](docs/PILOT_ANALYSIS.md).

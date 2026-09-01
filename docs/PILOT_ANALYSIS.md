@@ -44,7 +44,8 @@ is statistically supported.
 
 ## Cross-scenario portfolio
 
-Analysis schema 5 includes the schema-4 portfolio row per exact inference configuration.
+Analysis schema 6 includes the schema-5 portfolio and acquisition plan per exact
+inference configuration.
 It shows:
 
 - which required q32–q41 scenarios were observed and which remain missing;
@@ -78,6 +79,34 @@ when its upper bound does not exceed that threshold, and `INCONCLUSIVE` when it 
 the threshold. These labels are conservative descriptive evidence, not a significance
 test, causal estimate, model prediction, leaderboard score, or automatic promotion.
 
+## Directional observed-configuration contrast
+
+Unsigned distance answers whether two configurations behave differently. Schema 6
+separately asks which observed configuration had the better outcome over exact shared
+scenario versions. All eight axes are defined as higher-is-better. For every attempt,
+the analyzer takes their equal-weight mean only when all axes are observed, averages
+repeats within each configuration/scenario cell, and defines the scenario effect as
+`left - right`.
+
+The deterministic hierarchical bootstrap resamples whole scenarios and then resamples
+attempts within both sides of every selected scenario. Repeats therefore contribute
+uncertainty without pretending to be independent incidents. The directional result
+uses the same minimum three exact shared scenarios, two complete attempts per side,
+complete transport, authority safety, fingerprint alignment, and full-axis gates as
+repeat-adjusted separation.
+
+The 95% interval must lie above +5 percentage points for
+`STABLE_LEFT_ADVANTAGE` or below -5 points for `STABLE_RIGHT_ADVANTAGE`. An interval
+fully inside the ±5-point equivalence band is `NO_MATERIAL_ADVANTAGE`; an interval that
+crosses a boundary is `INCONCLUSIVE`. Failed gates yield `INSUFFICIENT_EVIDENCE` and no
+favored configuration. A stable direction also receives the same single-scenario
+removal audit, and signed per-axis rows show which observed capabilities favor each
+side.
+
+This contrast compares only the two anonymous configurations and observed scenarios.
+It is not a significance test, population claim, causal effect, prediction for an
+untested model, global ranking, or permission to promote a pilot.
+
 The machine and Markdown reports also prioritize the next acquisition step: align mixed
 or mismatched versions, collect missing scenarios, add repeat attempts, replace invalid
 attempts or unobserved axes, replicate influential or noisy scenarios, or proceed to
@@ -91,8 +120,8 @@ detailed portfolio planner independently exposes every outstanding action and co
 
 ## Evidence collection plan
 
-Schema 5 adds a finite lower-bound acquisition plan to every portfolio. For each exact
-configuration and required pilot, it distinguishes `READY`, `MISSING`,
+Schema 5 and later add a finite lower-bound acquisition plan to every portfolio. For
+each exact configuration and required pilot, it distinguishes `READY`, `MISSING`,
 `REPEAT_DEFICIT`, `PACK_AMBIGUOUS`, and `FRESH_COHORT_REQUIRED`. The JSON and Markdown
 outputs report the number of additional complete attempts needed for every actionable
 configuration/pilot cell, then sum those counts by configuration and portfolio.
@@ -122,9 +151,10 @@ new failures, version changes, or configuration changes can alter the plan.
 For each outcome axis, schema 4 and later report scenario-weighted between-configuration
 distance, within-configuration repeat noise, their difference, and the share of positive
 adjusted separation. The shares sum to one when positive signal exists. This
-decomposition is unsigned: it explains where configurations differ but deliberately
-does not claim which configuration is better. Aggregate distance still weights all
-comparable axes equally.
+decomposition remains unsigned and explains where configurations differ. The separate
+schema-6 directional contrast uses signed higher-is-better differences and must pass
+its stricter evidence and material-effect decision before naming an observed favored
+configuration. Aggregate distance still weights all comparable axes equally.
 Contribution shares remain unavailable until both sides have enough repeats to estimate
 per-axis repeat noise; an unavailable share is never rendered as zero evidence.
 

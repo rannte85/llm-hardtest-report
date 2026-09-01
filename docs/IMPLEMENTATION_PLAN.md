@@ -1070,3 +1070,38 @@ Acceptance checks:
   exact-version attempts per configuration across q32–q37.
 - Source tests, repository selftest, installed-package validation, live E4B/Luna smoke
   checks, and the Linux/macOS CI matrix pass without publishing raw evidence.
+
+## Phase 36 — Authenticated webhook replay boundary
+
+Goal: distinguish an implementation that merely checks one HMAC from one that
+preserves exact wire authenticity and exactly-once handler effects under rotation,
+failure, concurrency, and reentrancy.
+
+Deliverables:
+
+1. Add `q38_webhook_replay` with a visible duplicate billing delivery and late raw
+   byte, rotation, timestamp, replay, failure, concurrency, and JSON constraints.
+2. Verify all active secrets and all supplied signatures over the exact raw body,
+   with strict header grammar and inclusive past/future tolerance boundaries.
+3. Reserve authenticated replay identity before invoking the handler, permit unrelated
+   and reentrant requests to progress, release only failed reservations, and retain
+   successful reservations.
+4. Build baseline, correct, canonical-body, first-signature, current-secret,
+   timestamp-boundary, future-window, late-reservation, stuck-failure, global-lock,
+   body-only, duplicate/scalar JSON, and authority-tamper controls.
+5. Integrate q38 with isolated fingerprints, seven-scenario portfolios, voluntary
+   public export, package data, selftest, documentation, and CI.
+
+Acceptance checks:
+
+- The baseline reaches 2/4 public and 2/10 held-back; the complete implementation
+  reaches 4/4 and 10/10.
+- Every incomplete or adversarial control remains 4/4 public while failing at least
+  one distinct held-back authentication, replay, concurrency, recovery, JSON, or
+  authority contract.
+- Concurrent identical requests invoke the handler once; different requests and a
+  callback-triggered nested request do not deadlock behind a handler-wide lock.
+- Invalid authentication cannot poison replay state, handler failure permits retry,
+  and the same body under a separately signed timestamp is not a false replay.
+- q38 changes only its own scenario fingerprint, and portfolio readiness requires two
+  exact-version attempts per configuration across q32–q38.

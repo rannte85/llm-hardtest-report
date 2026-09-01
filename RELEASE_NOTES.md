@@ -1,4 +1,4 @@
-# Release Notes — 2.36.0
+# Release Notes — 2.37.0
 
 This repository is ready to publish as `rannte85/llm-hardtest-report`. It contains no raw
 campaign outputs, credentials, local model files, personal filesystem paths, or
@@ -6,6 +6,23 @@ generated Python caches. The included Luna result is the allowlist-only public b
 not its prompts, responses, transcripts, account details, or local run directory.
 
 The release validation now also covers:
+
+- `q38_webhook_replay`, a seventh long-horizon incident for exact wire
+  authentication and concurrent exactly-once processing;
+- current/previous secret rotation, multiple signature positions, raw timestamp-dot-
+  body HMAC input, strict decimal timestamps, and inclusive tolerance boundaries;
+- reserve-before-handler replay control with concurrent duplicate exclusion,
+  unrelated-request progress, reentrant callback progress, and failure-only release;
+- duplicate-key and non-object JSON rejection after successful authentication;
+- a fourteen-state control matrix where the complete implementation reaches 4/4
+  public and 10/10 held-back, the baseline reaches 2/4 and 2/10, and twelve partial or
+  adversarial implementations stay public-green but fail held-back evidence;
+- q38 scenario fingerprints and q32–q38 portfolio coverage through execution,
+  analysis, voluntary export, installed-package selftest, and CI;
+- 243 passing source tests plus repository selftest and all seven Round 5 control
+  matrices;
+
+## Previous release: 2.36.0
 
 - GitHub issue #1's provider-neutral Round 4 execution contract, with Codex as the
   compatibility default and optional OpenCode support for Chat-Completions-only local

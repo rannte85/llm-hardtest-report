@@ -4,9 +4,9 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-**Current release: 2.36.0** — makes Round 4 agent execution provider-neutral. Codex
-remains the default, OpenCode can drive Chat-Completions-only local servers, and an
-optional fail-closed macOS Seatbelt mode records canary, policy, and audit evidence.
+**Current release: 2.37.0** — adds a seventh Round 5 incident for exact raw-byte
+webhook authentication, rotated signatures, strict timestamp grammar, and concurrent
+replay reservation without global handler serialization.
 
 LLM Hardtest Report is a local-first command-line benchmark for comparing language
 models as reasoners, coding workers, and safe handoff agents. Point it at one or more
@@ -42,13 +42,13 @@ rounds all use the **LLM Hardtest** name.
 | 3 | Structured diagnosis and multi-turn engineering | Deterministic checks for Q21–Q24; Q25 is queued for review | OpenAI-compatible chat or Codex CLI |
 | 4 | Six repository-based coding-agent tasks | Public/held-back tests, integrity gates, handoff and release signals | Codex + Responses, or OpenCode + Chat Completions |
 
-Six selectable Round 5 research pilots are included for evolving incident evidence,
+Seven selectable Round 5 research pilots are included for evolving incident evidence,
 retry idempotency, late compatibility constraints, and public-green partial fixes.
 They are deliberately excluded from canonical campaign scores until multi-model
 stability and grader-ambiguity reviews are complete. Use `pilot round5 --pilot-id`
 with `q32_retry_compatibility` (the default), `q33_batch_delivery`,
-`q34_config_overlay`, `q35_snapshot_race`, `q36_jsonl_stream`, or
-`q37_archive_boundary` to collect three-turn research evidence
+`q34_config_overlay`, `q35_snapshot_race`, `q36_jsonl_stream`,
+`q37_archive_boundary`, or `q38_webhook_replay` to collect three-turn research evidence
 without presenting it as a leaderboard score. See
 [Round 5 Pilot](docs/ROUND5_PILOT.md).
 
@@ -216,7 +216,7 @@ llm-hardtest pilot analyze runs/pilot-a runs/pilot-b --output round5-analysis.md
 It compares repeated outcome distance within one configuration against distance
 between configurations across transport completion, authority safety, hypothesis
 revision, public and held-back tests, release readiness, report accuracy, and tool
-protocol compliance. It also builds a configuration portfolio across q32–q37, keeps
+protocol compliance. It also builds a configuration portfolio across q32–q38, keeps
 missing scenarios unobserved, exposes the worst observed held-back rate, and compares
 configurations only on an exact shared scenario fingerprint. Pairwise analysis subtracts
 within-configuration repeat noise and resamples whole scenarios for a deterministic 95%

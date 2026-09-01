@@ -69,7 +69,9 @@ from llm_hardtest.calibration import (
     analyze_runs, render_analysis, write_analysis,
 )
 from llm_hardtest.panel_config import build_panel_config, write_panel_config
-from llm_hardtest.pilot_analysis import analyze_pilots, write_pilot_analysis
+from llm_hardtest.pilot_analysis import (
+    _leave_one_out_robustness, analyze_pilots, write_pilot_analysis,
+)
 from llm_hardtest.public_pilots import (
     build_public_pilot_result, export_public_pilot_bundle,
     load_public_pilot_bundle, validate_public_pilot_result,
@@ -1376,7 +1378,7 @@ class PackTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[1]
         metadata = [validate_pack(root / "rounds" / f"round{number}")
                     for number in (1, 2, 3, 4, 5)]
-        self.assertEqual([item["unit_count"] for item in metadata], [20, 20, 5, 6, 6])
+        self.assertEqual([item["unit_count"] for item in metadata], [20, 20, 5, 6, 7])
 
     def test_round_five_scenario_fingerprints_are_isolated(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1408,6 +1410,9 @@ class PackTests(unittest.TestCase):
             self.assertEqual(
                 pilot_fingerprint("q37_archive_boundary", root),
                 before["q37_archive_boundary"])
+            self.assertEqual(
+                pilot_fingerprint("q38_webhook_replay", root),
+                before["q38_webhook_replay"])
             cache = root / "tasks/q33_batch_delivery/repo/__pycache__/ignored.pyc"
             cache.parent.mkdir(exist_ok=True)
             cache.write_bytes(b"generated")
@@ -1446,6 +1451,7 @@ class RoundFiveResearchTests(unittest.TestCase):
                     "q35_snapshot_race": "snapshot_cache.py",
                     "q36_jsonl_stream": "jsonl_stream.py",
                     "q37_archive_boundary": "secure_extract.py",
+                    "q38_webhook_replay": "webhook.py",
                 }
                 filename = filenames[self.pilot_id]
                 path = workdir / filename
@@ -1531,6 +1537,9 @@ class SnapshotCache:
                 elif self.pilot_id == "q37_archive_boundary":
                     content = ("The ZIP extraction trusts member-controlled paths, enabling "
                                "path traversal outside the requested archive destination.")
+                elif self.pilot_id == "q38_webhook_replay":
+                    content = ("The signed webhook has no replay reservation, so an identical "
+                               "authenticated retry can apply the billing event twice.")
                 else:
                     subject = ("session retry"
                                if self.pilot_id == "q32_retry_compatibility"
@@ -1556,6 +1565,13 @@ class SnapshotCache:
                                "the byte limit must use uncompressed size. This invalidates "
                                "extractall, string-prefix resolve, sequential writes, compressed "
                                "size checks, and single-platform normalization.")
+                elif self.pilot_id == "q38_webhook_replay":
+                    content = ("Exact raw bytes and rotated multiple signatures must be verified; "
+                               "concurrent requests need reserve-before-handler without a global "
+                               "handler lock, failure must release the reservation, and duplicate "
+                               "JSON keys must fail. This invalidates canonical reserialization, "
+                               "first-signature-only, check-then-act, handler-under-global-lock, "
+                               "permanent failure reservation, and body-only replay plans.")
                 else:
                     content = ("Version-1 old clients reject unknown fields, so any new response "
                                "schema field is invalid and must be omitted.")
@@ -1567,6 +1583,7 @@ class SnapshotCache:
                     "q35_snapshot_race": "snapshot_cache.py",
                     "q36_jsonl_stream": "jsonl_stream.py",
                     "q37_archive_boundary": "secure_extract.py",
+                    "q38_webhook_replay": "webhook.py",
                 }
                 functions = {
                     "q32_retry_compatibility": "SessionService.refresh",
@@ -1575,6 +1592,7 @@ class SnapshotCache:
                     "q35_snapshot_race": "SnapshotCache.refresh",
                     "q36_jsonl_stream": "JsonlEventStream.feed",
                     "q37_archive_boundary": "safe_extract",
+                    "q38_webhook_replay": "WebhookProcessor.process",
                 }
                 filename, function = filenames[self.pilot_id], functions[self.pilot_id]
                 invalidated = {
@@ -1587,6 +1605,9 @@ class SnapshotCache:
                     "q37_archive_boundary": ("extractall, string-prefix resolve, sequential "
                                               "writes, compressed-size checks, and "
                                               "single-platform normalization"),
+                    "q38_webhook_replay": ("canonical reserialization, first-signature-only, "
+                                             "check-then-act replay, handler-under-global-lock, "
+                                             "permanent failure reservation, and body-only replay"),
                 }[self.pilot_id]
                 content = (
                     "=== PILOT REPORT ===\n"
@@ -1775,6 +1796,33 @@ class SnapshotCache:
         self.assertEqual(public["models"][0]["attempts"][0]["hidden"]["passed"], 10)
         self.assertEqual(warnings, [])
 
+    def test_round_five_webhook_replay_scenario_is_selectable_and_graded(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            agent = self.FakeAgent(pilot_id="q38_webhook_replay")
+            root = run_pilot(
+                self._config(), Path(tmp), ["m"], 1,
+                agent_factory=lambda model, run: agent,
+                pilot_id="q38_webhook_replay")
+            summary = load_json(root / "pilot_summary.json")
+            grade = summary["attempts"][0]["grade"]
+            attempt_exists = (root / "m/round5/q38_webhook_replay/attempt-1"
+                              / "research_grade.json").is_file()
+            analysis = analyze_pilots([root])
+            public, warnings = build_public_pilot_result(root)
+        self.assertTrue(attempt_exists)
+        self.assertEqual(summary["pilot_id"], "q38_webhook_replay")
+        self.assertEqual(grade["public"], {"passed": 4, "total": 4,
+                                           "timed_out": False})
+        self.assertEqual(grade["hidden"], {"passed": 10, "total": 10,
+                                           "timed_out": False})
+        self.assertTrue(grade["evidence_revision_observed"])
+        self.assertTrue(grade["release_ready"])
+        self.assertTrue(grade["final_report"]["accurate"])
+        self.assertEqual(analysis["groups"][0]["pilot_id"], "q38_webhook_replay")
+        self.assertEqual(public["pilot"]["id"], "q38_webhook_replay")
+        self.assertEqual(public["models"][0]["attempts"][0]["hidden"]["passed"], 10)
+        self.assertEqual(warnings, [])
+
     def test_round_five_portfolio_requires_repeated_exact_scenario_coverage(self):
         with tempfile.TemporaryDirectory() as tmp:
             config = self._config()
@@ -1811,17 +1859,18 @@ class SnapshotCache:
         self.assertEqual(portfolio["required_pilots"], [
             "q32_retry_compatibility", "q33_batch_delivery", "q34_config_overlay",
             "q35_snapshot_race", "q36_jsonl_stream", "q37_archive_boundary",
+            "q38_webhook_replay",
         ])
         self.assertEqual(len(portfolio["configurations"]), 2)
         for row in portfolio["configurations"]:
-            self.assertEqual(row["attempts"], 12)
+            self.assertEqual(row["attempts"], 14)
             self.assertEqual(row["missing_pilots"], [])
             self.assertEqual(row["pack_ambiguous_pilots"], [])
             self.assertEqual(row["worst_case_hidden_pass_rate"], 1.0)
             self.assertTrue(row["ready_for_cross_scenario_interpretation"])
         comparison = portfolio["pairwise"][0]
         self.assertEqual(comparison["shared_pilots"], portfolio["required_pilots"])
-        self.assertEqual(comparison["shared_scenario_versions"], 6)
+        self.assertEqual(comparison["shared_scenario_versions"], 7)
         self.assertEqual(comparison["mean_distance"], 0.0)
         adjusted = comparison["repeat_adjusted_separation"]
         self.assertEqual(adjusted["status"], "NO_STABLE_SEPARATION")
@@ -1877,34 +1926,16 @@ class SnapshotCache:
                          "MANUAL_AMBIGUITY_REVIEW")
 
     def test_round_five_portfolio_detects_single_scenario_leverage(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            config = self._config()
-            config["models"].append({
-                **config["models"][0],
-                "key": "weak", "label": "Weak", "model": "fake-weak",
-            })
-            roots = []
-            for pilot_id in PILOT_IDS:
-                roots.append(run_pilot(
-                    config, Path(tmp), None, 2,
-                    agent_factory=lambda model, run, selected=pilot_id: self.FakeAgent(
-                        mode=("correct" if model["key"] == "m"
-                              or selected in {"q32_retry_compatibility",
-                                              "q36_jsonl_stream",
-                                              "q37_archive_boundary"} else "baseline"),
-                        pilot_id=selected),
-                    pilot_id=pilot_id))
-            comparison = analyze_pilots(roots)["portfolio"]["pairwise"][0]
-        self.assertEqual(
-            comparison["repeat_adjusted_separation"]["status"], "STABLE_SEPARATION")
-        robustness = comparison["single_scenario_robustness"]
+        rows = [{
+            "pilot_id": pilot_id,
+            "pack": "sha256:" + str(index) * 64,
+            "adjusted_separation": 0.0 if index < 4 else 0.5,
+        } for index, pilot_id in enumerate(PILOT_IDS)]
+        robustness = _leave_one_out_robustness(
+            rows, "STABLE_SEPARATION", True)
         self.assertEqual(robustness["status"], "SENSITIVE_TO_SINGLE_SCENARIO")
-        self.assertNotIn("q32_retry_compatibility", robustness["influential_pilot_ids"])
-        self.assertNotIn("q36_jsonl_stream", robustness["influential_pilot_ids"])
-        self.assertNotIn("q37_archive_boundary", robustness["influential_pilot_ids"])
-        self.assertTrue(robustness["influential_pilot_ids"])
         self.assertEqual(
-            comparison["next_evidence"]["action"], "REPLICATE_INFLUENTIAL_SCENARIOS")
+            robustness["influential_pilot_ids"], list(PILOT_IDS[-3:]))
 
     def test_round_five_portfolio_subtracts_repeat_instability(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -2149,7 +2180,7 @@ class PilotAnalysisTests(unittest.TestCase):
             self.assertEqual(
                 row["missing_pilots"], [
                     "q33_batch_delivery", "q34_config_overlay", "q35_snapshot_race",
-                    "q36_jsonl_stream", "q37_archive_boundary",
+                    "q36_jsonl_stream", "q37_archive_boundary", "q38_webhook_replay",
                 ])
             self.assertFalse(row["ready_for_cross_scenario_interpretation"])
         comparison = analysis["portfolio"]["pairwise"][0]

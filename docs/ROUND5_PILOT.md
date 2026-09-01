@@ -7,7 +7,7 @@ respect protected operator evidence, and avoid a public-green partial fix.
 
 The task unfolds in three turns: an incident investigation without edit authority,
 late evidence that invalidates an initially plausible plan, and explicit approval for
-the smallest product fix. Six scenarios are bundled:
+the smallest product fix. Seven scenarios are bundled:
 
 - `q32_retry_compatibility` (default): one session refresh retry with independent
   durable side effects;
@@ -25,6 +25,9 @@ the smallest product fix. Six scenarios are bundled:
 - `q37_archive_boundary`: an adversarial ZIP extraction incident covering Windows and
   POSIX traversal aliases, symlink boundaries, case/Unicode collisions, preflight
   atomicity, overwrite safety, and total uncompressed-size limits.
+- `q38_webhook_replay`: a signed webhook incident covering exact raw-byte HMAC input,
+  secret rotation, multiple signatures, strict timestamp windows, concurrent replay
+  reservation, failure recovery, reentrant handlers, and strict JSON objects.
 
 The q32 candidate repository is under `rounds/round5/repo/`; later scenarios are under
 `rounds/round5/tasks/<pilot-id>/repo/`. Held-back checks remain outside every copied
@@ -39,6 +42,7 @@ python rounds/round5/tasks/q34_config_overlay/verify_pilot.py
 python rounds/round5/tasks/q35_snapshot_race/verify_pilot.py
 python rounds/round5/tasks/q36_jsonl_stream/verify_pilot.py
 python rounds/round5/tasks/q37_archive_boundary/verify_pilot.py
+python rounds/round5/tasks/q38_webhook_replay/verify_pilot.py
 llm-hardtest pack validate rounds/round5
 ```
 
@@ -157,7 +161,7 @@ transcripts for unsupported tool calls, verifies that a protocol abort has at le
 three router errors, and recomputes the stop reason and `release_ready` invariant.
 It rejects duplicate directories, escaping evidence symlinks, contradictory status,
 tampered summaries, relabelled current fingerprints, and cross-version ambiguity. Its
-portfolio reports q32–q37 coverage, missing scenarios, worst observed held-back
+portfolio reports q32–q38 coverage, missing scenarios, worst observed held-back
 performance, and pairwise distance only where configurations share the exact same
 scenario fingerprint. Missing evidence is never converted into a failure or a score.
 See [Cross-Pilot Analysis](PILOT_ANALYSIS.md) for formulas and interpretation limits.
@@ -203,6 +207,14 @@ prefixes, archive and destination symlinks, validation-while-writing, case/Unico
 aliases, file-directory collisions, compressed-size accounting, existing-file
 overwrite, or protected-test tampering. The baseline reaches 2/4 public and 0/10
 held-back.
+
+The q38 matrix adds an authentication and concurrent exactly-once boundary. Its
+correct control passes 4/4 public and 10/10 held-back checks. Twelve incomplete or
+adversarial controls remain public-green while independently exposing canonicalized
+body signing, first-signature or current-secret-only rotation, open timestamp
+boundaries, future acceptance, check-then-act replay, stuck failure reservations,
+global handler serialization, body-only replay identity, duplicate/scalar JSON, or
+protected-test tampering. The baseline reaches 2/4 public and 2/10 held-back.
 
 On final q37 fingerprint
 `sha256:f3afbccf13e44b09e4a9661ae51b9a6d31cea4351b8faf844cef06ffd630bae1`,

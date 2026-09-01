@@ -5,6 +5,24 @@ out separately from harness features.
 
 ## Unreleased
 
+## 2.37.0 — 2026-09-01
+
+- Added `q38_webhook_replay`, a seventh Round 5 scenario for exact raw-body HMAC
+  verification, secret rotation, multiple signatures, strict timestamp grammar, and
+  replay-safe handler execution.
+- Added four public and ten held-back checks. The unfixed baseline reaches 2/4 public
+  and 2/10 held-back; the complete implementation reaches 4/4 and 10/10.
+- Added twelve public-green negative controls isolating canonicalized signing,
+  signature/secret rotation, timestamp edges, check-then-act concurrency, stuck
+  failure state, global handler locks, replay identity, JSON structure, and protected
+  test authority.
+- Proved concurrent identical requests run the handler once while unrelated and
+  callback-triggered reentrant requests still progress; failed handlers release only
+  their own reservation.
+- Integrated q38 into scenario fingerprints, seven-scenario portfolio coverage, CLI
+  selection, anonymous analysis, public pilot export, package assets, selftest, and CI.
+- All 243 source tests and the deterministic q38 control matrix pass locally.
+
 ## 2.36.0 — 2026-09-01
 
 - Accepted and implemented GitHub issue #1 without changing any canonical Round 4

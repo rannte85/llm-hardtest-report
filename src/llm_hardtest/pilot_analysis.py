@@ -27,6 +27,7 @@ MIN_SHARED_SCENARIOS = 3
 MIN_COMPLETE_REPEATS = 2
 MIN_ADJUSTED_SEPARATION = 0.05
 MIN_DIRECTIONAL_ADVANTAGE = 0.05
+FAMILYWISE_ALPHA = 0.05
 BOOTSTRAP_SAMPLES = 5000
 
 
@@ -370,33 +371,48 @@ def _percentile(values: list[float], quantile: float) -> float:
     return ordered[lower] * (1 - weight) + ordered[upper] * weight
 
 
-def _scenario_bootstrap(values: list[float]) -> dict | None:
+def _scenario_bootstrap_draws(values: list[float]) -> list[float] | None:
     """Bootstrap scenario-level effects, not individual attempts or outcome axes."""
     if len(values) < MIN_SHARED_SCENARIOS:
         return None
     rng = random.Random(730031)
-    means = [
+    return [
         statistics.mean(rng.choice(values) for _ in values)
         for _ in range(BOOTSTRAP_SAMPLES)
     ]
+
+
+def _scenario_interval(draws: list[float] | None,
+                       confidence: float) -> dict | None:
+    if not 0.0 < confidence < 1.0:
+        raise ValueError("scenario interval confidence must be between zero and one")
+    if draws is None:
+        return None
+    alpha = 1.0 - confidence
     return {
         "method": "scenario-resampling",
-        "confidence": 0.95,
+        "confidence": round(confidence, 12),
         "samples": BOOTSTRAP_SAMPLES,
-        "lower": round(_percentile(means, 0.025), 6),
-        "upper": round(_percentile(means, 0.975), 6),
+        "lower": round(_percentile(draws, alpha / 2), 6),
+        "upper": round(_percentile(draws, 1 - alpha / 2), 6),
     }
 
 
-def _separation_status(values: list[float], eligible: bool) -> tuple[str, dict | None]:
-    interval = _scenario_bootstrap(values) if eligible else None
+def _separation_classification(interval: dict | None) -> str:
     if interval is None:
-        return "INSUFFICIENT_EVIDENCE", None
+        return "INSUFFICIENT_EVIDENCE"
     if interval["lower"] > MIN_ADJUSTED_SEPARATION:
-        return "STABLE_SEPARATION", interval
+        return "STABLE_SEPARATION"
     if interval["upper"] <= MIN_ADJUSTED_SEPARATION:
-        return "NO_STABLE_SEPARATION", interval
-    return "INCONCLUSIVE", interval
+        return "NO_STABLE_SEPARATION"
+    return "INCONCLUSIVE"
+
+
+def _separation_status(values: list[float], eligible: bool,
+                       confidence: float = 0.95) -> tuple[str, dict | None]:
+    draws = _scenario_bootstrap_draws(values) if eligible else None
+    interval = _scenario_interval(draws, confidence)
+    return _separation_classification(interval), interval
 
 
 def _outcome_mean(attempt: dict) -> float | None:
@@ -407,8 +423,8 @@ def _outcome_mean(attempt: dict) -> float | None:
     return statistics.mean(values)
 
 
-def _directional_bootstrap(scenarios: list[dict]) -> dict | None:
-    """Resample scenarios and attempts within each selected scenario."""
+def _directional_bootstrap_draws(scenarios: list[dict]) -> list[float] | None:
+    """Resample scenarios and attempts within each selected scenario once."""
     if len(scenarios) < MIN_SHARED_SCENARIOS:
         return None
     rng = random.Random(730032)
@@ -423,48 +439,82 @@ def _directional_bootstrap(scenarios: list[dict]) -> dict | None:
             right_mean = statistics.mean(rng.choice(right) for _ in right)
             effects.append(left_mean - right_mean)
         draws.append(statistics.mean(effects))
+    return draws
+
+
+def _directional_interval(draws: list[float] | None,
+                          confidence: float) -> dict | None:
+    if not 0.0 < confidence < 1.0:
+        raise ValueError("directional interval confidence must be between zero and one")
+    if draws is None:
+        return None
+    alpha = 1.0 - confidence
     return {
         "method": "hierarchical-scenario-and-attempt-resampling",
-        "confidence": 0.95,
+        "confidence": round(confidence, 12),
         "samples": BOOTSTRAP_SAMPLES,
-        "lower": round(_percentile(draws, 0.025), 6),
-        "upper": round(_percentile(draws, 0.975), 6),
+        "lower": round(_percentile(draws, alpha / 2), 6),
+        "upper": round(_percentile(draws, 1 - alpha / 2), 6),
     }
 
 
+def _directional_classification(interval: dict | None, left: str,
+                                right: str) -> tuple[str, str | None]:
+    if interval is None:
+        return "INSUFFICIENT_EVIDENCE", None
+    if interval["lower"] > MIN_DIRECTIONAL_ADVANTAGE:
+        return "STABLE_LEFT_ADVANTAGE", left
+    if interval["upper"] < -MIN_DIRECTIONAL_ADVANTAGE:
+        return "STABLE_RIGHT_ADVANTAGE", right
+    if (interval["lower"] >= -MIN_DIRECTIONAL_ADVANTAGE
+            and interval["upper"] <= MIN_DIRECTIONAL_ADVANTAGE):
+        return "NO_MATERIAL_ADVANTAGE", None
+    return "INCONCLUSIVE", None
+
+
 def _directional_advantage(scenarios: list[dict], eligible: bool,
-                           left: str, right: str) -> dict:
+                           left: str, right: str,
+                           family_size: int = 1) -> dict:
+    if (isinstance(family_size, bool) or not isinstance(family_size, int)
+            or family_size < 0 or (eligible and family_size < 1)):
+        raise ValueError("directional family size must cover every eligible comparison")
     effects = [
         statistics.mean(row["left_attempt_values"])
         - statistics.mean(row["right_attempt_values"])
         for row in scenarios
         if row["left_attempt_values"] and row["right_attempt_values"]
     ]
-    interval = (_directional_bootstrap(scenarios)
-                if eligible and len(effects) == len(scenarios) else None)
-    status, favored = "INSUFFICIENT_EVIDENCE", None
-    if interval is not None:
-        if interval["lower"] > MIN_DIRECTIONAL_ADVANTAGE:
-            status, favored = "STABLE_LEFT_ADVANTAGE", left
-        elif interval["upper"] < -MIN_DIRECTIONAL_ADVANTAGE:
-            status, favored = "STABLE_RIGHT_ADVANTAGE", right
-        elif (interval["lower"] >= -MIN_DIRECTIONAL_ADVANTAGE
-              and interval["upper"] <= MIN_DIRECTIONAL_ADVANTAGE):
-            status = "NO_MATERIAL_ADVANTAGE"
-        else:
-            status = "INCONCLUSIVE"
+    can_infer = eligible and len(effects) == len(scenarios)
+    draws = _directional_bootstrap_draws(scenarios) if can_infer else None
+    pointwise = _directional_interval(draws, 0.95)
+    divisor = max(1, family_size)
+    family_confidence = 1.0 - FAMILYWISE_ALPHA / divisor
+    simultaneous = _directional_interval(draws, family_confidence)
+    pointwise_status, _ = _directional_classification(pointwise, left, right)
+    status, favored = _directional_classification(simultaneous, left, right)
     return {
         "status": status,
+        "pointwise_status": pointwise_status,
         "effect_definition": "left_minus_right_equal_axis_outcome_mean",
         "minimum_effect": MIN_DIRECTIONAL_ADVANTAGE,
         "mean_left_advantage": _mean(effects),
         "favored_configuration": favored,
-        "bootstrap_95": interval,
+        "bootstrap_95": pointwise,
+        "familywise_bootstrap": simultaneous,
+        "multiplicity": {
+            "method": "bonferroni_across_eligible_configuration_pairs",
+            "familywise_alpha": FAMILYWISE_ALPHA,
+            "eligible_comparisons": family_size,
+            "adjustment_divisor": divisor,
+            "simultaneous_confidence": (
+                round(family_confidence, 12) if family_size else None),
+        },
     }
 
 
 def _directional_robustness(scenarios: list[dict], status: str,
-                            eligible: bool, left: str, right: str) -> dict:
+                            eligible: bool, left: str, right: str,
+                            family_size: int = 1) -> dict:
     stable = {"STABLE_LEFT_ADVANTAGE", "STABLE_RIGHT_ADVANTAGE"}
     if not eligible or status not in stable:
         return {
@@ -483,7 +533,8 @@ def _directional_robustness(scenarios: list[dict], status: str,
     cases = []
     for omitted in scenarios:
         remaining = [row for row in scenarios if row is not omitted]
-        result = _directional_advantage(remaining, True, left, right)
+        result = _directional_advantage(
+            remaining, True, left, right, family_size)
         cases.append({
             "omitted_pilot_id": omitted["pilot_id"],
             "omitted_pack": omitted["pack"],
@@ -491,6 +542,7 @@ def _directional_robustness(scenarios: list[dict], status: str,
             "mean_left_advantage": result["mean_left_advantage"],
             "status": result["status"],
             "bootstrap_95": result["bootstrap_95"],
+            "familywise_bootstrap": result["familywise_bootstrap"],
         })
     influential = sorted(
         row["omitted_pilot_id"] for row in cases if row["status"] != status)
@@ -534,7 +586,7 @@ def _axis_attribution(scenario_rows: list[dict]) -> list[dict]:
 
 
 def _leave_one_out_robustness(scenario_rows: list[dict], status: str,
-                              eligible: bool) -> dict:
+                              eligible: bool, family_size: int = 1) -> dict:
     if not eligible or status != "STABLE_SEPARATION":
         return {
             "status": "NOT_APPLICABLE",
@@ -552,10 +604,15 @@ def _leave_one_out_robustness(scenario_rows: list[dict], status: str,
     full_mean = statistics.mean(
         row["adjusted_separation"] for row in scenario_rows)
     cases = []
+    family_confidence = 1.0 - FAMILYWISE_ALPHA / max(1, family_size)
     for omitted in scenario_rows:
         remaining = [row["adjusted_separation"] for row in scenario_rows
                      if row is not omitted]
-        omitted_status, interval = _separation_status(remaining, True)
+        draws = _scenario_bootstrap_draws(remaining)
+        pointwise = _scenario_interval(draws, 0.95)
+        simultaneous = _scenario_interval(draws, family_confidence)
+        pointwise_status = _separation_classification(pointwise)
+        omitted_status = _separation_classification(simultaneous)
         cases.append({
             "omitted_pilot_id": omitted["pilot_id"],
             "omitted_pack": omitted["pack"],
@@ -564,7 +621,9 @@ def _leave_one_out_robustness(scenario_rows: list[dict], status: str,
             "absolute_mean_shift": round(
                 abs(statistics.mean(remaining) - full_mean), 6),
             "status": omitted_status,
-            "bootstrap_95": interval,
+            "pointwise_status": pointwise_status,
+            "bootstrap_95": pointwise,
+            "familywise_bootstrap": simultaneous,
         })
     influential = sorted(
         row["omitted_pilot_id"] for row in cases
@@ -1085,13 +1144,6 @@ def _portfolio(attempts: list[dict], aliases: dict[str, str],
         effects = [row["adjusted_separation"] for row in versions
                    if row["adjusted_separation"] is not None]
         eligible = all(gates.values()) and len(effects) == len(versions)
-        status, interval = _separation_status(effects, eligible)
-        robustness = _leave_one_out_robustness(versions, status, eligible)
-        directional = _directional_advantage(
-            directional_inputs, eligible, aliases[left], aliases[right])
-        directional_robustness = _directional_robustness(
-            directional_inputs, directional["status"], eligible,
-            aliases[left], aliases[right])
         comparisons.append({
             "left": aliases[left],
             "right": aliases[right],
@@ -1101,7 +1153,6 @@ def _portfolio(attempts: list[dict], aliases: dict[str, str],
             "mean_distance": (_mean([row["mean_distance"] for row in versions])
                               if versions else None),
             "repeat_adjusted_separation": {
-                "status": status,
                 "minimum_shared_scenarios": MIN_SHARED_SCENARIOS,
                 "minimum_complete_repeats": MIN_COMPLETE_REPEATS,
                 "minimum_effect": MIN_ADJUSTED_SEPARATION,
@@ -1111,23 +1162,69 @@ def _portfolio(attempts: list[dict], aliases: dict[str, str],
                     row["repeat_noise"] for row in versions
                     if row["repeat_noise"] is not None]),
                 "mean_adjusted_separation": _mean(effects),
-                "bootstrap_95": interval,
                 "evidence_gates": gates,
             },
             "axis_attribution": _axis_attribution(versions),
-            "single_scenario_robustness": robustness,
-            "directional_advantage": {
-                **directional,
-                "axis_contrasts": _directional_axis_summary(versions),
-                "single_scenario_robustness": directional_robustness,
+            "_directional_inputs": directional_inputs,
+            "_pair_effects": effects,
+            "_pair_eligible": eligible,
+            "_next_evidence_args": {
+                "missing_left": missing_left,
+                "missing_right": missing_right,
+                "mismatched": mismatched,
+                "ambiguous": ambiguous,
+                "deficits": deficits,
+                "invalid_pilots": sorted(set(invalid_pilots)),
+                "unobserved_pilots": sorted(set(unobserved_pilots)),
+                "scenario_rows": versions,
             },
-            "next_evidence": _next_pair_evidence(
-                missing_left=missing_left, missing_right=missing_right,
-                mismatched=mismatched, ambiguous=ambiguous, deficits=deficits,
-                invalid_pilots=sorted(set(invalid_pilots)), status=status,
-                unobserved_pilots=sorted(set(unobserved_pilots)),
-                scenario_rows=versions, robustness=robustness),
         })
+    eligible_pair_family_size = sum(row["_pair_eligible"] for row in comparisons)
+    family_confidence = (
+        1.0 - FAMILYWISE_ALPHA / max(1, eligible_pair_family_size))
+    for row in comparisons:
+        inputs = row.pop("_directional_inputs")
+        effects = row.pop("_pair_effects")
+        eligible = row.pop("_pair_eligible")
+        next_args = row.pop("_next_evidence_args")
+        draws = _scenario_bootstrap_draws(effects) if eligible else None
+        pointwise = _scenario_interval(draws, 0.95)
+        simultaneous = _scenario_interval(draws, family_confidence)
+        pointwise_status = _separation_classification(pointwise)
+        status = _separation_classification(simultaneous)
+        robustness = _leave_one_out_robustness(
+            row["scenario_distances"], status, eligible,
+            eligible_pair_family_size)
+        row["repeat_adjusted_separation"].update({
+            "status": status,
+            "pointwise_status": pointwise_status,
+            "bootstrap_95": pointwise,
+            "familywise_bootstrap": simultaneous,
+            "multiplicity": {
+                "method": "bonferroni_across_eligible_configuration_pairs",
+                "familywise_alpha": FAMILYWISE_ALPHA,
+                "eligible_comparisons": eligible_pair_family_size,
+                "adjustment_divisor": max(1, eligible_pair_family_size),
+                "simultaneous_confidence": (
+                    round(family_confidence, 12)
+                    if eligible_pair_family_size else None),
+            },
+        })
+        row["single_scenario_robustness"] = robustness
+        row["next_evidence"] = _next_pair_evidence(
+            **next_args, status=status, robustness=robustness)
+        directional = _directional_advantage(
+            inputs, eligible, row["left"], row["right"],
+            eligible_pair_family_size)
+        directional_robustness = _directional_robustness(
+            inputs, directional["status"], eligible, row["left"], row["right"],
+            eligible_pair_family_size)
+        row["directional_advantage"] = {
+            **directional,
+            "axis_contrasts": _directional_axis_summary(
+                row["scenario_distances"]),
+            "single_scenario_robustness": directional_robustness,
+        }
     collection_plan = _evidence_collection_plan(configurations)
     return {
         "required_pilots": list(PILOT_IDS),
@@ -1248,7 +1345,7 @@ def analyze_pilots(run_dirs: list[Path], include_model_labels: bool = False) -> 
             "canonical_promotion_ready": False,
         })
     return {
-        "schema_version": 6,
+        "schema_version": 7,
         "analysis_kind": "round5-research",
         "canonical_score": False,
         "source_runs": len(run_dirs),
@@ -1360,44 +1457,59 @@ def render_pilot_analysis(analysis: dict) -> str:
             "", "### Shared-scenario configuration distance", "",
             "Only attempts with the same scenario ID and exact scenario fingerprint are",
             "compared. Repeat noise is subtracted before a deterministic 95% interval",
-            "resamples whole scenarios. A missing shared version remains unavailable.", "",
-            "| Left | Right | Shared | Between | Repeat noise | Adjusted | 95% interval | Status | LOO robustness | Next evidence |",
-            "|---|---|---:|---:|---:|---:|---|---|---|---|",
+            "resamples whole scenarios. The decision uses the same family-wise",
+            "simultaneous-confidence adjustment as directional advantage. A missing",
+            "shared version remains unavailable.", "",
+            "| Left | Right | Shared | Between | Repeat noise | Adjusted | Pointwise 95% | Simultaneous interval | Family | Pointwise status | Family-wise status | LOO robustness | Next evidence |",
+            "|---|---|---:|---:|---:|---:|---|---|---:|---|---|---|---|",
         ]
         for row in comparisons:
             adjusted = row["repeat_adjusted_separation"]
-            interval = adjusted["bootstrap_95"]
-            interval_text = ("n/a" if interval is None else
-                             f"{_percent(interval['lower'])}–{_percent(interval['upper'])}")
+            pointwise = adjusted["bootstrap_95"]
+            simultaneous = adjusted["familywise_bootstrap"]
+            pointwise_text = ("n/a" if pointwise is None else
+                              f"{_percent(pointwise['lower'])}–{_percent(pointwise['upper'])}")
+            simultaneous_text = (
+                "n/a" if simultaneous is None else
+                f"{_percent(simultaneous['lower'])}–{_percent(simultaneous['upper'])}")
             lines.append(
                 f"| {row['left']} | {row['right']} | "
                 f"{row['shared_scenario_versions']} | "
                 f"{_percent(adjusted['mean_between_distance'])} | "
                 f"{_percent(adjusted['mean_repeat_noise'])} | "
                 f"{_percent(adjusted['mean_adjusted_separation'])} | "
-                f"{interval_text} | {adjusted['status']} | "
+                f"{pointwise_text} | {simultaneous_text} | "
+                f"{adjusted['multiplicity']['eligible_comparisons']} | "
+                f"{adjusted['pointwise_status']} | {adjusted['status']} | "
                 f"{row['single_scenario_robustness']['status']} | "
                 f"{row['next_evidence']['action']} |")
         lines += [
             "", "### Shared-scenario directional advantage", "",
             "Direction uses the signed left-minus-right mean across the same eight",
             "higher-is-better outcome axes. The 95% interval resamples whole scenarios",
-            "and attempts within each selected scenario; no favored configuration is",
-            "reported unless the interval clears the material-effect boundary.", "",
-            "| Left | Right | Left advantage | 95% interval | Favored | Status | LOO robustness |",
-            "|---|---|---:|---|---|---|---|",
+            "and attempts within each selected scenario. The decision interval applies",
+            "a Bonferroni simultaneous-confidence adjustment across every eligible",
+            "configuration pair; no favored configuration is reported unless that wider",
+            "interval clears the material-effect boundary.", "",
+            "| Left | Right | Left advantage | Pointwise 95% | Simultaneous interval | Family | Favored | Pointwise status | Family-wise status | LOO robustness |",
+            "|---|---|---:|---|---|---:|---|---|---|---|",
         ]
         for row in comparisons:
             directional = row["directional_advantage"]
-            interval = directional["bootstrap_95"]
-            interval_text = ("n/a" if interval is None else
-                             f"{_percent(interval['lower'])}–{_percent(interval['upper'])}")
+            pointwise = directional["bootstrap_95"]
+            simultaneous = directional["familywise_bootstrap"]
+            pointwise_text = ("n/a" if pointwise is None else
+                              f"{_percent(pointwise['lower'])}–{_percent(pointwise['upper'])}")
+            simultaneous_text = (
+                "n/a" if simultaneous is None else
+                f"{_percent(simultaneous['lower'])}–{_percent(simultaneous['upper'])}")
             lines.append(
                 f"| {row['left']} | {row['right']} | "
                 f"{_percent(directional['mean_left_advantage'])} | "
-                f"{interval_text} | "
+                f"{pointwise_text} | {simultaneous_text} | "
+                f"{directional['multiplicity']['eligible_comparisons']} | "
                 f"{directional['favored_configuration'] or 'none'} | "
-                f"{directional['status']} | "
+                f"{directional['pointwise_status']} | {directional['status']} | "
                 f"{directional['single_scenario_robustness']['status']} |")
         lines += ["", "### Separation attribution", "",
                   "Axis rows explain observed distance but do not rank configurations;",
@@ -1485,14 +1597,18 @@ def render_pilot_analysis(analysis: dict) -> str:
         "  before cross-scenario interpretation.",
         f"- Repeat-adjusted separation requires at least {MIN_SHARED_SCENARIOS} exact shared",
         f"  scenario versions and {MIN_COMPLETE_REPEATS} complete attempts per side/version.",
-        f"  Its scenario-bootstrap interval must clear the {MIN_ADJUSTED_SEPARATION:.0%} minimum",
-        "  effect to be called stable; this is not significance, causality, or canonical promotion.", "",
+        f"  Its family-wise scenario-bootstrap interval must clear the {MIN_ADJUSTED_SEPARATION:.0%}",
+        "  minimum effect to be called stable; this is not significance, causality, or",
+        "  canonical promotion.", "",
         "- Unsigned axis attribution explains where distance came from. Directional",
         "  contrast is separate and uses signed higher-is-better axis differences.",
         f"- Directional advantage uses a {_percent(MIN_DIRECTIONAL_ADVANTAGE)} material",
-        "  boundary and a hierarchical scenario-and-attempt bootstrap. It names a favored",
-        "  observed configuration only when the complete evidence gates pass and the",
-        "  interval clears that boundary; it is not a general model ranking.",
+        "  boundary and a hierarchical scenario-and-attempt bootstrap. Its decision",
+        f"  interval targets family-wise error control at {FAMILYWISE_ALPHA:.0%} across all eligible",
+        "  configuration pairs with a Bonferroni simultaneous-confidence adjustment.",
+        "  It names a favored observed configuration only when the complete evidence",
+        "  gates pass and that adjusted interval clears the boundary; it is not a general",
+        "  model ranking.",
         "- Single-scenario robustness re-runs the complete separation decision after each",
         "  omission. Sensitivity requires more evidence before manual ambiguity review.", "",
     ]

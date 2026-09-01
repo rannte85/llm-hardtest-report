@@ -72,8 +72,8 @@ from llm_hardtest.calibration import (
 from llm_hardtest.panel_config import build_panel_config, write_panel_config
 from llm_hardtest.pilot_analysis import (
     _directional_advantage, _directional_robustness,
-    _evidence_collection_plan, _leave_one_out_robustness, analyze_pilots,
-    write_pilot_analysis,
+    _evidence_collection_plan, _leave_one_out_robustness, _next_pair_evidence,
+    _separation_status, analyze_pilots, write_pilot_analysis,
 )
 from llm_hardtest.public_pilots import (
     build_public_pilot_result, export_public_pilot_bundle,
@@ -2026,7 +2026,7 @@ class SnapshotCache:
                     summary_row["grade"] = missing_axis_grade
             save_json(missing_axis_summary_path, missing_axis_summary)
             missing_axis_comparison = analyze_pilots(roots)["portfolio"]["pairwise"][0]
-        self.assertEqual(analysis["schema_version"], 6)
+        self.assertEqual(analysis["schema_version"], 7)
         self.assertEqual(portfolio["required_pilots"], [
             "q32_retry_compatibility", "q33_batch_delivery", "q34_config_overlay",
             "q35_snapshot_race", "q36_jsonl_stream", "q37_archive_boundary",
@@ -2146,6 +2146,11 @@ class SnapshotCache:
         gated = _directional_advantage(scenarios, False, "config-1", "config-2")
         robustness = _directional_robustness(
             scenarios, left["status"], True, "config-1", "config-2")
+        family_adjusted = _directional_advantage(
+            scenarios, True, "config-1", "config-2", family_size=6)
+        family_robustness = _directional_robustness(
+            scenarios, family_adjusted["status"], True,
+            "config-1", "config-2", family_size=6)
         self.assertEqual(left["status"], "STABLE_LEFT_ADVANTAGE")
         self.assertEqual(left["favored_configuration"], "config-1")
         self.assertEqual(
@@ -2163,6 +2168,12 @@ class SnapshotCache:
         self.assertIsNone(gated["bootstrap_95"])
         self.assertEqual(
             robustness["status"], "ROBUST_TO_SINGLE_SCENARIO_REMOVAL")
+        self.assertEqual(
+            family_robustness["status"], "ROBUST_TO_SINGLE_SCENARIO_REMOVAL")
+        self.assertTrue(all(
+            row["familywise_bootstrap"]["confidence"]
+            == round(1 - 0.05 / 6, 12)
+            for row in family_robustness["cases"]))
 
     def test_round_five_directional_advantage_withholds_mixed_direction(self):
         scenarios = []
@@ -2195,6 +2206,82 @@ class SnapshotCache:
         self.assertIsNone(result["favored_configuration"])
         self.assertLess(result["bootstrap_95"]["lower"], 0.05)
         self.assertGreater(result["bootstrap_95"]["upper"], 0.05)
+
+    def test_round_five_directional_advantage_controls_pairwise_family(self):
+        effects = (0.0, 0.2, 0.2, 0.2, 0.2)
+        scenarios = [{
+            "pilot_id": pilot_id,
+            "pack": "sha256:" + str(index) * 64,
+            "left_attempt_values": [effect, effect],
+            "right_attempt_values": [0.0, 0.0],
+        } for index, (pilot_id, effect) in enumerate(
+            zip(PILOT_IDS[:5], effects), 1)]
+        result = _directional_advantage(
+            scenarios, True, "config-1", "config-2", family_size=6)
+        self.assertEqual(result["pointwise_status"], "STABLE_LEFT_ADVANTAGE")
+        self.assertEqual(result["status"], "INCONCLUSIVE")
+        self.assertIsNone(result["favored_configuration"])
+        self.assertEqual(result["multiplicity"]["eligible_comparisons"], 6)
+        self.assertAlmostEqual(
+            result["familywise_bootstrap"]["confidence"], 1 - 0.05 / 6)
+        self.assertGreaterEqual(
+            result["bootstrap_95"]["lower"], 0.05)
+        self.assertLessEqual(
+            result["familywise_bootstrap"]["lower"], 0.05)
+        with self.assertRaisesRegex(ValueError, "family size"):
+            _directional_advantage(
+                scenarios, True, "config-1", "config-2", family_size=0)
+        pointwise_status, pointwise = _separation_status(list(effects), True)
+        family_status, simultaneous = _separation_status(
+            list(effects), True, 1 - 0.05 / 6)
+        self.assertEqual(pointwise_status, "STABLE_SEPARATION")
+        self.assertEqual(family_status, "INCONCLUSIVE")
+        self.assertGreater(pointwise["lower"], 0.05)
+        self.assertLessEqual(simultaneous["lower"], 0.05)
+        next_evidence = _next_pair_evidence(
+            missing_left=[], missing_right=[], mismatched=[], ambiguous=[],
+            deficits=[], invalid_pilots=[], unobserved_pilots=[],
+            status=family_status,
+            scenario_rows=[{
+                "pilot_id": pilot_id,
+                "pack": "sha256:" + str(index) * 64,
+                "repeat_noise": effect,
+            } for index, (pilot_id, effect) in enumerate(
+                zip(PILOT_IDS[:5], effects), 1)],
+            robustness={"status": "NOT_APPLICABLE", "influential_pilot_ids": []})
+        self.assertEqual(
+            next_evidence["action"], "REPLICATE_NOISIEST_SCENARIO")
+
+    def test_round_five_portfolio_adjusts_all_eligible_configuration_pairs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            config = self._config()
+            config["models"] += [{
+                **config["models"][0],
+                "key": key, "label": key.upper(), "model": f"fake-{key}",
+            } for key in ("weak", "other")]
+            roots = []
+            for pilot_id in PILOT_IDS[:3]:
+                roots.append(run_pilot(
+                    config, Path(tmp), None, 2,
+                    agent_factory=lambda model, run, selected=pilot_id: self.FakeAgent(
+                        mode="correct" if model["key"] == "m" else "baseline",
+                        pilot_id=selected),
+                    pilot_id=pilot_id))
+            comparisons = analyze_pilots(roots)["portfolio"]["pairwise"]
+        self.assertEqual(len(comparisons), 3)
+        for comparison in comparisons:
+            directional = comparison["directional_advantage"]
+            separation = comparison["repeat_adjusted_separation"]
+            self.assertEqual(
+                directional["multiplicity"]["eligible_comparisons"], 3)
+            self.assertAlmostEqual(
+                directional["familywise_bootstrap"]["confidence"],
+                1 - 0.05 / 3)
+            self.assertEqual(
+                separation["multiplicity"]["eligible_comparisons"], 3)
+            self.assertAlmostEqual(
+                separation["familywise_bootstrap"]["confidence"],
+                1 - 0.05 / 3)
 
     def test_round_five_portfolio_detects_single_scenario_leverage(self):
         rows = [{

@@ -5,6 +5,25 @@ out separately from harness features.
 
 ## Unreleased
 
+## 2.44.0 — 2026-09-01
+
+- Added Round 5 analysis schema 7 with family-wise unsigned discrimination and
+  directional inference across every eligible configuration pair in one portfolio.
+- Kept the hierarchical pointwise 95% interval for diagnosis, but now bases favored-
+  configuration status on a Bonferroni simultaneous-confidence interval with overall
+  alpha 0.05.
+- Applied the same family adjustment during unsigned and directional leave-one-
+  scenario-out checks, so robustness cannot silently revert to an easier pointwise
+  decision.
+- Added Markdown and JSON fields for pointwise status, simultaneous interval,
+  multiplicity method, eligible family size, adjustment divisor, and simultaneous
+  confidence.
+- Added a three-configuration integration control and boundary cases where pointwise
+  evidence claims a stable difference or winner but the family-wise results correctly
+  stay inconclusive.
+- All 254 source tests, repository selftest, wheel/sdist builds, clean wheel/sdist
+  installs, and installed-package schema-7 live q41 analysis pass locally.
+
 ## 2.43.0 — 2026-09-01
 
 - Added Round 5 analysis schema 6 with a signed, equal-axis directional contrast for

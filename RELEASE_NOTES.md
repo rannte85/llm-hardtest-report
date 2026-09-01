@@ -1,4 +1,4 @@
-# Release Notes — 2.43.0
+# Release Notes — 2.44.0
 
 This repository is ready to publish as `rannte85/llm-hardtest-report`. It contains no raw
 campaign outputs, credentials, local model files, personal filesystem paths, or
@@ -6,6 +6,23 @@ generated Python caches. The included Luna result is the allowlist-only public b
 not its prompts, responses, transcripts, account details, or local run directory.
 
 This release adds:
+
+- Round 5 analysis schema 7 with family-wise unsigned discrimination and directional
+  decisions across all eligible configuration pairs;
+- Bonferroni simultaneous-confidence intervals at overall alpha 0.05 while retaining
+  the pointwise 95% interval as diagnostic evidence;
+- family-adjusted unsigned and directional single-scenario robustness rather than
+  pointwise fallback;
+- explicit multiplicity method, eligible comparison count, adjustment divisor,
+  simultaneous confidence, pointwise status, and family-wise status in JSON and
+  Markdown;
+- three-configuration, pointwise-false-separation, and pointwise-false-winner controls;
+- all 254 source tests, repository selftest, wheel/sdist builds, fresh installs, and
+  installed-package schema-7 live q41 analysis passing locally.
+
+## Previous release: 2.43.0
+
+The previous release added:
 
 - Round 5 analysis schema 6 with separate unsigned discrimination and signed
   observed-configuration advantage;

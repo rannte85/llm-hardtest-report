@@ -4,8 +4,8 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-**Current release: 2.43.0** — adds evidence-gated directional Round 5 comparison with
-hierarchical scenario-and-attempt uncertainty and single-scenario robustness checks.
+**Current release: 2.44.0** — controls family-wise discrimination and directional
+claims when three or more Round 5 configurations create simultaneous pair comparisons.
 
 LLM Hardtest Report is a local-first command-line benchmark for comparing language
 models as reasoners, coding workers, and safe handoff agents. Point it at one or more
@@ -222,15 +222,19 @@ configurations only on an exact shared scenario fingerprint. Pairwise analysis s
 within-configuration repeat noise and resamples whole scenarios for a deterministic 95%
 interval. It requires three shared exact versions and two complete attempts per side and
 labels evidence as stable, inconclusive, no stable separation, or insufficient.
-Analysis schema 6 also calculates the minimum additional complete attempts per
+Analysis schema 7 also calculates the minimum additional complete attempts per
 configuration,
 prioritizes scenarios by attainable pair-coverage gain per attempt, and requires a fresh
 cohort when invalid history cannot be repaired by appending attempts. Axis attribution
 decomposes the unsigned distance. A separate signed contrast reports an observed favored
 configuration only when its hierarchical 95% interval clears a five-percentage-point
 material-effect boundary after all evidence gates pass. It resamples scenarios and
-attempts within scenarios instead of treating repeats as independent incidents, while
-leave-one-scenario-out
+attempts within scenarios instead of treating repeats as independent incidents. When
+multiple configuration pairs are eligible, the favored-configuration decision uses a
+Bonferroni simultaneous-confidence interval across the complete comparison family;
+the same adjustment governs stable unsigned separation. Pointwise 95% intervals remain
+visible for diagnosis but cannot declare a stable difference or winner.
+Leave-one-scenario-out
 checks identify stable results that depend on one incident and redirect collection to
 the influential scenarios. This remains descriptive observed-configuration evidence,
 not a general model ranking, significance test, or promotion.

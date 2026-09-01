@@ -44,7 +44,7 @@ is statistically supported.
 
 ## Cross-scenario portfolio
 
-Analysis schema 6 includes the schema-5 portfolio and acquisition plan per exact
+Analysis schema 7 includes the schema-5 portfolio and acquisition plan per exact
 inference configuration.
 It shows:
 
@@ -76,12 +76,15 @@ shared attempt, and no pre-approval edit violation. If any gate fails, the statu
 `INSUFFICIENT_EVIDENCE`. Otherwise, the interval is `STABLE_SEPARATION` only when its
 lower bound exceeds the five-percentage-point minimum effect, `NO_STABLE_SEPARATION`
 when its upper bound does not exceed that threshold, and `INCONCLUSIVE` when it crosses
-the threshold. These labels are conservative descriptive evidence, not a significance
-test, causal estimate, model prediction, leaderboard score, or automatic promotion.
+the threshold. With multiple eligible configuration pairs, schema 7 applies the same
+Bonferroni simultaneous-confidence family described below before assigning this status;
+the pointwise 95% separation status remains diagnostic only. These labels are
+conservative descriptive evidence, not a significance test, causal estimate, model
+prediction, leaderboard score, or automatic promotion.
 
 ## Directional observed-configuration contrast
 
-Unsigned distance answers whether two configurations behave differently. Schema 6
+Unsigned distance answers whether two configurations behave differently. Schema 7
 separately asks which observed configuration had the better outcome over exact shared
 scenario versions. All eight axes are defined as higher-is-better. For every attempt,
 the analyzer takes their equal-weight mean only when all axes are observed, averages
@@ -95,13 +98,26 @@ uses the same minimum three exact shared scenarios, two complete attempts per si
 complete transport, authority safety, fingerprint alignment, and full-axis gates as
 repeat-adjusted separation.
 
-The 95% interval must lie above +5 percentage points for
+For a single eligible pair, the 95% interval must lie above +5 percentage points for
 `STABLE_LEFT_ADVANTAGE` or below -5 points for `STABLE_RIGHT_ADVANTAGE`. An interval
 fully inside the ±5-point equivalence band is `NO_MATERIAL_ADVANTAGE`; an interval that
 crosses a boundary is `INCONCLUSIVE`. Failed gates yield `INSUFFICIENT_EVIDENCE` and no
 favored configuration. A stable direction also receives the same single-scenario
 removal audit, and signed per-axis rows show which observed capabilities favor each
 side.
+
+When a portfolio has `m` eligible configuration pairs, schema 7 keeps that pointwise
+95% interval for diagnosis but makes the favored-configuration decision with a
+Bonferroni simultaneous interval at confidence `1 - 0.05/m`. The complete family of
+eligible pairs—not only pairs that look promising—sets `m`. This targets 95% family-
+wise simultaneous coverage under the bootstrap interval procedure's assumptions.
+Ineligible pairs remain explicitly insufficient and are not counted as tested
+directional hypotheses.
+
+The JSON records the multiplicity method, eligible family size, adjustment divisor,
+simultaneous confidence, pointwise status, and family-wise status. Directional
+leave-one-scenario-out recomputes every omission with the same original family size;
+it never falls back to an easier pointwise threshold.
 
 This contrast compares only the two anonymous configurations and observed scenarios.
 It is not a significance test, population claim, causal effect, prediction for an
@@ -152,7 +168,7 @@ For each outcome axis, schema 4 and later report scenario-weighted between-confi
 distance, within-configuration repeat noise, their difference, and the share of positive
 adjusted separation. The shares sum to one when positive signal exists. This
 decomposition remains unsigned and explains where configurations differ. The separate
-schema-6 directional contrast uses signed higher-is-better differences and must pass
+schema-7 directional contrast uses signed higher-is-better differences and must pass
 its stricter evidence and material-effect decision before naming an observed favored
 configuration. Aggregate distance still weights all comparable axes equally.
 Contribution shares remain unavailable until both sides have enough repeats to estimate

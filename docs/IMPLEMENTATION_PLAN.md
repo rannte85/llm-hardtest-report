@@ -1309,3 +1309,38 @@ Acceptance checks:
   than three exact shared scenarios produce `INSUFFICIENT_EVIDENCE`.
 - A stable result over at least four scenarios reports whether every one-scenario
   omission preserves the same direction.
+
+## Phase 44 — Family-wise Round 5 directional control
+
+Goal: prevent a growing configuration portfolio from producing chance stable
+differences or directional “winners” merely because it displays many pairwise intervals.
+
+Deliverables:
+
+1. Treat all directionally eligible configuration pairs in one portfolio as a single
+   comparison family; never select the family after observing favorable results.
+2. Preserve hierarchical pointwise 95% intervals for diagnosis while basing both
+   stable-separation and favored-configuration decisions on Bonferroni simultaneous
+   intervals at confidence `1 - 0.05/m` for `m` eligible pairs.
+3. Record family-wise alpha, multiplicity method, eligible family size, adjustment
+   divisor, simultaneous confidence, pointwise status, and adjusted status in JSON and
+   Markdown.
+4. Reuse the original family size in every unsigned and directional leave-one-scenario-
+   out case so robustness cannot weaken the decision threshold.
+5. Keep ineligible comparisons visible as `INSUFFICIENT_EVIDENCE` without counting
+   them as tested directional hypotheses.
+
+Acceptance checks:
+
+- Two configurations retain the schema-6 result because a one-pair family requires no
+  additional widening.
+- Three fully eligible configurations produce three pair comparisons, each using the
+  same 98.33% simultaneous confidence.
+- A synthetic pointwise `STABLE_LEFT_ADVANTAGE` whose simultaneous lower bound does
+  not clear five points becomes `INCONCLUSIVE` with no favored configuration.
+- The same boundary pattern converts pointwise `STABLE_SEPARATION` to family-wise
+  `INCONCLUSIVE` and changes next-evidence guidance accordingly.
+- Strong symmetric controls remain stable and reverse exactly after the family-wise
+  adjustment.
+- Missing, incomplete, unsafe, repeat-deficient, or partially observed pairs remain
+  ineligible and cannot shrink or expand the tested family after seeing outcomes.

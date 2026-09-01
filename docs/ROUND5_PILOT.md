@@ -152,6 +152,10 @@ Adding q36 therefore cannot invalidate unchanged q32–q35 evidence. Resume requ
 current schema-2 scenario fingerprint and refuses mismatched or legacy summaries
 rather than relabeling old evidence. Legacy schema-1 evidence remains available to the
 offline analyzer in its own exact historical pack group.
+Schema-2 evidence from a previous public release is also analyzable without
+reinstalling that release: the analyzer accepts only an exact fingerprint in the
+bundled release registry and recomputes report accuracy with the grading contract
+recorded for that fingerprint. Unknown or edited fingerprints remain rejected.
 
 ## Compare models and repeats
 

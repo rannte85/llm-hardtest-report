@@ -1418,3 +1418,28 @@ Acceptance:
 - All twelve incomplete/adversarial controls remain public-green and held-back-negative.
 - Current fingerprint is
   `sha256:06c886e8d9d5e8fc6bb1af3b59aa40f5f9a26c2feb3175003ccd1d4fc5e2ffa4`.
+
+## Phase 48 — Trusted historical Round 5 contract verification (completed)
+
+Goal: keep evidence from prior public scenario releases analyzable without weakening
+the fingerprint boundary or applying a newer grading contract to older evidence.
+
+Deliverables:
+
+1. Package a strict q32–q41 release registry that binds each published exact scenario
+   fingerprint to its first/last release and historical grading contract.
+2. Accept schema-2 evidence only when its fingerprint matches the installed assets or
+   an exact registry entry; continue rejecting arbitrary relabelling.
+3. Recompute final-report accuracy with the contract bound to the selected fingerprint.
+4. Preserve exact `(pilot_id, fingerprint)` grouping and expose verification provenance
+   in analysis schema 9 and Markdown.
+5. Test registry completeness, duplicate rejection, trusted historical analysis,
+   unknown-fingerprint rejection, and current/historical non-pooling.
+
+Acceptance:
+
+- Every currently installed q32–q41 fingerprint appears in the registry.
+- Historical q41 v2.44.1–v2.45.0 evidence can be analyzed by the current release.
+- A zeroed or otherwise unknown fingerprint is rejected.
+- Current and historical q41 evidence produces two groups and a portfolio version-
+  alignment blocker rather than a pooled comparison.

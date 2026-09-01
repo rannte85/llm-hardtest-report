@@ -5,6 +5,23 @@ out separately from harness features.
 
 ## Unreleased
 
+## 2.46.0 — 2026-09-01
+
+- Added a strict Round 5 public-release fingerprint registry containing every q32–q41
+  scenario fingerprint published through v2.45.1 and its exact historical grading
+  contract.
+- Round 5 analysis schema 9 now accepts trusted schema-2 historical evidence without
+  requiring the matching package version, while still rejecting arbitrary relabelled
+  fingerprints and keeping every exact scenario version in a separate group.
+- Historical final-report accuracy is recomputed with the grading contract attached to
+  that release fingerprint rather than the currently installed contract.
+- Added group-level fingerprint verification provenance (`installed-assets`,
+  `release-registry`, or `legacy-summary`) to JSON and Markdown output.
+- Added controls for registry completeness and duplicate rejection, historical q41
+  analysis, unknown-fingerprint rejection, and current/historical non-pooling.
+- All 258 source tests and the repository selftest pass; clean wheel and sdist 2.46.0
+  installs both load the complete registry and pass their installed selftests.
+
 ## 2.45.1 — 2026-09-01
 
 - Hardened q41's public queue-neutral timeout control after a tag CI macOS runner

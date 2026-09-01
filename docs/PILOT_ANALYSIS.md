@@ -44,9 +44,9 @@ is statistically supported.
 
 ## Cross-scenario portfolio
 
-Analysis schema 8 includes the schema-5 portfolio and acquisition plan, schema-7
-family-wise decisions, and adaptive bootstrap resolution per exact
-inference configuration.
+Analysis schema 9 includes the schema-5 portfolio and acquisition plan, schema-7
+family-wise decisions, schema-8 adaptive bootstrap resolution per exact inference
+configuration, and trusted historical-fingerprint provenance.
 It shows:
 
 - which required q32–q41 scenarios were observed and which remain missing;
@@ -224,7 +224,8 @@ visible outcomes; they do not disappear behind the coverage gate.
 Before calculation, the analyzer:
 
 - rejects a duplicate input directory;
-- validates the pilot ID and exact scenario fingerprint for current schema-2 runs;
+- validates schema-2 fingerprints against either the current installed assets or the
+  bundled registry of exact fingerprints and grading contracts from public releases;
 - rejects unsafe model keys and evidence symlinks escaping the run directory;
 - requires the run summary and raw grade to match exactly;
 - recomputes transport completion and release readiness from lower-level evidence;
@@ -241,8 +242,11 @@ Scenario fingerprints cover only that task's contract, verifier, candidate repos
 and held-back grader assets. Adding a new scenario therefore does not relabel unchanged
 q32–q37 evidence. Schema-1 legacy summaries remain readable but retain their historical
 opaque pack identity; exact-version grouping still prevents them from being silently
-pooled with current evidence. Analyze schema-2 evidence with the matching installed
-release so its asset fingerprint can be verified.
+pooled with current evidence. Schema-2 historical evidence is verified against the
+bundled public-release registry and recomputed with that fingerprint's grading
+contract. An unknown fingerprint is rejected, and current and historical fingerprints
+always remain separate analysis coordinates. Analysis schema 9 exposes each group's
+verification source as `installed-assets`, `release-registry`, or `legacy-summary`.
 
 By default, output configurations are named `config-1`, `config-2`, and so on. Raw
 prompts, model responses, endpoints, filesystem paths, credentials, and model labels

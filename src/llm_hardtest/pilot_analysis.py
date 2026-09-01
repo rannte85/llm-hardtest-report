@@ -13,7 +13,7 @@ from .calibration import _model_identity
 from .common import load_json, save_json, slug
 from .round5 import (
     PILOT_ID, PILOT_IDS, REPORT_FIELDS, _attempt_stop_reason, _report_fields,
-    pilot_assets, pilot_fingerprint,
+    pilot_assets, pilot_fingerprint_contract,
 )
 from .protocol import MAX_UNSUPPORTED_CALLS_PER_AGENT_TURN, unsupported_tool_calls
 
@@ -126,13 +126,14 @@ def _recompute_report_accuracy(grade: dict, attempt_dir: Path, run_dir: Path,
     return accurate
 
 
-def _validated_grade(grade: object, attempt_dir: Path, run_dir: Path) -> dict:
+def _validated_grade(grade: object, attempt_dir: Path, run_dir: Path,
+                     grading: dict) -> dict:
     if not isinstance(grade, dict):
         raise ValueError("pilot grade must be an object")
     pilot_id = grade.get("pilot_id")
     if not isinstance(pilot_id, str):
         raise ValueError("pilot grade has invalid pilot ID")
-    _, _, task = pilot_assets(pilot_id)
+    pilot_assets(pilot_id)
     status = grade.get("status")
     if status not in {"COMPLETE", "INCOMPLETE"}:
         raise ValueError(f"unsupported pilot status: {status!r}")
@@ -216,7 +217,7 @@ def _validated_grade(grade: object, attempt_dir: Path, run_dir: Path) -> dict:
         raise ValueError("pilot release_ready contradicts test and authority evidence")
     recomputed_report = _recompute_report_accuracy(
         grade, attempt_dir, run_dir, turns[-1]["content"] if turns else "", public,
-        task["grading"])
+        grading)
     vector = {
         "transport_complete": 1.0 if transport_complete else 0.0,
         "authority_safe": 1.0 if grade["no_edit_before_approval"] else 0.0,
@@ -1309,13 +1310,15 @@ def collect_pilot_attempts(run_dirs: list[Path]) -> list[dict]:
             raise ValueError(f"invalid pilot pack fingerprint: {run_dir}")
         if not isinstance(pilot_id, str) or not pilot_id:
             raise ValueError(f"invalid pilot ID: {run_dir}")
-        pilot_assets(pilot_id)
+        _, _, task = pilot_assets(pilot_id)
         if summary_schema == 2:
             if summary.get("fingerprint_scope") != "scenario":
                 raise ValueError(f"invalid pilot fingerprint scope: {run_dir}")
-            if pack != pilot_fingerprint(pilot_id):
-                raise ValueError(
-                    f"pilot scenario fingerprint does not match installed assets: {run_dir}")
+            grading, fingerprint_verification = pilot_fingerprint_contract(
+                pilot_id, pack)
+        else:
+            grading = task["grading"]
+            fingerprint_verification = "legacy-summary"
         models = config.get("models")
         if not isinstance(models, list):
             raise ValueError(f"invalid pilot model configuration: {run_dir}")
@@ -1361,7 +1364,9 @@ def collect_pilot_attempts(run_dirs: list[Path]) -> list[dict]:
                 "model_key": key,
                 "attempt": attempt,
                 "label": str(model.get("label") or key),
-                "metrics": _validated_grade(grade, attempt_dir, run_dir),
+                "fingerprint_verification": fingerprint_verification,
+                "metrics": _validated_grade(
+                    grade, attempt_dir, run_dir, grading),
             })
     if not collected:
         raise ValueError("no Round 5 pilot attempts were found")
@@ -1391,6 +1396,8 @@ def analyze_pilots(run_dirs: list[Path], include_model_labels: bool = False) -> 
         results.append({
             "pilot_id": pilot_id,
             "pack": pack,
+            "fingerprint_verification": sorted({
+                row["fingerprint_verification"] for row in rows}),
             "attempts": len(rows),
             "model_configurations": distinct,
             "configurations": configurations,
@@ -1401,7 +1408,7 @@ def analyze_pilots(run_dirs: list[Path], include_model_labels: bool = False) -> 
             "canonical_promotion_ready": False,
         })
     return {
-        "schema_version": 8,
+        "schema_version": 9,
         "analysis_kind": "round5-research",
         "canonical_score": False,
         "source_runs": len(run_dirs),
@@ -1609,6 +1616,8 @@ def render_pilot_analysis(analysis: dict) -> str:
         pairwise, gates = group["pairwise"], group["automatic_gates"]
         lines += [
             f"## `{group['pilot_id']}` — `{group['pack']}`", "",
+            "Fingerprint verification: **" + _escape(
+                ", ".join(group["fingerprint_verification"])) + "**.", "",
             f"Attempts: **{group['attempts']}**; distinct configurations: "
             f"**{group['model_configurations']}**.", "",
             "| Configuration | Attempts | Complete | Public | Hidden | Revision | "

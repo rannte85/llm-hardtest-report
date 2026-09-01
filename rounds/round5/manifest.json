@@ -12,6 +12,7 @@
     "repo/**/*",
     "hidden/**/*",
     "verify_pilot.py",
+    "fingerprint_registry.json",
     "tasks/**/*"
   ],
   "controls": [

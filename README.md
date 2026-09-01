@@ -4,8 +4,8 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-**Current release: 2.45.1** — adds 100× scheduling headroom to q41's queue-neutral
-timeout control while retaining schema-8 family-wise bootstrap resolution.
+**Current release: 2.46.0** — verifies historical Round 5 results against the exact
+grading contracts published with their trusted release fingerprints.
 
 LLM Hardtest Report is a local-first command-line benchmark for comparing language
 models as reasoners, coding workers, and safe handoff agents. Point it at one or more
@@ -222,7 +222,7 @@ configurations only on an exact shared scenario fingerprint. Pairwise analysis s
 within-configuration repeat noise and resamples whole scenarios for a deterministic 95%
 interval. It requires three shared exact versions and two complete attempts per side and
 labels evidence as stable, inconclusive, no stable separation, or insufficient.
-Analysis schema 8 also calculates the minimum additional complete attempts per
+Analysis schema 9 also calculates the minimum additional complete attempts per
 configuration,
 prioritizes scenarios by attainable pair-coverage gain per attempt, and requires a fresh
 cohort when invalid history cannot be repaired by appending attempts. Axis attribution

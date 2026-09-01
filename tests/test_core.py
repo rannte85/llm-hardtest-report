@@ -79,7 +79,9 @@ from llm_hardtest.public_pilots import (
     build_public_pilot_result, export_public_pilot_bundle,
     load_public_pilot_bundle, validate_public_pilot_result,
 )
-from llm_hardtest.round5 import PILOT_IDS, pilot_fingerprint, run_pilot
+from llm_hardtest.round5 import (
+    PILOT_IDS, fingerprint_registry, pilot_fingerprint, run_pilot,
+)
 from llm_hardtest.round12 import run as run_round12
 from llm_hardtest.round3 import _fields, _grade
 from llm_hardtest.round4 import run as run_round4
@@ -2026,7 +2028,7 @@ class SnapshotCache:
                     summary_row["grade"] = missing_axis_grade
             save_json(missing_axis_summary_path, missing_axis_summary)
             missing_axis_comparison = analyze_pilots(roots)["portfolio"]["pairwise"][0]
-        self.assertEqual(analysis["schema_version"], 8)
+        self.assertEqual(analysis["schema_version"], 9)
         self.assertEqual(portfolio["required_pilots"], [
             "q32_retry_compatibility", "q33_batch_delivery", "q34_config_overlay",
             "q35_snapshot_race", "q36_jsonl_stream", "q37_archive_boundary",
@@ -2396,6 +2398,64 @@ class SnapshotCache:
             with self.assertRaisesRegex(ValueError, "scenario fingerprint"):
                 analyze_pilots([root])
 
+    def test_round_five_analysis_accepts_trusted_historical_fingerprint(self):
+        historical = (
+            "sha256:1186a977c1b4264fcf47497c027299b84f627ae1308f6488d85cfa34d1443679")
+        with tempfile.TemporaryDirectory() as tmp:
+            root = run_pilot(
+                self._config(), Path(tmp), ["m"], 1,
+                agent_factory=lambda model, run: self.FakeAgent(
+                    pilot_id="q41_async_fanout"),
+                pilot_id="q41_async_fanout")
+            summary_path = root / "pilot_summary.json"
+            summary = load_json(summary_path)
+            summary["pack"] = historical
+            save_json(summary_path, summary)
+            analysis = analyze_pilots([root])
+        self.assertEqual(analysis["schema_version"], 9)
+        self.assertEqual(analysis["groups"][0]["pack"], historical)
+        self.assertEqual(
+            analysis["groups"][0]["fingerprint_verification"],
+            ["release-registry"])
+
+    def test_round_five_analysis_never_pools_current_and_historical_versions(self):
+        historical = (
+            "sha256:1186a977c1b4264fcf47497c027299b84f627ae1308f6488d85cfa34d1443679")
+        with tempfile.TemporaryDirectory() as tmp:
+            roots = []
+            for name in ("current", "historical"):
+                root = run_pilot(
+                    self._config(), Path(tmp) / name, ["m"], 1,
+                    agent_factory=lambda model, run: self.FakeAgent(
+                        pilot_id="q41_async_fanout"),
+                    pilot_id="q41_async_fanout")
+                roots.append(root)
+            summary_path = roots[1] / "pilot_summary.json"
+            summary = load_json(summary_path)
+            summary["pack"] = historical
+            save_json(summary_path, summary)
+            analysis = analyze_pilots(roots)
+        self.assertEqual(len(analysis["groups"]), 2)
+        self.assertEqual({group["pack"] for group in analysis["groups"]}, {
+            pilot_fingerprint("q41_async_fanout"), historical})
+        self.assertEqual(
+            analysis["portfolio"]["configurations"][0]["pack_ambiguous_pilots"],
+            ["q41_async_fanout"])
+
+    def test_round_five_release_registry_is_complete_and_rejects_duplicates(self):
+        registry = fingerprint_registry()
+        for pilot_id in PILOT_IDS:
+            self.assertIn(
+                pilot_fingerprint(pilot_id),
+                {entry["fingerprint"] for entry in registry["pilots"][pilot_id]})
+        with tempfile.TemporaryDirectory() as tmp:
+            malformed = json.loads(json.dumps(registry))
+            malformed["pilots"][PILOT_IDS[0]].append(
+                malformed["pilots"][PILOT_IDS[0]][0])
+            save_json(Path(tmp) / "fingerprint_registry.json", malformed)
+            with self.assertRaisesRegex(ValueError, "duplicate.*fingerprint"):
+                fingerprint_registry(Path(tmp))
+
     def test_round_five_stops_on_preapproval_edit(self):
         with tempfile.TemporaryDirectory() as tmp:
             agent = self.FakeAgent("early-edit")
@@ -2680,7 +2740,7 @@ class PilotAnalysisTests(unittest.TestCase):
             labeled_text = labeled.read_text(encoding="utf-8")
             machine_payload = json.loads(machine.read_text(encoding="utf-8"))
         self.assertEqual(machine_payload, analysis)
-        self.assertEqual(machine_payload["schema_version"], 8)
+        self.assertEqual(machine_payload["schema_version"], 9)
         self.assertIn("### Evidence collection plan", default_text)
         self.assertIn("### Shared-scenario directional advantage", default_text)
         self.assertIn("Expected / tail", default_text)

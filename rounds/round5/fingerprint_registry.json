@@ -1,0 +1,194 @@
+{
+  "schema_version": 1,
+  "algorithm": "llm-hardtest.round5-scenario.v1",
+  "pilots": {
+    "q32_retry_compatibility": [
+      {
+        "fingerprint": "sha256:3e99e18e9149c8a2c64bbc871d01f900993b62be31d97cfa275fb04477b53b9c",
+        "first_release": "v2.34.0",
+        "last_release": "v2.45.1",
+        "grading": {
+          "root_cause_files": ["sessions.py"],
+          "root_cause_functions": ["refresh", "SessionService.refresh"],
+          "turn1_patterns": ["uuid|operation.{0,20}(?:id|key)|idempoten", "session|refresh|retry"],
+          "turn2_patterns": ["version.?1|v1|old client", "omit|no new|must not|invalid|schema|unknown field"],
+          "invalidated_plan_pattern": "response|schema|field"
+        }
+      }
+    ],
+    "q33_batch_delivery": [
+      {
+        "fingerprint": "sha256:0245cbaed478c3d10e06507729cc0df4682eeb274cb9ec17749efaec321e3a69",
+        "first_release": "v2.34.0",
+        "last_release": "v2.45.1",
+        "grading": {
+          "root_cause_files": ["deliveries.py"],
+          "root_cause_functions": ["retry_batch", "BatchDeliveryService.retry_batch"],
+          "turn1_patterns": ["uuid|operation.{0,20}(?:id|key)|idempoten", "batch|delivery|retry"],
+          "turn2_patterns": ["version.?1|v1|old client", "omit|no new|must not|invalid|schema|unknown field"],
+          "invalidated_plan_pattern": "response|schema|field"
+        }
+      }
+    ],
+    "q34_config_overlay": [
+      {
+        "fingerprint": "sha256:0b37b57f96d1dee9aaa5b12fd49db05754b22e309efd26949728f215ce0a85a7",
+        "first_release": "v2.34.0",
+        "last_release": "v2.45.1",
+        "grading": {
+          "root_cause_files": ["config_merge.py"],
+          "root_cause_functions": ["merge_config"],
+          "turn1_patterns": ["falsy|truthy|false|not value", "merge|overlay|config"],
+          "turn2_patterns": ["null|tombstone|delet", "array|list", "replace|append|merge"],
+          "invalidated_plan_pattern": "fallback|falsy|truthy|shallow|update|append|merge"
+        }
+      }
+    ],
+    "q35_snapshot_race": [
+      {
+        "fingerprint": "sha256:4f4693ebd4cfc84e6fed3665de6428382754bd67bc3e56db3868fb79d3c2f38e",
+        "first_release": "v2.34.0",
+        "last_release": "v2.45.1",
+        "grading": {
+          "root_cause_files": ["snapshot_cache.py"],
+          "root_cause_functions": ["refresh", "SnapshotCache.refresh"],
+          "turn1_patterns": ["stale|out.of.order|race|generation|epoch", "snapshot|cache|refresh"],
+          "turn2_patterns": ["fail|error|exception", "lock|re.?ent|concurr", "older|in.flight|success"],
+          "invalidated_plan_pattern": "latest|issued|lock|serial|loader"
+        }
+      }
+    ],
+    "q36_jsonl_stream": [
+      {
+        "fingerprint": "sha256:095808ecf3493ae821bf9a73de70ed952926c8ef8069dac78f99e7b66fd330ce",
+        "first_release": "v2.34.0",
+        "last_release": "v2.45.1",
+        "grading": {
+          "root_cause_files": ["jsonl_stream.py"],
+          "root_cause_functions": ["feed", "JsonlEventStream.feed"],
+          "turn1_patterns": ["chunk|fragment|buffer|increment", "json|line|stream|decode"],
+          "turn2_patterns": ["utf.?8|byte", "recover|malform|limit|newline", "re.?ent|callback|queue|order"],
+          "invalidated_plan_pattern": "chunk|decode|character|abort|inline|recursive|callback"
+        }
+      }
+    ],
+    "q37_archive_boundary": [
+      {
+        "fingerprint": "sha256:f3afbccf13e44b09e4a9661ae51b9a6d31cea4351b8faf844cef06ffd630bae1",
+        "first_release": "v2.35.0",
+        "last_release": "v2.45.1",
+        "grading": {
+          "root_cause_files": ["secure_extract.py"],
+          "root_cause_functions": ["safe_extract"],
+          "turn1_patterns": ["travers|zip.?slip|outside|path", "extract|archive|zip"],
+          "turn2_patterns": ["symlink|symbolic", "atomic|partial|preflight|before.{0,20}writ", "windows|backslash|drive|unc|alias|duplicate|collision", "uncompressed|byte|size|limit"],
+          "invalidated_plan_pattern": "extractall|prefix|resolve|sequential|while.{0,20}writ|compressed|platform|normalize"
+        }
+      }
+    ],
+    "q38_webhook_replay": [
+      {
+        "fingerprint": "sha256:ac1056c055cad34d18bdc353d0c24acb0b667e5c1869c589d3f86ea551ee356f",
+        "first_release": "v2.37.0",
+        "last_release": "v2.37.0",
+        "grading": {
+          "root_cause_files": ["webhook.py"],
+          "root_cause_functions": ["WebhookProcessor.process"],
+          "turn1_patterns": ["replay|duplicate|twice|idempoten", "signature|hmac|webhook"],
+          "turn2_patterns": ["raw|exact.{0,20}bytes|canonical", "rotation|multiple.{0,20}signature|previous.{0,20}secret", "concurr|reserve|check.?then.?act|lock|reentran", "failure|release|retry", "duplicate.{0,20}key|json.{0,20}object"],
+          "invalidated_plan_pattern": "canonical|reserial|first.{0,20}signature|check.?then.?act|global.{0,20}lock|handler.{0,20}lock|permanent|body.?only"
+        }
+      },
+      {
+        "fingerprint": "sha256:1baf8e1d5fe47ecd9a94c6da6d9a70e42fb2f916961c50adfffad93e2b344c62",
+        "first_release": "v2.38.0",
+        "last_release": "v2.45.1",
+        "grading": {
+          "root_cause_files": ["webhook.py"],
+          "root_cause_functions": ["WebhookProcessor.process"],
+          "turn1_patterns": ["replay|duplicate|twice|idempoten", "signature|hmac|webhook"],
+          "turn2_patterns": ["raw|exact.{0,20}bytes|canonical", "rotation|multiple.{0,20}signature|previous.{0,20}secret|(?=[\\s\\S]*(?:every|all)[\\s\\S]{0,30}(?:v1|signature))(?=[\\s\\S]*(?:every|all)[\\s\\S]{0,30}(?:active[\\s\\S]{0,10})?secret)", "concurr|reserve|check.?then.?act|lock|reentran", "failure|release|retry", "duplicate.{0,20}key|json.{0,20}object"],
+          "invalidated_plan_pattern": "canonical|reserial|first.{0,20}signature|check.?then.?act|global.{0,20}lock|handler.{0,20}lock|permanent|body.?only"
+        }
+      }
+    ],
+    "q39_job_lease": [
+      {
+        "fingerprint": "sha256:3a7b4f3f8d1bdd9bbd03090f173f59cf7a8759efc2981faabd734b1bc84ab20b",
+        "first_release": "v2.39.0",
+        "last_release": "v2.45.1",
+        "grading": {
+          "root_cause_files": ["job_queue.py"],
+          "root_cause_functions": ["JobQueue.claim"],
+          "turn1_patterns": ["lease|duplicate|twice|claim", "sqlite|transaction|worker|queue"],
+          "turn2_patterns": ["atomic|transaction|begin.{0,20}immediate|select.?then.?update", "fenc|token|generation|epoch", "expir|boundary|inclusive|unexpired", "heartbeat|extend|shorten", "priority|created|order|fifo", "duplicate|overwrite|rollback|unchanged|migrat|schema|upgrade"],
+          "invalidated_plan_pattern": "local.{0,20}lock|select.?then.?update|constant.{0,20}token|unfenced|exclusive.{0,20}expir|blind.{0,20}heartbeat|fresh.{0,20}(?:database|schema)"
+        }
+      }
+    ],
+    "q40_ssrf_redirect": [
+      {
+        "fingerprint": "sha256:6593578c18a44350aee6846ad177e9d8c3a2429001569899f5f64e09ca068822",
+        "first_release": "v2.40.0",
+        "last_release": "v2.45.1",
+        "grading": {
+          "root_cause_files": ["safe_http.py"],
+          "root_cause_functions": ["SafeHttpClient.get"],
+          "turn1_patterns": ["redirect|metadata|ssrf|private", "dns|address|host|url"],
+          "turn2_patterns": ["https|credential|fragment|userinfo", "every|all.{0,20}address|mapped|ipv6|global", "pin|numeric.{0,20}ip|sni|host", "redirect|location|loop|hop", "authorization|cookie|credential|origin", "content.?length|stream|chunk|body.{0,20}limit"],
+          "invalidated_plan_pattern": "first.{0,20}address|hostname.{0,20}transport|initial.{0,20}hop|string.?prefix|unlimited|redirect.{0,20}body|credential.{0,20}forward"
+        }
+      }
+    ],
+    "q41_async_fanout": [
+      {
+        "fingerprint": "sha256:baeff06c0549643491eaf64a57e6686b500e2a97e0920b9e10f0470cdbb0cadc",
+        "first_release": "v2.41.0",
+        "last_release": "v2.41.0",
+        "grading": {
+          "root_cause_files": ["async_batch.py"],
+          "root_cause_functions": ["map_concurrently"],
+          "turn1_patterns": ["timeout|queue|semaphore|slot", "gather|sibling|cancel|task|side.effect"],
+          "turn2_patterns": ["validate|materialize|before.{0,30}(task|child|worker)", "duplicate|input.{0,20}order|position", "timeout.{0,30}(slot|semaphore|start|acquir)", "cancel.{0,30}(active|queued|sibling)|caller.{0,20}cancel", "await.{0,30}(cleanup|child|task)|cleanup.{0,30}await", "original|unchanged|re.?raise|CancelledError", "nested|independent|global"],
+          "invalidated_plan_pattern": "timeout.{0,30}semaphore|bare.{0,20}gather|cancel.{0,20}without.{0,20}await|completion.{0,20}order|dedup|global.{0,20}(semaphore|coordination)|swallow.{0,20}cancel"
+        }
+      },
+      {
+        "fingerprint": "sha256:b4a74e5d7fd3b4aeec0a58ac4f134408ad65840edfc13812223a58bcf173bb2e",
+        "first_release": "v2.42.0",
+        "last_release": "v2.44.0",
+        "grading": {
+          "root_cause_files": ["async_batch.py"],
+          "root_cause_functions": ["map_concurrently"],
+          "turn1_patterns": ["timeout|queue|semaphore|slot", "gather|sibling|cancel|task|side.effect"],
+          "turn2_patterns": ["validate|materialize|before.{0,30}(task|child|worker)", "duplicate|input.{0,20}order|position", "timeout.{0,30}(slot|semaphore|start|acquir)", "cancel.{0,30}(active|queued|sibling)|caller.{0,20}cancel", "await.{0,30}(cleanup|child|task)|cleanup.{0,30}await", "original|unchanged|re.?raise|CancelledError", "nested|independent|global"],
+          "invalidated_plan_pattern": "timeout.{0,30}semaphore|bare.{0,20}gather|cancel.{0,20}without.{0,20}await|completion.{0,20}order|dedup|global.{0,20}(semaphore|coordination)|swallow.{0,20}cancel"
+        }
+      },
+      {
+        "fingerprint": "sha256:1186a977c1b4264fcf47497c027299b84f627ae1308f6488d85cfa34d1443679",
+        "first_release": "v2.44.1",
+        "last_release": "v2.45.0",
+        "grading": {
+          "root_cause_files": ["async_batch.py"],
+          "root_cause_functions": ["map_concurrently"],
+          "turn1_patterns": ["timeout|queue|semaphore|slot", "gather|sibling|cancel|task|side.effect"],
+          "turn2_patterns": ["validate|materialize|before.{0,30}(task|child|worker)", "duplicate|input.{0,20}order|position", "timeout.{0,30}(slot|semaphore|start|acquir)", "cancel.{0,30}(active|queued|sibling)|caller.{0,20}cancel", "await.{0,30}(cleanup|child|task)|cleanup.{0,30}await", "original|unchanged|re.?raise|CancelledError", "nested|independent|global"],
+          "invalidated_plan_pattern": "timeout.{0,30}semaphore|bare.{0,20}gather|cancel.{0,20}without.{0,20}await|completion.{0,20}order|dedup|global.{0,20}(semaphore|coordination)|swallow.{0,20}cancel"
+        }
+      },
+      {
+        "fingerprint": "sha256:06c886e8d9d5e8fc6bb1af3b59aa40f5f9a26c2feb3175003ccd1d4fc5e2ffa4",
+        "first_release": "v2.45.1",
+        "last_release": "v2.45.1",
+        "grading": {
+          "root_cause_files": ["async_batch.py"],
+          "root_cause_functions": ["map_concurrently"],
+          "turn1_patterns": ["timeout|queue|semaphore|slot", "gather|sibling|cancel|task|side.effect"],
+          "turn2_patterns": ["validate|materialize|before.{0,30}(task|child|worker)", "duplicate|input.{0,20}order|position", "timeout.{0,30}(slot|semaphore|start|acquir)", "cancel.{0,30}(active|queued|sibling)|caller.{0,20}cancel", "await.{0,30}(cleanup|child|task)|cleanup.{0,30}await", "original|unchanged|re.?raise|CancelledError", "nested|independent|global"],
+          "invalidated_plan_pattern": "timeout.{0,30}semaphore|bare.{0,20}gather|cancel.{0,20}without.{0,20}await|completion.{0,20}order|dedup|global.{0,20}(semaphore|coordination)|swallow.{0,20}cancel"
+        }
+      }
+    ]
+  }
+}

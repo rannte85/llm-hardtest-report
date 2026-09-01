@@ -1,4 +1,4 @@
-# Release Notes — 2.45.1
+# Release Notes — 2.46.0
 
 This repository is ready to publish as `rannte85/llm-hardtest-report`. It contains no raw
 campaign outputs, credentials, local model files, personal filesystem paths, or
@@ -6,6 +6,23 @@ generated Python caches. The included Luna result is the allowlist-only public b
 not its prompts, responses, transcripts, account details, or local run directory.
 
 This release adds:
+
+- a strict bundled registry of every Round 5 scenario fingerprint published through
+  v2.45.1, together with the exact grading contract used by that fingerprint;
+- schema-9 analysis of trusted historical schema-2 evidence without reinstalling an
+  old package, with report accuracy recomputed against the historical contract;
+- continued rejection of arbitrary fingerprint relabelling and exact-version grouping
+  that prevents current and historical evidence from being pooled;
+- explicit fingerprint verification provenance in machine-readable and Markdown
+  analysis output;
+- adversarial controls for registry completeness, duplicate entries, unknown
+  fingerprints, historical q41 evidence, and mixed-version isolation.
+- all 258 source tests, the repository selftest, and clean wheel/sdist 2.46.0
+  installed selftests passing; both installed artifacts load the complete registry.
+
+## Previous release: 2.45.1
+
+The previous patch release added:
 
 - a 100× nominal scheduling margin for q41's queue-neutral public timeout control:
   5 ms workers, a 500 ms per-worker timeout, and 120 serialized items;

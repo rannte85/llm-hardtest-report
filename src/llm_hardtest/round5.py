@@ -27,18 +27,16 @@ REPORT_FIELDS = {
     "ROOT_CAUSE_FILE", "ROOT_CAUSE_FUNCTION", "INVALIDATED_PLAN",
     "FILES_CHANGED", "PUBLIC_TESTS", "CONFIDENCE", "REMAINING_RISKS",
 }
-def pilot_assets(pilot_id: str, base: Path | None = None) -> tuple[Path, Path, dict]:
-    if pilot_id not in PILOT_IDS:
-        raise ValueError(
-            f"unsupported Round 5 pilot ID: {pilot_id!r}; choose one of {PILOT_IDS}")
-    base = (base or repo_root() / "rounds/round5").resolve()
-    task_root = base if pilot_id == PILOT_ID else base / "tasks" / pilot_id
-    task = load_json(task_root / "task.json")
-    if task.get("id") != pilot_id:
-        raise ValueError(f"Round 5 task ID does not match its path: {task_root}")
-    grading = task.get("grading")
+FINGERPRINT_ALGORITHM = "llm-hardtest.round5-scenario.v1"
+
+
+def _validate_grading_contract(grading: object, pilot_id: str) -> dict:
     if not isinstance(grading, dict):
         raise ValueError(f"Round 5 task has no grading contract: {pilot_id}")
+    if set(grading) != {
+            "root_cause_files", "root_cause_functions", "turn1_patterns",
+            "turn2_patterns", "invalidated_plan_pattern"}:
+        raise ValueError(f"Round 5 grading contract has unexpected fields: {pilot_id}")
     for field in ("root_cause_files", "root_cause_functions", "turn1_patterns",
                   "turn2_patterns"):
         values = grading.get(field)
@@ -60,6 +58,19 @@ def pilot_assets(pilot_id: str, base: Path | None = None) -> tuple[Path, Path, d
         re.compile(invalidated)
     except re.error as exc:
         raise ValueError(f"Round 5 grading regex is invalid: {pilot_id}") from exc
+    return grading
+
+
+def pilot_assets(pilot_id: str, base: Path | None = None) -> tuple[Path, Path, dict]:
+    if pilot_id not in PILOT_IDS:
+        raise ValueError(
+            f"unsupported Round 5 pilot ID: {pilot_id!r}; choose one of {PILOT_IDS}")
+    base = (base or repo_root() / "rounds/round5").resolve()
+    task_root = base if pilot_id == PILOT_ID else base / "tasks" / pilot_id
+    task = load_json(task_root / "task.json")
+    if task.get("id") != pilot_id:
+        raise ValueError(f"Round 5 task ID does not match its path: {task_root}")
+    _validate_grading_contract(task.get("grading"), pilot_id)
     source, hidden = task_root / "repo", task_root / "hidden/hidden_tests.py"
     if not source.is_dir() or not hidden.is_file():
         raise ValueError(f"Round 5 task assets are incomplete: {pilot_id}")
@@ -87,11 +98,67 @@ def pilot_fingerprint(pilot_id: str, base: Path | None = None) -> str:
         files.append((relative.as_posix(), resolved))
     if not files:
         raise ValueError(f"Round 5 task has no fingerprinted assets: {pilot_id}")
-    digest = hashlib.sha256(b"llm-hardtest.round5-scenario.v1\0")
+    digest = hashlib.sha256((FINGERPRINT_ALGORITHM + "\0").encode("ascii"))
     for relative, path in sorted(set(files)):
         digest.update(relative.encode("utf-8") + b"\0")
         digest.update(path.read_bytes())
     return "sha256:" + digest.hexdigest()
+
+
+def fingerprint_registry(base: Path | None = None) -> dict:
+    """Load the strict allowlist of public Round 5 release contracts."""
+    base = (base or repo_root() / "rounds/round5").resolve()
+    registry = load_json(base / "fingerprint_registry.json")
+    if (not isinstance(registry, dict)
+            or set(registry) != {"schema_version", "algorithm", "pilots"}
+            or registry.get("schema_version") != 1
+            or registry.get("algorithm") != FINGERPRINT_ALGORITHM
+            or not isinstance(registry.get("pilots"), dict)
+            or set(registry["pilots"]) != set(PILOT_IDS)):
+        raise ValueError("invalid Round 5 release fingerprint registry")
+    global_fingerprints = set()
+    for pilot_id, entries in registry["pilots"].items():
+        if not isinstance(entries, list) or not entries:
+            raise ValueError(f"empty Round 5 fingerprint registry: {pilot_id}")
+        seen = set()
+        for entry in entries:
+            if (not isinstance(entry, dict)
+                    or set(entry) != {"fingerprint", "first_release", "last_release",
+                                          "grading"}
+                    or not isinstance(entry.get("fingerprint"), str)
+                    or re.fullmatch(r"sha256:[0-9a-f]{64}", entry["fingerprint"]) is None
+                    or not isinstance(entry.get("first_release"), str)
+                    or not isinstance(entry.get("last_release"), str)
+                    or re.fullmatch(r"v[0-9]+\.[0-9]+\.[0-9]+",
+                                    entry["first_release"]) is None
+                    or re.fullmatch(r"v[0-9]+\.[0-9]+\.[0-9]+",
+                                    entry["last_release"]) is None):
+                raise ValueError(f"invalid Round 5 fingerprint entry: {pilot_id}")
+            first = tuple(int(value) for value in entry["first_release"][1:].split("."))
+            last = tuple(int(value) for value in entry["last_release"][1:].split("."))
+            if first > last:
+                raise ValueError(f"reversed Round 5 release range: {pilot_id}")
+            if entry["fingerprint"] in seen:
+                raise ValueError(f"duplicate Round 5 fingerprint entry: {pilot_id}")
+            seen.add(entry["fingerprint"])
+            if entry["fingerprint"] in global_fingerprints:
+                raise ValueError("Round 5 fingerprint is assigned to multiple pilots")
+            global_fingerprints.add(entry["fingerprint"])
+            _validate_grading_contract(entry.get("grading"), pilot_id)
+    return registry
+
+
+def pilot_fingerprint_contract(pilot_id: str, fingerprint: str,
+                               base: Path | None = None) -> tuple[dict, str]:
+    """Return the grading contract for a current or trusted public fingerprint."""
+    _, _, task = pilot_assets(pilot_id, base)
+    if fingerprint == pilot_fingerprint(pilot_id, base):
+        return task["grading"], "installed-assets"
+    for entry in fingerprint_registry(base)["pilots"][pilot_id]:
+        if entry["fingerprint"] == fingerprint:
+            return entry["grading"], "release-registry"
+    raise ValueError(
+        f"pilot scenario fingerprint is not in the trusted release registry: {pilot_id}")
 
 
 def _hashes(root: Path) -> dict[str, str]:

@@ -448,6 +448,14 @@ def _next_pair_evidence(*, missing_left: list[str], missing_right: list[str],
             "pilot_ids": sorted(set(ambiguous) | set(mismatched)),
             "reason": "configurations must share one exact fingerprint per pilot",
         }
+    if invalid_pilots:
+        return {
+            "action": "RECOLLECT_CLEAN_COHORT",
+            "pilot_ids": invalid_pilots,
+            "reason": (
+                "transport-incomplete or authority-invalid attempts remain descriptive "
+                "evidence but must be excluded from a fresh inferential cohort"),
+        }
     missing = sorted(set(missing_left) | set(missing_right))
     if missing:
         return {
@@ -456,14 +464,6 @@ def _next_pair_evidence(*, missing_left: list[str], missing_right: list[str],
             "missing_on_left": missing_left,
             "missing_on_right": missing_right,
             "reason": "missing scenarios are never imputed",
-        }
-    if invalid_pilots:
-        return {
-            "action": "RECOLLECT_CLEAN_COHORT",
-            "pilot_ids": invalid_pilots,
-            "reason": (
-                "transport-incomplete or authority-invalid attempts remain descriptive "
-                "evidence but must be excluded from a fresh inferential cohort"),
         }
     if deficits:
         return {

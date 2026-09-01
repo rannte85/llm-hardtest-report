@@ -1255,3 +1255,27 @@ Acceptance checks:
 - Mixed fingerprints require manual alignment and do not report a false numeric total.
 - Any incomplete or authority-invalid history produces a two-attempt clean-cohort
   action that explicitly excludes invalid run directories.
+
+## Phase 42 — Current-fingerprint planner validation
+
+Goal: exercise schema-5 acquisition planning against real incomplete and complete q41
+evidence and remove any contradiction between pairwise and portfolio guidance.
+
+Deliverables:
+
+1. Run one current-fingerprint q41 attempt each with local E4B and GPT-5.6 Luna.
+2. Preserve raw evidence locally and verify exact scenario-fingerprint grouping.
+3. Require clean-cohort recovery to precede unrelated missing-scenario guidance when a
+   shared attempt is transport-incomplete or authority-invalid.
+4. Recompute the finite lower bound and verify the same priority in JSON and Markdown.
+
+Acceptance checks:
+
+- Both runs share current fingerprint
+  `sha256:b4a74e5d7fd3b4aeec0a58ac4f134408ad65840edfc13812223a58bcf173bb2e`.
+- E4B's invalid run remains descriptive and triggers a separate two-attempt clean
+  cohort; Luna requires one ordinary q41 repeat.
+- The total lower bound is 39 complete attempts and q41 ranks before every missing
+  scenario.
+- Pairwise and detailed collection-plan next actions both identify clean-cohort
+  recovery rather than contradictory missing-scenario collection.

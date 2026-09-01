@@ -5,6 +5,25 @@ out separately from harness features.
 
 ## Unreleased
 
+## 2.42.1 — 2026-09-01
+
+- Revalidated current q41 fingerprint
+  `sha256:b4a74e5d7fd3b4aeec0a58ac4f134408ad65840edfc13812223a58bcf173bb2e`
+  with one local E4B and one signed-in GPT-5.6 Luna attempt.
+- E4B hit the three-error unsupported-tool circuit breaker in turn 1 at the 2/4 public
+  and 0/10 held-back baseline. Luna completed cleanly, revised its plan, and reached
+  4/4 public and 8/10 held-back with an accurate report; queued siblings could still
+  start after timeout or worker failure before cancellation became observable.
+- Their descriptive eight-axis distance is 66.25% and remains
+  `INSUFFICIENT_EVIDENCE`; the schema-5 plan requires at least 39 additional complete
+  attempts across the two configurations and prioritizes q41.
+- Fixed pairwise next-evidence guidance to request `RECOLLECT_CLEAN_COHORT` before
+  unrelated missing scenarios when invalid shared history is present, matching the
+  detailed acquisition plan. Invalid directories remain descriptive but excluded from
+  the fresh inferential cohort.
+- All 249 source tests, five consecutive q41 control matrices, repository selftest,
+  and current-fingerprint live analysis pass locally.
+
 ## 2.42.0 — 2026-09-01
 
 - Added Round 5 analysis schema 5 with a deterministic evidence acquisition plan for

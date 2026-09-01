@@ -275,6 +275,17 @@ headroom. The behavior contract is unchanged, but the exact scenario fingerprint
 The v2.41 observations above are historical evidence and are not pooled with this exact
 version.
 
+On the current fingerprint, a new local E4B attempt hit the three-error unsupported-tool
+circuit breaker in turn 1 and retained the 2/4 public and 0/10 held-back baseline. A new
+signed-in GPT-5.6 Luna attempt completed all three turns with clean protocol and
+authority, revised its plan, and produced an accurate report at 4/4 public and 8/10
+held-back. Its implementation still allowed a queued sibling to start after either an
+item timeout or a worker failure before cancellation became observable. The observed
+eight-axis distance is 66.25% and remains `INSUFFICIENT_EVIDENCE`. Schema-5 analysis
+calculates a 39-complete-attempt lower bound across both configurations, prioritizing one
+additional clean Luna q41 repeat and a separate two-attempt clean E4B cohort before the
+nine missing scenarios. Raw evidence remains local, ignored, and uncommitted.
+
 On final q40 fingerprint
 `sha256:6593578c18a44350aee6846ad177e9d8c3a2429001569899f5f64e09ca068822`,
 one local E4B attempt hit the three-error unsupported-tool circuit breaker in turn 1

@@ -2547,11 +2547,15 @@ class PilotAnalysisTests(unittest.TestCase):
                 if row["model"] == "weak" and row["grade"]["attempt"] == 1:
                     row["grade"] = grade
             save_json(run / "pilot_summary.json", summary)
-            group = analyze_pilots([run])["groups"][0]
+            analysis = analyze_pilots([run])
+            group = analysis["groups"][0]
         weak = next(row for row in group["configurations"] if row["incomplete"] == 1)
         self.assertEqual(weak["public_pass_rate"], 0.25)
         self.assertEqual(weak["hidden_pass_rate"], round(6 / 9, 6))
         self.assertFalse(group["ready_for_manual_ambiguity_review"])
+        self.assertEqual(
+            analysis["portfolio"]["pairwise"][0]["next_evidence"]["action"],
+            "RECOLLECT_CLEAN_COHORT")
 
     def test_pilot_analysis_rejects_transcript_symlink_escape(self):
         with tempfile.TemporaryDirectory() as tmp:

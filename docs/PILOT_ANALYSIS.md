@@ -83,6 +83,12 @@ or mismatched versions, collect missing scenarios, add repeat attempts, replace 
 attempts or unobserved axes, replicate influential or noisy scenarios, or proceed to
 manual ambiguity review. Missing observations are never synthesized.
 
+For a pairwise summary, exact-version alignment is always first. Invalid shared history
+then takes priority over unrelated missing scenarios because appending attempts cannot
+repair its all-attempts gates; the report requests a fresh clean cohort. Missing
+scenarios, ordinary repeat deficits, and unobserved axes follow in that order. The
+detailed portfolio planner independently exposes every outstanding action and count.
+
 ## Evidence collection plan
 
 Schema 5 adds a finite lower-bound acquisition plan to every portfolio. For each exact

@@ -4,9 +4,9 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-**Current release: 2.42.0** — turns Round 5 evidence gaps into a finite, prioritized
-collection plan with exact per-configuration attempt counts and clean-cohort recovery
-when invalid history would otherwise make a coverage gate impossible to clear.
+**Current release: 2.42.1** — validates the finite Round 5 collection planner on the
+current q41 fingerprint and keeps pairwise next-evidence guidance consistent with its
+clean-cohort-first acquisition priority.
 
 LLM Hardtest Report is a local-first command-line benchmark for comparing language
 models as reasoners, coding workers, and safe handoff agents. Point it at one or more

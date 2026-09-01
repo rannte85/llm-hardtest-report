@@ -1,9 +1,25 @@
-# Release Notes — 2.42.0
+# Release Notes — 2.42.1
 
 This repository is ready to publish as `rannte85/llm-hardtest-report`. It contains no raw
 campaign outputs, credentials, local model files, personal filesystem paths, or
 generated Python caches. The included Luna result is the allowlist-only public bundle,
 not its prompts, responses, transcripts, account details, or local run directory.
+
+This maintenance release adds:
+
+- exact-current-fingerprint q41 smoke evidence from local E4B and signed-in GPT-5.6
+  Luna, retained locally rather than publishing raw transcripts;
+- an E4B turn-1 unsupported-tool circuit-breaker result at 2/4 public and 0/10
+  held-back, and a clean Luna result at 4/4 public and 8/10 held-back;
+- explicit identification of Luna's two remaining queued-sibling cancellation races;
+- a non-canonical 66.25% eight-axis distance and a 39-attempt lower-bound collection
+  plan that prioritizes q41 while refusing inference from one attempt per model;
+- pairwise `RECOLLECT_CLEAN_COHORT` guidance before unrelated missing scenarios when
+  shared invalid history would permanently poison all-attempts gates;
+- all 249 source tests, five consecutive q41 matrices, repository selftest, and
+  current-fingerprint live analysis passing locally.
+
+## Previous release: 2.42.0
 
 The release validation now also covers:
 

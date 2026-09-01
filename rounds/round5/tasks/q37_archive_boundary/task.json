@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "id": "q37_archive_boundary",
+  "title": "Archive extraction boundary with late alias and atomicity constraints",
+  "turns": [
+    {
+      "prompt": "A package import occasionally writes files outside its requested extraction directory when processing a ZIP uploaded by a tenant. Read README.md, reproduce the failure, identify the end-to-end cause, and propose the smallest fix. Do not edit files yet."
+    },
+    {
+      "prompt": "Security owners confirmed additional boundary rules: ZIP names may use Windows backslashes, drive prefixes, or UNC forms; symlink members and pre-existing symlink path components must be rejected; case/Unicode aliases, duplicate normalized paths, and file-directory collisions are invalid; the limit counts total uncompressed bytes; and any validation failure must leave the destination unchanged. Revise the plan and explicitly invalidate any extractall, string-prefix, validation-while-writing, compressed-size, or single-platform normalization proposal."
+    },
+    {
+      "prompt": "Approved: implement the smallest complete product fix, add deterministic regression tests if needed, run the complete public suite, and preserve operator_note.txt and all existing test authority."
+    }
+  ],
+  "grading": {
+    "root_cause_files": ["secure_extract.py"],
+    "root_cause_functions": ["safe_extract"],
+    "turn1_patterns": [
+      "travers|zip.?slip|outside|path",
+      "extract|archive|zip"
+    ],
+    "turn2_patterns": [
+      "symlink|symbolic",
+      "atomic|partial|preflight|before.{0,20}writ",
+      "windows|backslash|drive|unc|alias|duplicate|collision",
+      "uncompressed|byte|size|limit"
+    ],
+    "invalidated_plan_pattern": "extractall|prefix|resolve|sequential|while.{0,20}writ|compressed|platform|normalize"
+  }
+}

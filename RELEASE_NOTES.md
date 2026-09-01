@@ -1,4 +1,4 @@
-# Release Notes — 2.34.0
+# Release Notes — 2.35.0
 
 This repository is ready to publish as `rannte85/llm-hardtest-report`. It contains no raw
 campaign outputs, credentials, local model files, personal filesystem paths, or
@@ -6,6 +6,26 @@ generated Python caches. The included Luna result is the allowlist-only public b
 not its prompts, responses, transcripts, account details, or local run directory.
 
 The release validation now also covers:
+
+- `q37_archive_boundary`, a sixth long-horizon incident that requires complete
+  validation of untrusted ZIP metadata before any destination write;
+- Windows backslash, drive, and UNC aliases; POSIX and archive symlinks; case and
+  Unicode aliases; duplicate and file-directory collisions; uncompressed-byte limits;
+  existing-file protection; and protected-test authority;
+- a twelve-state control matrix where the complete implementation reaches 4/4 public
+  and 10/10 held-back, the baseline reaches 2/4 and 0/10, and ten plausible partial or
+  adversarial fixes remain public-green but fail held-back evidence;
+- q37 scenario-scoped fingerprints and q32–q37 portfolio coverage through execution,
+  analysis, public export, installed-package selftest, and explicit CI validation;
+- a fairness correction prompted by the first Luna smoke: conservative rejection of
+  redundant separators is accepted because the contract never requires that form;
+- exact-final-fingerprint E4B/Luna smoke evidence. E4B hit the three-error circuit
+  breaker in turn 1 and retained 2/4 public and 0/10 held-back. Luna completed with
+  clean protocol and authority, revised its plan, reached 4/4 and 10/10, reported
+  accurately, and was release-ready;
+- an 81.25% observed eight-axis distance that remains `INSUFFICIENT_EVIDENCE` because
+  E4B was incomplete and both configurations have only one attempt on one scenario;
+- 228 passing source tests plus repository selftest;
 
 - a live transcript circuit breaker that permits up to two recoverable unsupported
   tool calls but terminates the spawned Round 5 Codex process group on the third;

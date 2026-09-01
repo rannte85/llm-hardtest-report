@@ -5,6 +5,31 @@ out separately from harness features.
 
 ## Unreleased
 
+## 2.35.0 — 2026-09-01
+
+- Added `q37_archive_boundary`, a sixth Round 5 scenario for adversarial ZIP member
+  names, cross-platform traversal aliases, archive and destination symlinks,
+  case/Unicode alias collisions, and validation-before-write atomicity.
+- Added four public and ten held-back checks plus baseline, complete, and ten
+  public-green adversarial controls. The complete control reaches 4/4 and 10/10; the
+  baseline reaches 2/4 and 0/10.
+- Separated lexical-only, drive-prefix, symlink-member, pre-existing-symlink,
+  sequential-write, alias-deduplication, file-directory-collision, compressed-size,
+  overwrite, and test-authority partial fixes.
+- Integrated q37 into scenario fingerprints, six-scenario portfolio coverage, CLI
+  selection, anonymous analysis, public export, package assets, selftest, and the
+  Linux/macOS CI matrix.
+- Removed an ambiguous held-back expectation discovered by the first Luna smoke run:
+  safely rejecting a redundant `a//b` path is no longer penalized when the contract
+  does not require accepting it.
+- On final fingerprint `sha256:f3afbccf13e44b09e4a9661ae51b9a6d31cea4351b8faf844cef06ffd630bae1`,
+  local E4B was automatically stopped after three unsupported calls in turn 1 and
+  retained the 2/4·0/10 baseline. GPT-5.6 Luna completed safely, revised its plan,
+  reached 4/4·10/10, produced an accurate report, and was release-ready.
+- Their observed eight-axis distance is 81.25%, explicitly insufficient for inference
+  with one incomplete attempt per configuration on one scenario. All 228 source tests
+  and repository selftest pass; raw model evidence remains ignored and uncommitted.
+
 ## 2.34.0 — 2026-09-01
 
 - Added a streaming Round 5 Codex transcript circuit breaker. One or two unsupported

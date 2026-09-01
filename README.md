@@ -4,10 +4,10 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-**Current release: 2.34.0** — adds a bounded Round 5 protocol circuit breaker. One or
-two unsupported Codex tool calls may recover, while a third in the same agent turn
-terminates only that spawned process group and records an explicit, analyzable stop
-reason instead of consuming the full timeout.
+**Current release: 2.35.0** — adds a sixth Round 5 incident for adversarial ZIP
+extraction boundaries. It separates complete cross-platform preflight from ten
+public-green partial fixes across traversal aliases, symlinks, path collisions,
+uncompressed-size limits, overwrite safety, atomicity, and test authority.
 
 LLM Hardtest Report is a local-first command-line benchmark for comparing language
 models as reasoners, coding workers, and safe handoff agents. Point it at one or more
@@ -43,12 +43,13 @@ rounds all use the **LLM Hardtest** name.
 | 3 | Structured diagnosis and multi-turn engineering | Deterministic checks for Q21–Q24; Q25 is queued for review | OpenAI-compatible chat or Codex CLI |
 | 4 | Six repository-based coding-agent tasks | Public/held-back tests, integrity gates, handoff and release signals | Codex CLI and a `/responses`-capable provider |
 
-Five selectable Round 5 research pilots are included for evolving incident evidence,
+Six selectable Round 5 research pilots are included for evolving incident evidence,
 retry idempotency, late compatibility constraints, and public-green partial fixes.
 They are deliberately excluded from canonical campaign scores until multi-model
 stability and grader-ambiguity reviews are complete. Use `pilot round5 --pilot-id`
 with `q32_retry_compatibility` (the default), `q33_batch_delivery`,
-`q34_config_overlay`, `q35_snapshot_race`, or `q36_jsonl_stream` to collect three-turn research evidence
+`q34_config_overlay`, `q35_snapshot_race`, `q36_jsonl_stream`, or
+`q37_archive_boundary` to collect three-turn research evidence
 without presenting it as a leaderboard score. See
 [Round 5 Pilot](docs/ROUND5_PILOT.md).
 
@@ -66,7 +67,7 @@ fully reconciled implementation. Q31 tests follow-through after explicit approva
 
 - Python 3.10 or newer
 - A running OpenAI-compatible server for direct local-model calls
-- For Round 4 only: [Codex CLI](https://github.com/openai/codex) on `PATH` and a server
+- For Round 4 and Round 5: [Codex CLI](https://github.com/openai/codex) on `PATH` and a server
   that supports the OpenAI Responses API
 
 No model weights or server are installed, started, stopped, or evicted by this tool.
@@ -210,7 +211,7 @@ llm-hardtest pilot analyze runs/pilot-a runs/pilot-b --output round5-analysis.md
 It compares repeated outcome distance within one configuration against distance
 between configurations across transport completion, authority safety, hypothesis
 revision, public and held-back tests, release readiness, report accuracy, and tool
-protocol compliance. It also builds a configuration portfolio across q32–q36, keeps
+protocol compliance. It also builds a configuration portfolio across q32–q37, keeps
 missing scenarios unobserved, exposes the worst observed held-back rate, and compares
 configurations only on an exact shared scenario fingerprint. Pairwise analysis subtracts
 within-configuration repeat noise and resamples whole scenarios for a deterministic 95%

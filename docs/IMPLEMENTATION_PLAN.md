@@ -1017,3 +1017,38 @@ Acceptance checks:
   no raw prompts, outputs, paths, or credentials enter public bundles.
 - Source tests, repository selftest, installed-package validation, a bounded live E4B
   smoke check, and the Linux/macOS CI matrix pass.
+
+## Phase 35 — Adversarial archive boundary hard test
+
+Goal: add a security and preflight-atomicity capability axis that cannot be passed by
+the common `resolve()`/string-prefix ZIP-slip patch or by validating members only as
+they are written.
+
+Deliverables:
+
+1. Add `q37_archive_boundary` with a visible tenant ZIP boundary escape and late
+   cross-platform, symlink, alias, collision, size, overwrite, and atomicity rules.
+2. Require full archive and destination preflight before the first write, normalize
+   platform-independent names, reject unsafe member types, and count uncompressed
+   bytes.
+3. Build baseline, correct, backslash-only, drive-prefix, archive-symlink,
+   destination-symlink, sequential-write, alias, collision, compressed-size,
+   overwrite, and authority-tamper controls.
+4. Integrate q37 with isolated fingerprints, six-scenario portfolios, public pilot
+   export, package data, selftest, documentation, and CI.
+5. Run one exact-fingerprint attempt each with local E4B and signed-in GPT-5.6 Luna,
+   retaining raw evidence locally and treating the pair as a smoke observation only.
+
+Acceptance checks:
+
+- The baseline fails visible traversal checks and reaches 2/4 public and 0/10
+  held-back; the complete implementation reaches 4/4 and 10/10.
+- Every incomplete or adversarial control remains 4/4 public but fails at least one
+  distinct held-back boundary or authority check.
+- A late invalid member leaves an existing destination unchanged, symlink paths never
+  escape, platform aliases are rejected deterministically, and compressed bytes cannot
+  satisfy the uncompressed limit.
+- q37 changes only its own scenario fingerprint, and portfolio readiness requires two
+  exact-version attempts per configuration across q32–q37.
+- Source tests, repository selftest, installed-package validation, live E4B/Luna smoke
+  checks, and the Linux/macOS CI matrix pass without publishing raw evidence.

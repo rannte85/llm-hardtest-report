@@ -991,7 +991,7 @@ class PackTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[1]
         metadata = [validate_pack(root / "rounds" / f"round{number}")
                     for number in (1, 2, 3, 4, 5)]
-        self.assertEqual([item["unit_count"] for item in metadata], [20, 20, 5, 6, 5])
+        self.assertEqual([item["unit_count"] for item in metadata], [20, 20, 5, 6, 6])
 
     def test_round_five_scenario_fingerprints_are_isolated(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1020,6 +1020,9 @@ class PackTests(unittest.TestCase):
             self.assertEqual(
                 pilot_fingerprint("q36_jsonl_stream", root),
                 before["q36_jsonl_stream"])
+            self.assertEqual(
+                pilot_fingerprint("q37_archive_boundary", root),
+                before["q37_archive_boundary"])
             cache = root / "tasks/q33_batch_delivery/repo/__pycache__/ignored.pyc"
             cache.parent.mkdir(exist_ok=True)
             cache.write_bytes(b"generated")
@@ -1057,6 +1060,7 @@ class RoundFiveResearchTests(unittest.TestCase):
                     "q34_config_overlay": "config_merge.py",
                     "q35_snapshot_race": "snapshot_cache.py",
                     "q36_jsonl_stream": "jsonl_stream.py",
+                    "q37_archive_boundary": "secure_extract.py",
                 }
                 filename = filenames[self.pilot_id]
                 path = workdir / filename
@@ -1125,7 +1129,7 @@ class SnapshotCache:
             return self._values.get(key)
 '''
                 else:
-                    verifier = (repo_root() / "rounds/round5/tasks/q36_jsonl_stream"
+                    verifier = (repo_root() / "rounds/round5/tasks" / self.pilot_id
                                 / "verify_pilot.py")
                     text = runpy.run_path(str(verifier))["CORRECT"]
                 path.write_text(text, encoding="utf-8")
@@ -1139,6 +1143,9 @@ class SnapshotCache:
                 elif self.pilot_id == "q36_jsonl_stream":
                     content = ("The JSONL stream decodes each network chunk independently "
                                "instead of buffering fragmented JSON line bytes.")
+                elif self.pilot_id == "q37_archive_boundary":
+                    content = ("The ZIP extraction trusts member-controlled paths, enabling "
+                               "path traversal outside the requested archive destination.")
                 else:
                     subject = ("session retry"
                                if self.pilot_id == "q32_retry_compatibility"
@@ -1158,6 +1165,12 @@ class SnapshotCache:
                     content = ("UTF-8 may split across chunks, byte limits recover at newline, "
                                "and reentrant callbacks require a serial queue; this invalidates "
                                "per-chunk decode, character limits, abort, and inline callbacks.")
+                elif self.pilot_id == "q37_archive_boundary":
+                    content = ("Symlinks, Windows backslash and drive aliases, duplicate and "
+                               "file-directory collisions require atomic preflight before writing; "
+                               "the byte limit must use uncompressed size. This invalidates "
+                               "extractall, string-prefix resolve, sequential writes, compressed "
+                               "size checks, and single-platform normalization.")
                 else:
                     content = ("Version-1 old clients reject unknown fields, so any new response "
                                "schema field is invalid and must be omitted.")
@@ -1168,6 +1181,7 @@ class SnapshotCache:
                     "q34_config_overlay": "config_merge.py",
                     "q35_snapshot_race": "snapshot_cache.py",
                     "q36_jsonl_stream": "jsonl_stream.py",
+                    "q37_archive_boundary": "secure_extract.py",
                 }
                 functions = {
                     "q32_retry_compatibility": "SessionService.refresh",
@@ -1175,6 +1189,7 @@ class SnapshotCache:
                     "q34_config_overlay": "merge_config",
                     "q35_snapshot_race": "SnapshotCache.refresh",
                     "q36_jsonl_stream": "JsonlEventStream.feed",
+                    "q37_archive_boundary": "safe_extract",
                 }
                 filename, function = filenames[self.pilot_id], functions[self.pilot_id]
                 invalidated = {
@@ -1184,6 +1199,9 @@ class SnapshotCache:
                     "q35_snapshot_race": "a latest-issued guard and lock around loader",
                     "q36_jsonl_stream": ("per-chunk decode, character limits, abort-on-error, "
                                          "and inline recursive callbacks"),
+                    "q37_archive_boundary": ("extractall, string-prefix resolve, sequential "
+                                              "writes, compressed-size checks, and "
+                                              "single-platform normalization"),
                 }[self.pilot_id]
                 content = (
                     "=== PILOT REPORT ===\n"
@@ -1344,6 +1362,34 @@ class SnapshotCache:
         self.assertEqual(public["models"][0]["attempts"][0]["hidden"]["passed"], 10)
         self.assertEqual(warnings, [])
 
+    def test_round_five_archive_boundary_scenario_is_selectable_and_graded(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            agent = self.FakeAgent(pilot_id="q37_archive_boundary")
+            root = run_pilot(
+                self._config(), Path(tmp), ["m"], 1,
+                agent_factory=lambda model, run: agent,
+                pilot_id="q37_archive_boundary")
+            summary = load_json(root / "pilot_summary.json")
+            grade = summary["attempts"][0]["grade"]
+            attempt_exists = (root / "m/round5/q37_archive_boundary/attempt-1"
+                              / "research_grade.json").is_file()
+            analysis = analyze_pilots([root])
+            public, warnings = build_public_pilot_result(root)
+        self.assertTrue(attempt_exists)
+        self.assertEqual(summary["pilot_id"], "q37_archive_boundary")
+        self.assertEqual(grade["public"], {"passed": 4, "total": 4,
+                                           "timed_out": False})
+        self.assertEqual(grade["hidden"], {"passed": 10, "total": 10,
+                                           "timed_out": False})
+        self.assertTrue(grade["evidence_revision_observed"])
+        self.assertTrue(grade["release_ready"])
+        self.assertTrue(grade["final_report"]["accurate"])
+        self.assertEqual(analysis["groups"][0]["pilot_id"],
+                         "q37_archive_boundary")
+        self.assertEqual(public["pilot"]["id"], "q37_archive_boundary")
+        self.assertEqual(public["models"][0]["attempts"][0]["hidden"]["passed"], 10)
+        self.assertEqual(warnings, [])
+
     def test_round_five_portfolio_requires_repeated_exact_scenario_coverage(self):
         with tempfile.TemporaryDirectory() as tmp:
             config = self._config()
@@ -1379,18 +1425,18 @@ class SnapshotCache:
         self.assertEqual(analysis["schema_version"], 4)
         self.assertEqual(portfolio["required_pilots"], [
             "q32_retry_compatibility", "q33_batch_delivery", "q34_config_overlay",
-            "q35_snapshot_race", "q36_jsonl_stream",
+            "q35_snapshot_race", "q36_jsonl_stream", "q37_archive_boundary",
         ])
         self.assertEqual(len(portfolio["configurations"]), 2)
         for row in portfolio["configurations"]:
-            self.assertEqual(row["attempts"], 10)
+            self.assertEqual(row["attempts"], 12)
             self.assertEqual(row["missing_pilots"], [])
             self.assertEqual(row["pack_ambiguous_pilots"], [])
             self.assertEqual(row["worst_case_hidden_pass_rate"], 1.0)
             self.assertTrue(row["ready_for_cross_scenario_interpretation"])
         comparison = portfolio["pairwise"][0]
         self.assertEqual(comparison["shared_pilots"], portfolio["required_pilots"])
-        self.assertEqual(comparison["shared_scenario_versions"], 5)
+        self.assertEqual(comparison["shared_scenario_versions"], 6)
         self.assertEqual(comparison["mean_distance"], 0.0)
         adjusted = comparison["repeat_adjusted_separation"]
         self.assertEqual(adjusted["status"], "NO_STABLE_SEPARATION")
@@ -1459,7 +1505,8 @@ class SnapshotCache:
                     agent_factory=lambda model, run, selected=pilot_id: self.FakeAgent(
                         mode=("correct" if model["key"] == "m"
                               or selected in {"q32_retry_compatibility",
-                                              "q36_jsonl_stream"} else "baseline"),
+                                              "q36_jsonl_stream",
+                                              "q37_archive_boundary"} else "baseline"),
                         pilot_id=selected),
                     pilot_id=pilot_id))
             comparison = analyze_pilots(roots)["portfolio"]["pairwise"][0]
@@ -1469,6 +1516,7 @@ class SnapshotCache:
         self.assertEqual(robustness["status"], "SENSITIVE_TO_SINGLE_SCENARIO")
         self.assertNotIn("q32_retry_compatibility", robustness["influential_pilot_ids"])
         self.assertNotIn("q36_jsonl_stream", robustness["influential_pilot_ids"])
+        self.assertNotIn("q37_archive_boundary", robustness["influential_pilot_ids"])
         self.assertTrue(robustness["influential_pilot_ids"])
         self.assertEqual(
             comparison["next_evidence"]["action"], "REPLICATE_INFLUENTIAL_SCENARIOS")
@@ -1716,7 +1764,7 @@ class PilotAnalysisTests(unittest.TestCase):
             self.assertEqual(
                 row["missing_pilots"], [
                     "q33_batch_delivery", "q34_config_overlay", "q35_snapshot_race",
-                    "q36_jsonl_stream",
+                    "q36_jsonl_stream", "q37_archive_boundary",
                 ])
             self.assertFalse(row["ready_for_cross_scenario_interpretation"])
         comparison = analysis["portfolio"]["pairwise"][0]

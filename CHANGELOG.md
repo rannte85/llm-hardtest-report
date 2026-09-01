@@ -5,6 +5,22 @@ out separately from harness features.
 
 ## Unreleased
 
+## 2.50.0 — 2026-09-01
+
+- Added a fail-closed discrete-resolution audit to every eligible paired objective.
+  It derives the best attainable exact two-sided sign-flip p-value from non-zero
+  independent pairs, applies Holm's strictest family multiplier, and reports the
+  conservative additional non-zero pair floor needed to make rejection possible.
+- Added `RESOLUTION_LIMITED` so an unattainable p-value grid is no longer presented as
+  ordinary inconclusive evidence. Five aligned pairs correctly expose raw p floor
+  0.0625; two six-pair objectives expose strictest Holm floor 0.0625.
+- Zero-difference pairs cannot improve inference resolution. The report explicitly
+  discloses the sign-flip-aligned numerical effect tolerance and states that its
+  additional-pair count is neither power nor a guarantee of significance or practical
+  importance.
+- Added immutable paired-comparison schema v5 and updated Markdown, canonical JSON,
+  verified SQLite, and CLI parity coverage while preserving schemas v1–v4.
+
 ## 2.49.0 — 2026-09-01
 
 - Added Bonferroni simultaneous paired-bundle bootstrap intervals across every tested

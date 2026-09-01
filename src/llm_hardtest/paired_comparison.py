@@ -13,9 +13,10 @@ from .community_results import (
 from .public_results import normalized_serving_environment
 
 
-PAIRED_COMPARISON_SCHEMA_VERSION = 4
+PAIRED_COMPARISON_SCHEMA_VERSION = 5
 SIGN_FLIP_EXACT_LIMIT = 65_536
 SIGN_FLIP_MONTE_CARLO_SAMPLES = 20_000
+SIGN_FLIP_ABSOLUTE_TOLERANCE = 1e-12
 FAMILYWISE_ALPHA = 0.05
 MIN_EXPECTED_BOOTSTRAP_TAIL_DRAWS = 100
 
@@ -89,7 +90,7 @@ def _bundle_observations(submissions: list[dict]) -> list[dict]:
 def _sign_flip_test(effects: list[float], seed: str) -> dict:
     observed = abs(statistics.mean(effects))
     assignments = 2 ** len(effects)
-    tolerance = 1e-12
+    tolerance = SIGN_FLIP_ABSOLUTE_TOLERANCE
     extreme = 0
     if assignments <= SIGN_FLIP_EXACT_LIMIT:
         evaluated = assignments
@@ -128,6 +129,43 @@ def _bootstrap_sample_count(family_size: int) -> int:
             2 * family_size * MIN_EXPECTED_BOOTSTRAP_TAIL_DRAWS
             / FAMILYWISE_ALPHA),
     )
+
+
+def _minimum_nonzero_pairs_for_holm(family_size: int) -> int:
+    """Return the exact-test resolution needed at Holm's strictest rank."""
+    if family_size <= 0:
+        return 0
+    nonzero_pairs = 0
+    while min(1.0, 2.0 ** (1 - nonzero_pairs)) * family_size \
+            >= FAMILYWISE_ALPHA:
+        nonzero_pairs += 1
+    return nonzero_pairs
+
+
+def _inference_resolution(effects: list[float], family_size: int) -> dict:
+    """Audit the best attainable exact sign-flip resolution without claiming power."""
+    # A single sign reversal must move the mean beyond the test's absolute tolerance;
+    # ignoring smaller effects is conservative when several could accumulate.
+    nonzero_tolerance = SIGN_FLIP_ABSOLUTE_TOLERANCE * len(effects) / 2
+    nonzero_pairs = sum(abs(effect) > nonzero_tolerance for effect in effects)
+    raw_floor = min(1.0, 2.0 ** (1 - nonzero_pairs))
+    holm_floor = min(1.0, raw_floor * family_size)
+    required = _minimum_nonzero_pairs_for_holm(family_size)
+    additional = max(0, required - nonzero_pairs)
+    return {
+        "status": ("RESOLUTION_AVAILABLE" if additional == 0
+                   else "DISCRETE_P_LIMIT"),
+        "nonzero_effect_tolerance": nonzero_tolerance,
+        "nonzero_paired_bundles": nonzero_pairs,
+        "best_case_raw_p_floor": raw_floor,
+        "strictest_holm_multiplier": family_size,
+        "best_case_strictest_holm_p_floor": holm_floor,
+        "minimum_nonzero_pairs_for_strictest_holm": required,
+        "additional_nonzero_pairs_for_strictest_holm": additional,
+        "interpretation": (
+            "best-case discrete resolution only; additional pairs assume independent "
+            "non-zero effects and do not guarantee significance or practical importance"),
+    }
 
 
 def _paired_intervals(effects: list[float], seed: str,
@@ -243,6 +281,8 @@ def compare_paired_observations(observations: list[dict], *, round_number: int,
         "bootstrap_sample_policy": "max(2000,4000*tested_objectives)",
         "bootstrap_samples": 0,
         "simultaneous_confidence": None,
+        "minimum_nonzero_pairs_for_strictest_holm": 0,
+        "resolution_limited_objectives": 0,
         "status": "NO_OBSERVATIONS",
         "reason": "no observations exist for the requested round and pack",
         "left": None,
@@ -313,6 +353,7 @@ def compare_paired_observations(observations: list[dict], *, round_number: int,
             "minimum_practical_effect": minimum_effects[objective],
             "interval95": None,
             "simultaneous_interval": None,
+            "inference_resolution": None,
             "p_raw": None,
             "p_holm": None,
             "test": None,
@@ -330,6 +371,8 @@ def compare_paired_observations(observations: list[dict], *, round_number: int,
     result["simultaneous_confidence"] = (
         round(1 - FAMILYWISE_ALPHA / tested_objectives, 8)
         if tested_objectives else None)
+    result["minimum_nonzero_pairs_for_strictest_holm"] = (
+        _minimum_nonzero_pairs_for_holm(tested_objectives))
     configuration_pair = ":".join(sorted(
         (left_configuration, right_configuration)))
     for row in objective_rows:
@@ -340,8 +383,14 @@ def compare_paired_observations(observations: list[dict], *, round_number: int,
                 f"{configuration_pair}:{row['objective']}")
         row["interval95"], row["simultaneous_interval"] = _paired_intervals(
             effects, seed, tested_objectives, bootstrap_samples)
+        row["inference_resolution"] = _inference_resolution(
+            effects, tested_objectives)
         row["test"] = _sign_flip_test(effects, seed)
         row["p_raw"] = row["test"]["p_value"]
+    result["resolution_limited_objectives"] = sum(
+        row["inference_resolution"] is not None
+        and row["inference_resolution"]["status"] == "DISCRETE_P_LIMIT"
+        for row in objective_rows)
     _holm_adjust(objective_rows)
     for row in objective_rows:
         if row["classification"] == "INSUFFICIENT":
@@ -391,6 +440,13 @@ def compare_paired_observations(observations: list[dict], *, round_number: int,
         result["reason"] = (
             "a Holm-controlled direction exists but its simultaneous interval does "
             "not clear the declared minimum practical effect")
+    elif (result["tested_objectives"] > 0
+          and result["resolution_limited_objectives"]
+          == result["tested_objectives"]):
+        result["status"] = "RESOLUTION_LIMITED"
+        result["reason"] = (
+            "every tested objective is below the conservative discrete p-value "
+            "resolution needed at Holm's strictest rank")
     else:
         result["status"] = "INCONCLUSIVE"
         result["reason"] = "paired evidence is available but no selected objective is decisive"
@@ -414,6 +470,9 @@ def render_paired_comparison(result: dict) -> str:
         f"Family-wise alpha: **{result['familywise_alpha']}** · simultaneous confidence: "
         f"**{result['simultaneous_confidence'] if result['simultaneous_confidence'] is not None else 'n/a'}** · "
         f"bootstrap samples: **{result['bootstrap_samples']}**", "",
+        f"Strictest-rank Holm resolution: **{result['minimum_nonzero_pairs_for_strictest_holm']} "
+        f"non-zero pairs** · resolution-limited objectives: "
+        f"**{result['resolution_limited_objectives']}**", "",
     ]
     if result["left"] and result["right"]:
         lines += [
@@ -422,8 +481,8 @@ def render_paired_comparison(result: dict) -> str:
         ]
     if result["objectives_result"]:
         lines += [
-            "| Objective | Paired bundles | Left mean | Right mean | Left advantage | Minimum practical effect | 95% interval | Simultaneous interval | Raw p | Holm p | Result |",
-            "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|",
+            "| Objective | Paired bundles | Left mean | Right mean | Left advantage | Minimum practical effect | 95% interval | Simultaneous interval | Raw p | Holm p | Resolution | Result |",
+            "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|",
         ]
         for row in result["objectives_result"]:
             interval = row["interval95"]
@@ -433,6 +492,10 @@ def render_paired_comparison(result: dict) -> str:
             rendered_simultaneous = (
                 f"[{simultaneous['low']}, {simultaneous['high']}]"
                 if simultaneous else "n/a")
+            resolution = row["inference_resolution"]
+            rendered_resolution = (
+                f"{resolution['status']} (+{resolution['additional_nonzero_pairs_for_strictest_holm']})"
+                if resolution else "n/a")
             lines.append(
                 f"| {row['objective']} | {row['paired_bundles']} | "
                 f"{row['left_mean'] if row['left_mean'] is not None else 'n/a'} | "
@@ -442,6 +505,7 @@ def render_paired_comparison(result: dict) -> str:
                 f"{rendered_interval} | {rendered_simultaneous} | "
                 f"{row['p_raw'] if row['p_raw'] is not None else 'n/a'} | "
                 f"{row['p_holm'] if row['p_holm'] is not None else 'n/a'} | "
+                f"{rendered_resolution} | "
                 f"{row['classification']} |")
     lines += [
         "", "## Interpretation", "",
@@ -452,6 +516,10 @@ def render_paired_comparison(result: dict) -> str:
         "Bonferroni simultaneous paired-cluster bootstrap interval clearing the declared",
         "non-zero objective-specific minimum practical effect and Holm-adjusted p < 0.05.",
         "A zero floor retains the Holm-controlled historical non-zero rule.",
+        "The resolution audit reports the best exact sign-flip p-value attainable from",
+        "pairs beyond its disclosed numerical effect tolerance at Holm's strictest rank.",
+        "Its additional-pair count",
+        "is a conservative design floor, not a power calculation or a promise of significance.",
         "Bootstrap samples scale with the tested-objective family to retain at least",
         "100 expected draws in each adjusted tail. `LEFT_SMALL_EFFECT` and",
         "`RIGHT_SMALL_EFFECT` retain a statistical direction without promoting a change",

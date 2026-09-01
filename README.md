@@ -4,8 +4,8 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-**Current release: 2.49.0** — controls practical-effect claims across every objective
-with simultaneous paired intervals and an adaptive bootstrap budget.
+**Current release: 2.50.0** — exposes discrete sign-flip resolution limits and the
+conservative additional non-zero pair floor needed for family-wise claims.
 
 LLM Hardtest Report is a local-first command-line benchmark for comparing language
 models as reasoners, coding workers, and safe handoff agents. Point it at one or more
@@ -402,7 +402,7 @@ llm-hardtest results compare \
 ```
 
 The machine-readable response follows
-[`results/paired-comparison-schema-v4.json`](results/paired-comparison-schema-v4.json).
+[`results/paired-comparison-schema-v5.json`](results/paired-comparison-schema-v5.json).
 Each metric requires at least five shared independent bundles. Repeated runs are
 collapsed within their bundle before comparison. A deterministic paired-cluster
 bootstrap supplies both a diagnostic 95% interval and a Bonferroni simultaneous
@@ -414,6 +414,13 @@ declared floor. The deterministic sample budget scales as
 adjusted tail. A zero floor preserves the Holm-controlled historical non-zero rule; a
 statistical direction that misses a non-zero floor remains `LEFT_SMALL_EFFECT` or
 `RIGHT_SMALL_EFFECT` under `STATISTICAL_ONLY_EVIDENCE`, never a configuration win.
+Every eligible objective also reports the best attainable exact two-sided p-value from
+its current numerically non-zero pairs, the disclosed effect tolerance, the
+corresponding strictest-rank Holm floor, and how many
+additional independent non-zero pairs would be needed merely to make rejection
+discretely possible. `RESOLUTION_LIMITED` therefore distinguishes an unattainable
+p-value grid from ordinary inconclusive evidence. This is a conservative design floor,
+not a power calculation or a guarantee that more data will support a direction.
 
 ## Audit readiness before predictive serving
 

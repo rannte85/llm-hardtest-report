@@ -186,6 +186,12 @@ The response uses Holm-adjusted paired sign-flip tests for non-zero evidence and
 Bonferroni simultaneous bootstrap intervals for non-zero practical-effect floors.
 Its deterministic bootstrap budget scales with the number of tested objectives so
 each adjusted tail retains at least 100 expected draws.
+The same response audits the discrete sign-flip grid. It discloses a conservative
+effect tolerance aligned with the test's numerical tolerance, reports the best exact
+raw p-value supported by pairs beyond it, applies the strictest Holm multiplier,
+and gives a conservative additional non-zero pair floor when that adjusted value
+cannot reach 0.05. Zero-difference pairs do not improve this resolution, and the floor
+is not a statistical-power promise.
 
 The database adapter first collapses repeated runs to one metric value per bundle and
 configuration, then retains only shared bundles for each selected objective. It feeds

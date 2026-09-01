@@ -89,6 +89,12 @@ tested objective. Directions that do not simultaneously clear the declared floor
 remain visible as small effects but are not configuration wins. These floors express
 the caller's operational decision, not a universal benchmark constant or evidence
 about an untested environment.
+The paired result also separates discrete-test resolution from effect evidence. It
+counts only paired effects beyond a disclosed sign-flip-aligned numerical tolerance
+when deriving the best attainable exact p-value,
+applies the strictest Holm family multiplier, and reports a conservative acquisition
+floor when rejection is mathematically unavailable on the current grid. That count is
+neither estimated power nor evidence that future pairs will agree.
 
 Version 2.13 provides the first read-only form of this interface:
 

@@ -56,8 +56,9 @@ from llm_hardtest.collection_plan import (
 )
 from llm_hardtest.paired_comparison import (
     _bootstrap_sample_count as _paired_bootstrap_sample_count,
-    _bundle_observations, _sign_flip_test, compare_paired_observations,
-    compare_submissions, render_paired_comparison,
+    _bundle_observations, _inference_resolution,
+    _minimum_nonzero_pairs_for_holm, _sign_flip_test,
+    compare_paired_observations, compare_submissions, render_paired_comparison,
 )
 from llm_hardtest.prediction_readiness import (
     audit_prediction_readiness, audit_submissions, render_prediction_readiness,
@@ -5599,10 +5600,12 @@ class PublicResultTests(unittest.TestCase):
             left_configuration=configurations["org/fast"],
             right_configuration=configurations["org/accurate"],
             objectives=["accuracy", "latency", "throughput"])
-        self.assertEqual(result["schema_version"], 4)
+        self.assertEqual(result["schema_version"], 5)
         self.assertEqual(result["tested_objectives"], 3)
         self.assertEqual(result["bootstrap_samples"], 12_000)
         self.assertEqual(result["simultaneous_confidence"], 0.98333333)
+        self.assertEqual(result["minimum_nonzero_pairs_for_strictest_holm"], 7)
+        self.assertEqual(result["resolution_limited_objectives"], 0)
         self.assertEqual(result["status"], "MIXED_DIRECTIONAL_EVIDENCE")
         self.assertEqual(result["shared_configuration_bundles"], 7)
         by_objective = {row["objective"]: row
@@ -5620,6 +5623,7 @@ class PublicResultTests(unittest.TestCase):
         self.assertIn("minimum practical effect", document)
         self.assertIn("simultaneous confidence: **0.98333333**", document)
         self.assertIn("bootstrap samples: **12000**", document)
+        self.assertIn("Strictest-rank Holm resolution: **7 non-zero pairs**", document)
         serialized = json.dumps(result)
         self.assertNotIn("bundle_id", serialized)
         self.assertNotIn("recommendation-control", serialized)
@@ -5635,13 +5639,60 @@ class PublicResultTests(unittest.TestCase):
             left_configuration=configurations["org/fast"],
             right_configuration=configurations["org/accurate"],
             objectives=["accuracy", "latency"])
-        self.assertEqual(result["status"], "INCONCLUSIVE")
+        self.assertEqual(result["status"], "RESOLUTION_LIMITED")
+        self.assertEqual(result["minimum_nonzero_pairs_for_strictest_holm"], 7)
+        self.assertEqual(result["resolution_limited_objectives"], 2)
         self.assertEqual({row["p_raw"] for row in result["objectives_result"]},
                          {0.03125})
         self.assertEqual({row["p_holm"] for row in result["objectives_result"]},
                          {0.0625})
         self.assertEqual({row["classification"] for row in result["objectives_result"]},
                          {"INCONCLUSIVE"})
+        for row in result["objectives_result"]:
+            self.assertEqual(row["inference_resolution"]["status"],
+                             "DISCRETE_P_LIMIT")
+            self.assertEqual(
+                row["inference_resolution"]["best_case_raw_p_floor"], 0.03125)
+            self.assertEqual(
+                row["inference_resolution"]["best_case_strictest_holm_p_floor"],
+                0.0625)
+            self.assertEqual(
+                row["inference_resolution"][
+                    "additional_nonzero_pairs_for_strictest_holm"], 1)
+
+    def test_paired_comparison_audits_discrete_resolution_and_zero_pairs(self):
+        self.assertEqual(
+            [_minimum_nonzero_pairs_for_holm(size) for size in range(5)],
+            [0, 6, 7, 7, 8])
+        self.assertEqual(_inference_resolution([1.0] * 5, 1), {
+            "status": "DISCRETE_P_LIMIT",
+            "nonzero_effect_tolerance": 2.5e-12,
+            "nonzero_paired_bundles": 5,
+            "best_case_raw_p_floor": 0.0625,
+            "strictest_holm_multiplier": 1,
+            "best_case_strictest_holm_p_floor": 0.0625,
+            "minimum_nonzero_pairs_for_strictest_holm": 6,
+            "additional_nonzero_pairs_for_strictest_holm": 1,
+            "interpretation": (
+                "best-case discrete resolution only; additional pairs assume independent "
+                "non-zero effects and do not guarantee significance or practical importance"),
+        })
+        zero_heavy = _inference_resolution([1.0] * 7 + [0.0] * 20, 4)
+        self.assertEqual(zero_heavy["nonzero_paired_bundles"], 7)
+        self.assertEqual(zero_heavy["best_case_raw_p_floor"], 0.015625)
+        self.assertEqual(zero_heavy["best_case_strictest_holm_p_floor"], 0.0625)
+        self.assertEqual(zero_heavy["status"], "DISCRETE_P_LIMIT")
+        self.assertEqual(
+            zero_heavy["additional_nonzero_pairs_for_strictest_holm"], 1)
+        high_count = _inference_resolution([1.0] * 1000, 4)
+        self.assertGreater(high_count["best_case_raw_p_floor"], 0.0)
+        self.assertLess(high_count["best_case_raw_p_floor"], 1e-300)
+        self.assertEqual(high_count["status"], "RESOLUTION_AVAILABLE")
+        tolerance_control = _inference_resolution(
+            [2.5e-12] * 5 + [1.0] * 4, 1)
+        self.assertEqual(tolerance_control["nonzero_effect_tolerance"], 4.5e-12)
+        self.assertEqual(tolerance_control["nonzero_paired_bundles"], 4)
+        self.assertEqual(tolerance_control["status"], "DISCRETE_P_LIMIT")
 
     def test_paired_comparison_is_exactly_symmetric_when_sides_swap(self):
         submissions = self._recommendation_submissions(7)
@@ -5677,6 +5728,8 @@ class PublicResultTests(unittest.TestCase):
                                    -second["simultaneous_interval"]["low"])
             self.assertEqual(first["p_raw"], second["p_raw"])
             self.assertEqual(first["p_holm"], second["p_holm"])
+            self.assertEqual(first["inference_resolution"],
+                             second["inference_resolution"])
             expected = {"LEFT_BETTER": "RIGHT_BETTER",
                         "RIGHT_BETTER": "LEFT_BETTER",
                         "LEFT_SMALL_EFFECT": "RIGHT_SMALL_EFFECT",
@@ -5839,7 +5892,10 @@ class PublicResultTests(unittest.TestCase):
         self.assertEqual(result["shared_configuration_bundles"], 5)
         self.assertEqual(result["objectives_result"][0]["paired_bundles"], 5)
         self.assertEqual(result["objectives_result"][0]["p_raw"], 0.0625)
-        self.assertEqual(result["status"], "INCONCLUSIVE")
+        self.assertEqual(result["status"], "RESOLUTION_LIMITED")
+        resolution = result["objectives_result"][0]["inference_resolution"]
+        self.assertEqual(resolution["status"], "DISCRETE_P_LIMIT")
+        self.assertEqual(resolution["additional_nonzero_pairs_for_strictest_holm"], 1)
 
     def test_paired_sign_flip_monte_carlo_is_deterministic(self):
         effects = [0.01 * (index + 1) for index in range(17)]
@@ -5972,7 +6028,7 @@ class PublicResultTests(unittest.TestCase):
 
     def test_published_paired_comparison_schema_matches_runtime_contract(self):
         schema = json.loads((
-            repo_root() / "results/paired-comparison-schema-v4.json").read_text(
+            repo_root() / "results/paired-comparison-schema-v5.json").read_text(
                 encoding="utf-8"))
         submissions = self._full_coordinate_submissions(7)
         configurations = {

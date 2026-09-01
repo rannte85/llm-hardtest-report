@@ -1,4 +1,27 @@
-# Release Notes — 2.49.0
+# Release Notes — 2.50.0
+
+This release makes exact paired-test resolution visible before users collect or
+interpret more evidence:
+
+- every tested objective reports its numerically non-zero paired-bundle count,
+  disclosed effect tolerance, and best attainable exact two-sided sign-flip p-value;
+- the strictest Holm multiplier is applied to that floor, with the minimum and
+  additional non-zero pairs needed to make family-wise rejection discretely possible;
+- `RESOLUTION_LIMITED` distinguishes an impossible p-value grid from ordinary
+  inconclusive evidence;
+- zero-difference pairs do not manufacture resolution, and reports state that the
+  acquisition floor is not power or a promise of significance;
+- schema v5 records the complete resolution contract while v1–v4 stay immutable;
+- all 264 source tests and repository gates pass; fresh wheel and sdist installs
+  report 2.50.0, pass installed selftests, and reproduce the resolution audit, while
+  both artifacts pass Twine checks.
+
+## Previous release: 2.49.0
+
+The previous release controlled practical-effect claims across a multi-objective
+comparison.
+
+# Historical release notes — 2.49.0
 
 This release controls practical-effect claims across a multi-objective comparison:
 

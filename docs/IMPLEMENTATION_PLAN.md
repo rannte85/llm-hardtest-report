@@ -1585,3 +1585,37 @@ Acceptance:
 - Swapping configurations exactly negates both interval families and effects while
   preserving p-values, thresholds, family metadata, and classifications.
 - Schema v3 remains byte-for-byte unchanged and schema v4 exactly covers runtime JSON.
+
+## Phase 54 — Discrete paired-inference resolution audit (completed)
+
+Goal: distinguish ordinary inconclusive evidence from a paired sign-flip p-value grid
+that cannot possibly reach the family-wise decision threshold.
+
+Deliverables:
+
+1. Count numerically non-zero independent paired effects per eligible objective using
+   a disclosed conservative threshold aligned with the sign-flip test tolerance;
+   zero-difference and sub-resolution pairs cannot manufacture exact-test resolution.
+2. Derive the best attainable exact two-sided sign-flip p-value as
+   `min(1, 2 / 2^nonzero_pairs)` and expose Holm's strictest current-family multiplier.
+3. Report the minimum and additional non-zero independent pairs needed for that
+   strictest-rank adjusted floor to become less than 0.05.
+4. Add `RESOLUTION_LIMITED` when every tested objective is resolution-limited, without
+   changing the objective's honest `INCONCLUSIVE` classification.
+5. Publish immutable paired-comparison schema v5 and explain that the acquisition
+   floor is neither statistical power nor a guarantee of significance or practical
+   importance.
+
+Acceptance checks:
+
+- One objective with five aligned non-zero pairs reports raw and strictest Holm floors
+  of 0.0625, requests one additional non-zero pair, and returns
+  `RESOLUTION_LIMITED`.
+- Two objectives with six aligned pairs retain raw p 0.03125 but report strictest Holm
+  floor 0.0625 and one additional non-zero pair each.
+- Family sizes zero through four require `[0, 6, 7, 7, 8]` non-zero pairs at the
+  strictest Holm rank.
+- Adding twenty zero-difference pairs to seven non-zero pairs in a four-objective
+  family still requests one non-zero pair; pair count alone cannot fake resolution.
+- Left/right swaps retain identical resolution metadata, JSON and verified SQLite
+  remain byte-identical, and schema v4 stays unchanged while v5 exactly covers runtime.

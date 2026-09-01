@@ -235,11 +235,18 @@ An omitted floor is zero and retains the Holm-controlled non-zero rule. A non-ze
 floor that is not simultaneously cleared produces an explicit small-effect
 classification rather than a configuration win.
 
-The response follows `results/paired-comparison-schema-v4.json`. It contains exact
+The response follows `results/paired-comparison-schema-v5.json`. It contains exact
 public configuration records, shared counts, effects, intervals, tests, and decisions,
 but never the bundle IDs that formed a pair or contributor/tool history. Left/right
 swaps reproduce the same p-values, thresholds, and exactly negated pointwise and
 simultaneous intervals.
+For each tested objective, the response also publishes its conservative numerical
+effect tolerance, counts pairs beyond it, and reports the best attainable exact
+two-sided p-value, its strictest-rank Holm floor, and the
+additional non-zero pair count needed to make rejection discretely possible. Five
+perfectly aligned pairs still have raw p floor 0.0625; zero-difference pairs do not
+improve it. `RESOLUTION_LIMITED` is a data-design diagnosis, not failed replication,
+a power estimate, or a promise that collecting the stated floor will produce a win.
 Thresholds are user-declared operational choices, not universal claims or predictions
 for untested settings.
 

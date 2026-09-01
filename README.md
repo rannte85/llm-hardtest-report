@@ -4,9 +4,8 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-**Current release: 2.48.1** — adds declared practical-effect floors to paired serving
-comparisons so statistically detectable but operationally small differences are not
-reported as configuration wins.
+**Current release: 2.49.0** — controls practical-effect claims across every objective
+with simultaneous paired intervals and an adaptive bootstrap budget.
 
 LLM Hardtest Report is a local-first command-line benchmark for comparing language
 models as reasoners, coding workers, and safe handoff agents. Point it at one or more
@@ -403,15 +402,18 @@ llm-hardtest results compare \
 ```
 
 The machine-readable response follows
-[`results/paired-comparison-schema-v3.json`](results/paired-comparison-schema-v3.json).
+[`results/paired-comparison-schema-v4.json`](results/paired-comparison-schema-v4.json).
 Each metric requires at least five shared independent bundles. Repeated runs are
 collapsed within their bundle before comparison. A deterministic paired-cluster
-bootstrap supplies the 95% effect interval, a two-sided sign-flip test supplies the
-raw p-value, and Holm correction controls the selected-objective family. Directional
-claims require adjusted p below 0.05 and the entire interval to clear the declared
-objective-specific minimum effect. Floors default to zero for compatibility; a
-statistical direction that misses a non-zero floor is retained as `LEFT_SMALL_EFFECT`
-or `RIGHT_SMALL_EFFECT` under `STATISTICAL_ONLY_EVIDENCE`, never promoted to a win.
+bootstrap supplies both a diagnostic 95% interval and a Bonferroni simultaneous
+interval across every tested objective. A two-sided sign-flip test supplies the raw
+p-value, and Holm correction controls the non-zero family. Non-zero practical-effect
+claims require adjusted p below 0.05 and the simultaneous interval to clear the
+declared floor. The deterministic sample budget scales as
+`max(2,000, 4,000 × tested objectives)`, retaining at least 100 expected draws in each
+adjusted tail. A zero floor preserves the Holm-controlled historical non-zero rule; a
+statistical direction that misses a non-zero floor remains `LEFT_SMALL_EFFECT` or
+`RIGHT_SMALL_EFFECT` under `STATISTICAL_ONLY_EVIDENCE`, never a configuration win.
 
 ## Audit readiness before predictive serving
 

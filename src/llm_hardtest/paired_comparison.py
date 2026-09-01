@@ -13,9 +13,11 @@ from .community_results import (
 from .public_results import normalized_serving_environment
 
 
-PAIRED_COMPARISON_SCHEMA_VERSION = 3
+PAIRED_COMPARISON_SCHEMA_VERSION = 4
 SIGN_FLIP_EXACT_LIMIT = 65_536
 SIGN_FLIP_MONTE_CARLO_SAMPLES = 20_000
+FAMILYWISE_ALPHA = 0.05
+MIN_EXPECTED_BOOTSTRAP_TAIL_DRAWS = 100
 
 
 def _bundle_observations(submissions: list[dict]) -> list[dict]:
@@ -117,17 +119,41 @@ def _sign_flip_test(effects: list[float], seed: str) -> dict:
     }
 
 
-def _paired_interval(effects: list[float], seed: str) -> dict:
+def _bootstrap_sample_count(family_size: int) -> int:
+    if family_size <= 0:
+        return 0
+    return max(
+        BOOTSTRAP_SAMPLES,
+        math.ceil(
+            2 * family_size * MIN_EXPECTED_BOOTSTRAP_TAIL_DRAWS
+            / FAMILYWISE_ALPHA),
+    )
+
+
+def _paired_intervals(effects: list[float], seed: str,
+                      family_size: int, samples: int) -> tuple[dict, dict]:
+    """Return pointwise and Bonferroni-simultaneous paired intervals."""
     generator = _HashSampler(seed)
     draws = [statistics.mean(
         generator.choice(effects) for _ in effects)
-        for _ in range(BOOTSTRAP_SAMPLES)]
-    return {
+        for _ in range(samples)]
+    pointwise = {
         "low": round(_percentile(draws, 0.025), 6),
         "high": round(_percentile(draws, 0.975), 6),
         "method": "paired_bundle_cluster_bootstrap_95",
-        "samples": BOOTSTRAP_SAMPLES,
+        "samples": samples,
     }
+    tail_probability = FAMILYWISE_ALPHA / (2 * family_size)
+    simultaneous = {
+        "low": round(_percentile(draws, tail_probability), 6),
+        "high": round(_percentile(draws, 1 - tail_probability), 6),
+        "confidence": round(1 - FAMILYWISE_ALPHA / family_size, 8),
+        "method": "paired_bundle_cluster_bootstrap_bonferroni_simultaneous",
+        "samples": samples,
+        "family_size": family_size,
+        "expected_tail_draws": round(samples * tail_probability, 6),
+    }
+    return pointwise, simultaneous
 
 
 def _holm_adjust(rows: list[dict]) -> None:
@@ -210,8 +236,13 @@ def compare_paired_observations(observations: list[dict], *, round_number: int,
         "objectives": objectives,
         "minimum_practical_effects": minimum_effects,
         "minimum_paired_bundles": MIN_BASELINE_SUBMISSIONS,
-        "multiplicity_method": "holm_across_tested_objectives",
-        "familywise_alpha": 0.05,
+        "multiplicity_method": (
+            "holm_p_values_and_bonferroni_simultaneous_intervals_across_"
+            "tested_objectives"),
+        "familywise_alpha": FAMILYWISE_ALPHA,
+        "bootstrap_sample_policy": "max(2000,4000*tested_objectives)",
+        "bootstrap_samples": 0,
+        "simultaneous_confidence": None,
         "status": "NO_OBSERVATIONS",
         "reason": "no observations exist for the requested round and pack",
         "left": None,
@@ -252,6 +283,7 @@ def compare_paired_observations(observations: list[dict], *, round_number: int,
     result["shared_configuration_bundles"] = len(shared)
 
     objective_rows = []
+    effects_by_objective = {}
     for objective in objectives:
         pairs = [
             (pair[left_configuration]["metrics"][objective],
@@ -280,6 +312,7 @@ def compare_paired_observations(observations: list[dict], *, round_number: int,
             "left_advantage": round(statistics.mean(effects), 6) if effects else None,
             "minimum_practical_effect": minimum_effects[objective],
             "interval95": None,
+            "simultaneous_interval": None,
             "p_raw": None,
             "p_holm": None,
             "test": None,
@@ -287,38 +320,57 @@ def compare_paired_observations(observations: list[dict], *, round_number: int,
             "classification": "INSUFFICIENT",
         }
         if len(effects) >= MIN_BASELINE_SUBMISSIONS:
-            configuration_pair = ":".join(sorted(
-                (left_configuration, right_configuration)))
-            seed = (f"paired:{selected_pack}:{round_number}:"
-                    f"{configuration_pair}:{objective}")
-            row["interval95"] = _paired_interval(effects, seed)
-            row["test"] = _sign_flip_test(effects, seed)
-            row["p_raw"] = row["test"]["p_value"]
+            effects_by_objective[objective] = effects
             row["classification"] = "PENDING"
         objective_rows.append(row)
+    tested_objectives = len(effects_by_objective)
+    bootstrap_samples = _bootstrap_sample_count(tested_objectives)
+    result["tested_objectives"] = tested_objectives
+    result["bootstrap_samples"] = bootstrap_samples
+    result["simultaneous_confidence"] = (
+        round(1 - FAMILYWISE_ALPHA / tested_objectives, 8)
+        if tested_objectives else None)
+    configuration_pair = ":".join(sorted(
+        (left_configuration, right_configuration)))
+    for row in objective_rows:
+        effects = effects_by_objective.get(row["objective"])
+        if effects is None:
+            continue
+        seed = (f"paired:{selected_pack}:{round_number}:"
+                f"{configuration_pair}:{row['objective']}")
+        row["interval95"], row["simultaneous_interval"] = _paired_intervals(
+            effects, seed, tested_objectives, bootstrap_samples)
+        row["test"] = _sign_flip_test(effects, seed)
+        row["p_raw"] = row["test"]["p_value"]
     _holm_adjust(objective_rows)
     for row in objective_rows:
         if row["classification"] == "INSUFFICIENT":
             continue
         interval = row["interval95"]
+        simultaneous_interval = row["simultaneous_interval"]
         threshold = row["minimum_practical_effect"]
-        if row["p_holm"] < 0.05 and interval["low"] > threshold:
+        left_threshold_met = (
+            interval["low"] > 0 if threshold == 0
+            else simultaneous_interval["low"] > threshold)
+        right_threshold_met = (
+            interval["high"] < 0 if threshold == 0
+            else simultaneous_interval["high"] < -threshold)
+        if row["p_holm"] < FAMILYWISE_ALPHA and left_threshold_met:
             row["practical_threshold_met"] = True
             row["classification"] = "LEFT_BETTER"
-        elif row["p_holm"] < 0.05 and interval["high"] < -threshold:
+        elif row["p_holm"] < FAMILYWISE_ALPHA and right_threshold_met:
             row["practical_threshold_met"] = True
             row["classification"] = "RIGHT_BETTER"
-        elif row["p_holm"] < 0.05 and interval["low"] > 0:
+        elif row["p_holm"] < FAMILYWISE_ALPHA and interval["low"] > 0:
             row["practical_threshold_met"] = False
             row["classification"] = "LEFT_SMALL_EFFECT"
-        elif row["p_holm"] < 0.05 and interval["high"] < 0:
+        elif row["p_holm"] < FAMILYWISE_ALPHA and interval["high"] < 0:
             row["practical_threshold_met"] = False
             row["classification"] = "RIGHT_SMALL_EFFECT"
         else:
             row["practical_threshold_met"] = False
             row["classification"] = "INCONCLUSIVE"
     result["objectives_result"] = objective_rows
-    result["tested_objectives"] = sum(row["p_raw"] is not None for row in objective_rows)
     directions = {row["classification"] for row in objective_rows}
     decisive = directions & {"LEFT_BETTER", "RIGHT_BETTER"}
     statistical_only = directions & {"LEFT_SMALL_EFFECT", "RIGHT_SMALL_EFFECT"}
@@ -327,18 +379,18 @@ def compare_paired_observations(observations: list[dict], *, round_number: int,
         result["reason"] = "no objective has five paired independent bundles"
     elif decisive == {"LEFT_BETTER"}:
         result["status"] = "LEFT_DIRECTIONAL_EVIDENCE"
-        result["reason"] = "Holm-controlled paired evidence favors the left configuration"
+        result["reason"] = "familywise-controlled paired evidence favors the left configuration"
     elif decisive == {"RIGHT_BETTER"}:
         result["status"] = "RIGHT_DIRECTIONAL_EVIDENCE"
-        result["reason"] = "Holm-controlled paired evidence favors the right configuration"
+        result["reason"] = "familywise-controlled paired evidence favors the right configuration"
     elif len(decisive) == 2:
         result["status"] = "MIXED_DIRECTIONAL_EVIDENCE"
-        result["reason"] = "Holm-controlled paired objectives favor different configurations"
+        result["reason"] = "familywise-controlled paired objectives favor different configurations"
     elif statistical_only:
         result["status"] = "STATISTICAL_ONLY_EVIDENCE"
         result["reason"] = (
-            "a Holm-controlled direction exists but its interval does not clear the "
-            "declared minimum practical effect")
+            "a Holm-controlled direction exists but its simultaneous interval does "
+            "not clear the declared minimum practical effect")
     else:
         result["status"] = "INCONCLUSIVE"
         result["reason"] = "paired evidence is available but no selected objective is decisive"
@@ -359,6 +411,9 @@ def render_paired_comparison(result: dict) -> str:
         f"`{result['right_configuration']}`", "",
         f"Shared configuration bundles: **{result['shared_configuration_bundles']}** · "
         f"tested objectives: **{result['tested_objectives']}**", "",
+        f"Family-wise alpha: **{result['familywise_alpha']}** · simultaneous confidence: "
+        f"**{result['simultaneous_confidence'] if result['simultaneous_confidence'] is not None else 'n/a'}** · "
+        f"bootstrap samples: **{result['bootstrap_samples']}**", "",
     ]
     if result["left"] and result["right"]:
         lines += [
@@ -367,20 +422,24 @@ def render_paired_comparison(result: dict) -> str:
         ]
     if result["objectives_result"]:
         lines += [
-            "| Objective | Paired bundles | Left mean | Right mean | Left advantage | Minimum practical effect | 95% interval | Raw p | Holm p | Result |",
-            "|---|---:|---:|---:|---:|---:|---:|---:|---:|---|",
+            "| Objective | Paired bundles | Left mean | Right mean | Left advantage | Minimum practical effect | 95% interval | Simultaneous interval | Raw p | Holm p | Result |",
+            "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|",
         ]
         for row in result["objectives_result"]:
             interval = row["interval95"]
             rendered_interval = (f"[{interval['low']}, {interval['high']}]"
                                  if interval else "n/a")
+            simultaneous = row["simultaneous_interval"]
+            rendered_simultaneous = (
+                f"[{simultaneous['low']}, {simultaneous['high']}]"
+                if simultaneous else "n/a")
             lines.append(
                 f"| {row['objective']} | {row['paired_bundles']} | "
                 f"{row['left_mean'] if row['left_mean'] is not None else 'n/a'} | "
                 f"{row['right_mean'] if row['right_mean'] is not None else 'n/a'} | "
                 f"{row['left_advantage'] if row['left_advantage'] is not None else 'n/a'} "
                 f"{row['unit']} | {row['minimum_practical_effect']} {row['unit']} | "
-                f"{rendered_interval} | "
+                f"{rendered_interval} | {rendered_simultaneous} | "
                 f"{row['p_raw'] if row['p_raw'] is not None else 'n/a'} | "
                 f"{row['p_holm'] if row['p_holm'] is not None else 'n/a'} | "
                 f"{row['classification']} |")
@@ -390,9 +449,11 @@ def render_paired_comparison(result: dict) -> str:
         "Repeated runs inside one bundle are collapsed before pairing. Positive left",
         "advantage always favors the left configuration; latency uses right minus left",
         "seconds so lower latency remains better. Directional claims require both a",
-        "paired-cluster bootstrap interval clearing the declared objective-specific",
-        "minimum practical effect and Holm-adjusted p < 0.05. A zero threshold preserves",
-        "the historical non-zero decision rule. `LEFT_SMALL_EFFECT` and",
+        "Bonferroni simultaneous paired-cluster bootstrap interval clearing the declared",
+        "non-zero objective-specific minimum practical effect and Holm-adjusted p < 0.05.",
+        "A zero floor retains the Holm-controlled historical non-zero rule.",
+        "Bootstrap samples scale with the tested-objective family to retain at least",
+        "100 expected draws in each adjusted tail. `LEFT_SMALL_EFFECT` and",
         "`RIGHT_SMALL_EFFECT` retain a statistical direction without promoting a change",
         "that misses the declared operational floor. This is not a",
         "prediction for an untested model, pack, environment, or serving setting.", "",

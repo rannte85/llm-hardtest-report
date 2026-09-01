@@ -1,4 +1,29 @@
-# Release Notes — 2.48.1
+# Release Notes — 2.49.0
+
+This release controls practical-effect claims across a multi-objective comparison:
+
+- Holm-adjusted paired sign-flip tests continue to control non-zero evidence;
+- every non-zero practical-effect floor must now be cleared by a Bonferroni
+  simultaneous paired-bundle bootstrap interval;
+- the diagnostic pointwise 95% interval remains visible but cannot independently
+  promote a non-zero operational win;
+- deterministic bootstrap draws scale as
+  `max(2,000, 4,000 × tested objectives)`, retaining at least 100 expected draws in
+  every adjusted tail;
+- schema v4 records both intervals, family size, simultaneous confidence, sample
+  policy, selected draws, and expected tail resolution while v1–v3 stay unchanged;
+- a four-objective adversarial control proves that pointwise floor crossings remain
+  small-effect evidence when the simultaneous family does not clear the same floor;
+- all 263 source tests and repository gates pass; fresh wheel and sdist installs
+  report 2.49.0, pass installed selftests, and reproduce the adaptive family-size
+  sample policy, while both artifacts pass Twine checks.
+
+## Previous release: 2.48.1
+
+The previous patch hardened q41's real-deadline release selftest without weakening its
+control matrix.
+
+# Historical release notes — 2.48.1
 
 This patch hardens the release selftest without weakening q41's discrimination:
 

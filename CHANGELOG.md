@@ -5,6 +5,24 @@ out separately from harness features.
 
 ## Unreleased
 
+## 2.49.0 — 2026-09-01
+
+- Added Bonferroni simultaneous paired-bundle bootstrap intervals across every tested
+  comparison objective, closing the family-wise gap in non-zero practical-effect
+  claims while retaining Holm-adjusted sign-flip tests for non-zero evidence.
+- Practical wins with a non-zero floor now require the simultaneous interval—not only
+  the diagnostic pointwise 95% interval—to clear that floor. A zero floor retains the
+  historical Holm-controlled rule.
+- Added an adaptive deterministic budget of
+  `max(2,000, 4,000 × tested objectives)` bootstrap draws, guaranteeing at least 100
+  expected draws in each Bonferroni-adjusted tail for one to four objectives.
+- Added paired-comparison schema v4 with pointwise and simultaneous intervals, family
+  size, simultaneous confidence, sample policy, selected samples, and tail resolution;
+  v1–v3 remain immutable historical contracts.
+- Added a four-objective adversarial regression where every pointwise interval clears
+  a 0.6 floor but every simultaneous interval does not, preventing four false practical
+  wins while preserving exact left/right symmetry and JSON/SQLite/CLI parity.
+
 ## 2.48.1 — 2026-09-01
 
 - Hardened q41's release selftest after an overloaded tag-only macOS runner exhausted

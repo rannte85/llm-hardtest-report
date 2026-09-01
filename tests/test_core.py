@@ -55,6 +55,7 @@ from llm_hardtest.collection_plan import (
     build_collection_plan, plan_submissions, render_collection_plan,
 )
 from llm_hardtest.paired_comparison import (
+    _bootstrap_sample_count as _paired_bootstrap_sample_count,
     _bundle_observations, _sign_flip_test, compare_paired_observations,
     compare_submissions, render_paired_comparison,
 )
@@ -5598,7 +5599,10 @@ class PublicResultTests(unittest.TestCase):
             left_configuration=configurations["org/fast"],
             right_configuration=configurations["org/accurate"],
             objectives=["accuracy", "latency", "throughput"])
-        self.assertEqual(result["schema_version"], 3)
+        self.assertEqual(result["schema_version"], 4)
+        self.assertEqual(result["tested_objectives"], 3)
+        self.assertEqual(result["bootstrap_samples"], 12_000)
+        self.assertEqual(result["simultaneous_confidence"], 0.98333333)
         self.assertEqual(result["status"], "MIXED_DIRECTIONAL_EVIDENCE")
         self.assertEqual(result["shared_configuration_bundles"], 7)
         by_objective = {row["objective"]: row
@@ -5614,6 +5618,8 @@ class PublicResultTests(unittest.TestCase):
         document = render_paired_comparison(result)
         self.assertIn("Holm-adjusted p < 0.05", document)
         self.assertIn("minimum practical effect", document)
+        self.assertIn("simultaneous confidence: **0.98333333**", document)
+        self.assertIn("bootstrap samples: **12000**", document)
         serialized = json.dumps(result)
         self.assertNotIn("bundle_id", serialized)
         self.assertNotIn("recommendation-control", serialized)
@@ -5665,6 +5671,10 @@ class PublicResultTests(unittest.TestCase):
                                    -second["interval95"]["high"])
             self.assertAlmostEqual(first["interval95"]["high"],
                                    -second["interval95"]["low"])
+            self.assertAlmostEqual(first["simultaneous_interval"]["low"],
+                                   -second["simultaneous_interval"]["high"])
+            self.assertAlmostEqual(first["simultaneous_interval"]["high"],
+                                   -second["simultaneous_interval"]["low"])
             self.assertEqual(first["p_raw"], second["p_raw"])
             self.assertEqual(first["p_holm"], second["p_holm"])
             expected = {"LEFT_BETTER": "RIGHT_BETTER",
@@ -5704,6 +5714,59 @@ class PublicResultTests(unittest.TestCase):
         self.assertEqual(practical["status"], "MIXED_DIRECTIONAL_EVIDENCE")
         self.assertTrue(all(row["practical_threshold_met"]
                             for row in practical["objectives_result"]))
+
+    def test_paired_comparison_controls_practical_effect_family(self):
+        self.assertEqual(
+            [_paired_bootstrap_sample_count(size) for size in range(5)],
+            [0, 4_000, 8_000, 12_000, 16_000])
+        pack = "sha256:" + "a" * 64
+        common = {
+            "round": 1,
+            "pack": pack,
+            "environment": {
+                "os": "Linux", "architecture": "x86_64", "python": "3.12"},
+            "serving_environment": {
+                "scope": "same_host", "os": "Linux", "architecture": "x86_64"},
+            "transport": "openai_compat",
+            "parameters": {},
+            "public_metadata": {},
+        }
+        observations = []
+        for index in range(9):
+            effect = 0.0 if index == 0 else 1.0
+            observations.extend([
+                {
+                    **common, "bundle": f"bundle-{index}",
+                    "configuration": "a" * 10, "model": "left",
+                    "metrics": {
+                        "accuracy": effect, "completion": effect,
+                        "latency": 0.0, "throughput": effect},
+                },
+                {
+                    **common, "bundle": f"bundle-{index}",
+                    "configuration": "b" * 10, "model": "right",
+                    "metrics": {
+                        "accuracy": 0.0, "completion": 0.0,
+                        "latency": effect, "throughput": 0.0},
+                },
+            ])
+        objectives = ["accuracy", "completion", "latency", "throughput"]
+        result = compare_paired_observations(
+            observations, round_number=1, left_configuration="a" * 10,
+            right_configuration="b" * 10, objectives=objectives,
+            minimum_effects={objective: 0.6 for objective in objectives})
+        self.assertEqual(result["tested_objectives"], 4)
+        self.assertEqual(result["bootstrap_samples"], 16_000)
+        self.assertEqual(result["simultaneous_confidence"], 0.9875)
+        self.assertEqual(result["status"], "STATISTICAL_ONLY_EVIDENCE")
+        for row in result["objectives_result"]:
+            self.assertGreater(row["interval95"]["low"], 0.6)
+            self.assertLess(row["simultaneous_interval"]["low"], 0.6)
+            self.assertEqual(row["simultaneous_interval"]["family_size"], 4)
+            self.assertEqual(
+                row["simultaneous_interval"]["expected_tail_draws"], 100.0)
+            self.assertEqual(row["classification"], "LEFT_SMALL_EFFECT")
+            self.assertFalse(row["practical_threshold_met"])
 
     def test_paired_comparison_collapses_repeats_and_withholds_missing_metrics(self):
         repeated = self._recommendation_submissions(1)
@@ -5750,6 +5813,9 @@ class PublicResultTests(unittest.TestCase):
         self.assertEqual(by_objective["accuracy"]["paired_bundles"], 7)
         self.assertEqual(by_objective["latency"]["paired_bundles"], 4)
         self.assertEqual(by_objective["latency"]["classification"], "INSUFFICIENT")
+        self.assertEqual(result["tested_objectives"], 1)
+        self.assertEqual(result["bootstrap_samples"], 4_000)
+        self.assertEqual(result["simultaneous_confidence"], 0.95)
 
     def test_paired_comparison_excludes_unpaired_bundle_populations(self):
         submissions = self._recommendation_submissions(7)
@@ -5906,7 +5972,7 @@ class PublicResultTests(unittest.TestCase):
 
     def test_published_paired_comparison_schema_matches_runtime_contract(self):
         schema = json.loads((
-            repo_root() / "results/paired-comparison-schema-v3.json").read_text(
+            repo_root() / "results/paired-comparison-schema-v4.json").read_text(
                 encoding="utf-8"))
         submissions = self._full_coordinate_submissions(7)
         configurations = {

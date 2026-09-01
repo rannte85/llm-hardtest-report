@@ -1556,3 +1556,32 @@ Acceptance:
 - Three consecutive 3/4 results remain a hard failure.
 - The complete 14-state q41 matrix still separates the incomplete baseline and every
   hidden-negative mutation from the complete control.
+
+## Phase 53 — Family-wise practical-effect inference (completed)
+
+Goal: prevent multi-objective exploration from promoting a practical-effect claim on
+the basis of an unadjusted objective-wise interval.
+
+Deliverables:
+
+1. Preserve the diagnostic paired-cluster 95% interval and Holm-adjusted two-sided
+   sign-flip test for every eligible objective.
+2. Add a Bonferroni simultaneous paired-cluster interval across the complete tested-
+   objective family and use it for every non-zero practical-effect decision.
+3. Scale deterministic draws as `max(2,000, 4,000 × tested objectives)` so each
+   adjusted tail contains at least 100 expected bootstrap draws.
+4. Publish immutable paired-comparison schema v4 with pointwise/simultaneous intervals,
+   family size, confidence, sample policy, selected samples, and tail resolution.
+5. Preserve the zero-floor Holm-controlled rule, exact side-swap symmetry, sparse-
+   objective exclusion, and canonical JSON/SQLite/CLI identity.
+
+Acceptance:
+
+- One to four tested objectives select 4,000 to 16,000 draws and 95% to 98.75%
+  simultaneous confidence with 100 expected draws in every adjusted tail.
+- In a nine-bundle, four-objective adversarial control, every 95% lower bound exceeds
+  0.6 while every simultaneous lower bound is below 0.6; all four results remain
+  `LEFT_SMALL_EFFECT` and the overall result is `STATISTICAL_ONLY_EVIDENCE`.
+- Swapping configurations exactly negates both interval families and effects while
+  preserving p-values, thresholds, family metadata, and classifications.
+- Schema v3 remains byte-for-byte unchanged and schema v4 exactly covers runtime JSON.

@@ -182,14 +182,19 @@ llm-hardtest results compare \
   --minimum-latency-effect-seconds 0.5 --json
 ```
 
+The response uses Holm-adjusted paired sign-flip tests for non-zero evidence and
+Bonferroni simultaneous bootstrap intervals for non-zero practical-effect floors.
+Its deterministic bootstrap budget scales with the number of tested objectives so
+each adjusted tail retains at least 100 expected draws.
+
 The database adapter first collapses repeated runs to one metric value per bundle and
 configuration, then retains only shared bundles for each selected objective. It feeds
 the same paired bootstrap, sign-flip, and Holm implementation as canonical JSON, so
 identical evidence and minimum-effect floors produce byte-identical output. A direction
-is promoted only when its interval clears the declared objective-specific floor; a
-Holm-controlled direction below that floor remains visible as a small effect. Standalone
-database integrity and semantic checks run before analysis. The response exposes
-neither pairing bundle IDs nor contributor history.
+is promoted at a non-zero floor only when its simultaneous interval clears the declared
+objective-specific floor; a Holm-controlled direction below that floor remains visible
+as a small effect. Standalone database integrity and semantic checks run before
+analysis. The response exposes neither pairing bundle IDs nor contributor history.
 
 ## Predictive-service readiness audit
 

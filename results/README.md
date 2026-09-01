@@ -15,9 +15,9 @@ project does not automatically collect telemetry or local campaign data.
   are retained for historical clients.
 - `collection-plan-schema-v2.json` documents the current independent-bundle
   evidence-gap and acquisition-plan response; v1 is retained for compatibility.
-- `paired-comparison-schema-v3.json` documents current cluster-paired head-to-head
-  comparison with declared objective-specific practical-effect floors; v1 and v2 are
-  retained for historical clients.
+- `paired-comparison-schema-v4.json` documents current cluster-paired head-to-head
+  comparison with family-wise simultaneous practical-effect intervals and an adaptive
+  bootstrap budget; v1, v2, and v3 are retained for historical clients.
 - `prediction-readiness-schema-v2.json` documents the current non-authorizing
   evidence-design audit required before any predictive serving model is fitted; v1 is
   retained.
@@ -91,9 +91,11 @@ inputs produce the same response, and no contributor or bundle identity is emitt
 
 `results compare` uses only bundles containing both requested exact configurations.
 Repeated runs collapse within each bundle before paired effects, bootstrap intervals,
-and sign-flip tests are calculated. Holm correction covers every tested objective;
-directional results require the interval and adjusted p-value to agree. The result
-contains configuration identities and counts but no contributing bundle IDs.
+and sign-flip tests are calculated. Holm correction covers non-zero tests and a
+Bonferroni simultaneous interval covers every non-zero practical-effect claim. The
+bootstrap budget scales with the tested family to retain at least 100 expected draws
+per adjusted tail. The result contains configuration identities and counts but no
+contributing bundle IDs.
 
 `results readiness` evaluates independent objective coverage, configuration and
 serving-environment diversity, paired overlap, and exact model-profile repetition

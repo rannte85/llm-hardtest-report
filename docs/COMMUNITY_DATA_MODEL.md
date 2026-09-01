@@ -83,10 +83,12 @@ metadata.
 
 When two exact configurations share contributor bundles, `results compare` can also
 apply user-declared minimum practical effects separately to accuracy, completion,
-latency seconds, and throughput. Holm-controlled directions whose paired interval does
-not clear the declared floor remain visible as small effects but are not configuration
-wins. These floors express the caller's operational decision, not a universal benchmark
-constant or evidence about an untested environment.
+latency seconds, and throughput. Holm controls non-zero tests while Bonferroni
+simultaneous paired intervals control non-zero practical-effect claims across every
+tested objective. Directions that do not simultaneously clear the declared floor
+remain visible as small effects but are not configuration wins. These floors express
+the caller's operational decision, not a universal benchmark constant or evidence
+about an untested environment.
 
 Version 2.13 provides the first read-only form of this interface:
 

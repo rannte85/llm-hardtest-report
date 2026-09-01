@@ -1224,7 +1224,7 @@ class SnapshotCache:
                     pilot_id=pilot_id))
             analysis = analyze_pilots(roots)
             portfolio = analysis["portfolio"]
-        self.assertEqual(analysis["schema_version"], 2)
+        self.assertEqual(analysis["schema_version"], 3)
         self.assertEqual(portfolio["required_pilots"], [
             "q32_retry_compatibility", "q33_batch_delivery", "q34_config_overlay",
             "q35_snapshot_race",
@@ -1240,6 +1240,62 @@ class SnapshotCache:
         self.assertEqual(comparison["shared_pilots"], portfolio["required_pilots"])
         self.assertEqual(comparison["shared_scenario_versions"], 4)
         self.assertEqual(comparison["mean_distance"], 0.0)
+        adjusted = comparison["repeat_adjusted_separation"]
+        self.assertEqual(adjusted["status"], "NO_STABLE_SEPARATION")
+        self.assertEqual(adjusted["mean_repeat_noise"], 0.0)
+        self.assertEqual(adjusted["mean_adjusted_separation"], 0.0)
+        self.assertEqual(adjusted["bootstrap_95"]["lower"], 0.0)
+        self.assertEqual(adjusted["bootstrap_95"]["upper"], 0.0)
+        self.assertEqual(
+            comparison["next_evidence"]["action"], "REVIEW_NO_STABLE_SEPARATION")
+
+    def test_round_five_portfolio_detects_repeat_adjusted_stable_separation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            config = self._config()
+            config["models"].append({
+                **config["models"][0],
+                "key": "weak", "label": "Weak", "model": "fake-weak",
+            })
+            roots = []
+            for pilot_id in PILOT_IDS:
+                roots.append(run_pilot(
+                    config, Path(tmp), None, 2,
+                    agent_factory=lambda model, run, selected=pilot_id: self.FakeAgent(
+                        mode="correct" if model["key"] == "m" else "baseline",
+                        pilot_id=selected),
+                    pilot_id=pilot_id))
+            comparison = analyze_pilots(roots)["portfolio"]["pairwise"][0]
+        adjusted = comparison["repeat_adjusted_separation"]
+        self.assertEqual(adjusted["status"], "STABLE_SEPARATION")
+        self.assertGreater(adjusted["bootstrap_95"]["lower"], 0.05)
+        self.assertEqual(adjusted["mean_repeat_noise"], 0.0)
+        self.assertEqual(comparison["next_evidence"]["action"],
+                         "MANUAL_AMBIGUITY_REVIEW")
+
+    def test_round_five_portfolio_subtracts_repeat_instability(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            config = self._config()
+            config["models"].append({
+                **config["models"][0],
+                "key": "m2", "label": "M2", "model": "fake-model-2",
+            })
+            roots = []
+            for pilot_id in PILOT_IDS:
+                calls = {}
+
+                def factory(model, run, selected=pilot_id):
+                    calls[model["key"]] = calls.get(model["key"], 0) + 1
+                    mode = "correct" if calls[model["key"]] % 2 else "baseline"
+                    return self.FakeAgent(mode=mode, pilot_id=selected)
+
+                roots.append(run_pilot(
+                    config, Path(tmp), None, 2, agent_factory=factory,
+                    pilot_id=pilot_id))
+            comparison = analyze_pilots(roots)["portfolio"]["pairwise"][0]
+        adjusted = comparison["repeat_adjusted_separation"]
+        self.assertGreater(adjusted["mean_repeat_noise"], 0.0)
+        self.assertLessEqual(adjusted["mean_adjusted_separation"], 0.0)
+        self.assertEqual(adjusted["status"], "NO_STABLE_SEPARATION")
 
     def test_round_five_rejects_unknown_pilot_id(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1445,6 +1501,12 @@ class PilotAnalysisTests(unittest.TestCase):
                     "q33_batch_delivery", "q34_config_overlay", "q35_snapshot_race",
                 ])
             self.assertFalse(row["ready_for_cross_scenario_interpretation"])
+        comparison = analysis["portfolio"]["pairwise"][0]
+        self.assertEqual(
+            comparison["repeat_adjusted_separation"]["status"],
+            "INSUFFICIENT_EVIDENCE")
+        self.assertEqual(
+            comparison["next_evidence"]["action"], "COLLECT_MISSING_SCENARIOS")
 
     def test_cross_pilot_portfolio_marks_multiple_versions_as_ambiguous(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1460,6 +1522,12 @@ class PilotAnalysisTests(unittest.TestCase):
                 row["pack_ambiguous_pilots"], ["q32_retry_compatibility"])
             self.assertFalse(row["coverage_gates"]["one_pack_per_pilot"])
             self.assertFalse(row["ready_for_cross_scenario_interpretation"])
+        comparison = portfolio["pairwise"][0]
+        self.assertEqual(
+            comparison["repeat_adjusted_separation"]["status"],
+            "INSUFFICIENT_EVIDENCE")
+        self.assertEqual(
+            comparison["next_evidence"]["action"], "ALIGN_SCENARIO_VERSIONS")
 
     def test_pilot_analysis_is_anonymous_unless_labels_are_requested(self):
         with tempfile.TemporaryDirectory() as tmp:

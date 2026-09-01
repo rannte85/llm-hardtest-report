@@ -1,4 +1,4 @@
-# Release Notes — 2.30.0
+# Release Notes — 2.31.0
 
 This repository is ready to publish as `rannte85/llm-hardtest-report`. It contains no raw
 campaign outputs, credentials, local model files, personal filesystem paths, or
@@ -6,6 +6,16 @@ generated Python caches. The included Luna result is the allowlist-only public b
 not its prompts, responses, transcripts, account details, or local run directory.
 
 The release validation now also covers:
+
+- repeat-adjusted Round 5 configuration separation over exact shared scenario versions;
+- deterministic scenario-level bootstrap intervals and a conservative five-point
+  minimum effect instead of resampling dependent attempts or outcome axes;
+- explicit stable, inconclusive, no-stable-separation, and insufficient-evidence states;
+- next-evidence guidance for mixed versions, missing pilots, repeat deficits, invalid
+  attempts, noisy scenarios, and mandatory manual ambiguity review;
+- analysis schema 3 with no canonical score, causal claim, significance claim, or
+  prediction for a model that was not run;
+- 217 passing source tests, repository selftest, and installed-package verification;
 
 - `q35_snapshot_race`, an orthogonal temporal-consistency incident with four public
   and ten held-back checks for request-order commits, failed-newer fallback, ABA-safe

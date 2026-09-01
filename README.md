@@ -4,10 +4,10 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-**Current release: 2.30.0** — adds a fourth, orthogonal Round 5 incident for temporal
-consistency under overlapping asynchronous refreshes. It separates complete
-generation-order reasoning from public-green latest-issued guards, value CAS, global
-epochs, lock-held I/O, destructive failure handling, stale returns, and test tampering.
+**Current release: 2.31.0** — adds repeat-adjusted cross-scenario separation for Round 5.
+It subtracts each configuration's repeat instability, bootstraps whole scenarios, uses
+conservative evidence gates, and recommends the next evidence to collect without
+manufacturing a canonical score.
 
 LLM Hardtest Report is a local-first command-line benchmark for comparing language
 models as reasoners, coding workers, and safe handoff agents. Point it at one or more
@@ -210,7 +210,13 @@ between configurations across transport completion, authority safety, hypothesis
 revision, public and held-back tests, release readiness, report accuracy, and tool
 protocol compliance. It also builds a configuration portfolio across q32–q35, keeps
 missing scenarios unobserved, exposes the worst observed held-back rate, and compares
-configurations only on an exact shared scenario fingerprint. Model labels remain
+configurations only on an exact shared scenario fingerprint. Pairwise analysis subtracts
+within-configuration repeat noise and resamples whole scenarios for a deterministic 95%
+interval. It requires three shared exact versions and two complete attempts per side and
+labels evidence as stable, inconclusive, no stable separation, or insufficient. It also
+names the next missing, mismatched, repeated, invalid, or ambiguity-review evidence to
+collect. This remains descriptive research evidence, not significance or promotion.
+Model labels remain
 anonymous unless `--include-model-labels` is explicitly supplied. See
 [Round 5 Cross-Pilot Analysis](docs/PILOT_ANALYSIS.md).
 

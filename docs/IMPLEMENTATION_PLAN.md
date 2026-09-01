@@ -887,3 +887,38 @@ Acceptance checks:
   q35-version eight-axis distance is 56.875%.
 - Repository selftest, all 215 source tests, installed-package verification, and the
   Linux/macOS CI matrix pass without publishing raw model evidence.
+
+## Phase 31 — Repeat-adjusted cross-scenario evidence
+
+Goal: distinguish reproducible configuration separation from variation between repeated
+attempts, while keeping sparse or mismatched evidence explicitly non-inferential.
+
+Deliverables:
+
+1. Calculate exact-version between-configuration distance and within-configuration
+   repeat distance for every shared Round 5 scenario.
+2. Subtract mean repeat noise at the scenario level without clamping negative effects.
+3. Bootstrap whole scenario effects deterministically for a 95% interval; never treat
+   dependent attempts or the eight outcome axes as independent sampling units.
+4. Require three exact shared scenarios, one version per pilot, two complete attempts
+   per side/version, complete transport, and safe authority behavior before inference.
+5. Emit stable, inconclusive, no-stable-separation, or insufficient-evidence status
+   using a five-percentage-point minimum effect, plus a deterministic next-evidence
+   acquisition priority.
+6. Publish analysis schema 3 and human-readable methodology while preserving
+   `canonical_score: false` and mandatory manual ambiguity review.
+
+Acceptance checks:
+
+- Two identical stable configurations produce zero adjusted separation and
+  `NO_STABLE_SEPARATION` with a zero-width interval.
+- Stable correct-versus-baseline controls clear the minimum effect and require manual
+  ambiguity review before any interpretation beyond the observed configurations.
+- Alternating correct/baseline repeats on both sides create visible repeat noise that
+  is subtracted and cannot become a false stable separation.
+- Sparse single-scenario evidence remains `INSUFFICIENT_EVIDENCE` and requests missing
+  scenarios; mixed fingerprints request version alignment before more repeats.
+- Markdown and JSON agree, the bootstrap is reproducible, missing data is not imputed,
+  and no canonical score, significance claim, causal claim, or model prediction appears.
+- Repository selftest, all 217 source tests, installed-package verification, and the
+  Linux/macOS CI matrix pass without publishing raw model evidence.

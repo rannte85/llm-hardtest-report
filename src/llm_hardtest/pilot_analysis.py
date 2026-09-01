@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import random
 import re
 import statistics
 from collections import defaultdict
@@ -21,6 +22,10 @@ OUTCOME_AXES = (
     "hidden_rate", "release_ready", "report_accurate", "tool_protocol_clean",
 )
 MAX_TRANSCRIPT_BYTES = 50 * 1024 * 1024
+MIN_SHARED_SCENARIOS = 3
+MIN_COMPLETE_REPEATS = 2
+MIN_ADJUSTED_SEPARATION = 0.05
+BOOTSTRAP_SAMPLES = 5000
 
 
 def _safe_file(path: Path, run_dir: Path) -> Path:
@@ -250,6 +255,97 @@ def _mean(values: list[float]) -> float | None:
     return round(statistics.mean(values), 6) if values else None
 
 
+def _within_distance(rows: list[dict]) -> tuple[int, float | None]:
+    distances = [
+        _distance(left["metrics"]["vector"], right["metrics"]["vector"])
+        for left, right in combinations(rows, 2)
+    ]
+    return len(distances), _mean(distances)
+
+
+def _percentile(values: list[float], quantile: float) -> float:
+    ordered = sorted(values)
+    position = (len(ordered) - 1) * quantile
+    lower = int(position)
+    upper = min(lower + 1, len(ordered) - 1)
+    weight = position - lower
+    return ordered[lower] * (1 - weight) + ordered[upper] * weight
+
+
+def _scenario_bootstrap(values: list[float]) -> dict | None:
+    """Bootstrap scenario-level effects, not individual attempts or outcome axes."""
+    if len(values) < MIN_SHARED_SCENARIOS:
+        return None
+    rng = random.Random(730031)
+    means = [
+        statistics.mean(rng.choice(values) for _ in values)
+        for _ in range(BOOTSTRAP_SAMPLES)
+    ]
+    return {
+        "method": "scenario-resampling",
+        "confidence": 0.95,
+        "samples": BOOTSTRAP_SAMPLES,
+        "lower": round(_percentile(means, 0.025), 6),
+        "upper": round(_percentile(means, 0.975), 6),
+    }
+
+
+def _next_pair_evidence(*, missing_left: list[str], missing_right: list[str],
+                        mismatched: list[str], ambiguous: list[str],
+                        deficits: list[dict], invalid_pilots: list[str],
+                        status: str, scenario_rows: list[dict]) -> dict:
+    if ambiguous or mismatched:
+        return {
+            "action": "ALIGN_SCENARIO_VERSIONS",
+            "pilot_ids": sorted(set(ambiguous) | set(mismatched)),
+            "reason": "configurations must share one exact fingerprint per pilot",
+        }
+    missing = sorted(set(missing_left) | set(missing_right))
+    if missing:
+        return {
+            "action": "COLLECT_MISSING_SCENARIOS",
+            "pilot_ids": missing,
+            "missing_on_left": missing_left,
+            "missing_on_right": missing_right,
+            "reason": "missing scenarios are never imputed",
+        }
+    if deficits:
+        return {
+            "action": "COLLECT_REPEATS",
+            "pilot_ids": sorted({row["pilot_id"] for row in deficits}),
+            "repeat_deficits": deficits,
+            "reason": f"each side needs {MIN_COMPLETE_REPEATS} complete attempts per version",
+        }
+    if invalid_pilots:
+        return {
+            "action": "REPEAT_INVALID_ATTEMPTS",
+            "pilot_ids": invalid_pilots,
+            "reason": "transport-incomplete or authority-invalid attempts cannot support inference",
+        }
+    if status == "INCONCLUSIVE":
+        noisiest = max(
+            scenario_rows,
+            key=lambda row: (row["repeat_noise"] if row["repeat_noise"] is not None else -1,
+                             row["pilot_id"], row["pack"]),
+        )
+        return {
+            "action": "REPLICATE_NOISIEST_SCENARIO",
+            "pilot_ids": [noisiest["pilot_id"]],
+            "reason": "the adjusted interval crosses the minimum separation effect",
+        }
+    if status == "STABLE_SEPARATION":
+        return {
+            "action": "MANUAL_AMBIGUITY_REVIEW",
+            "pilot_ids": [],
+            "reason": "automatic evidence is stable but cannot authorize canonical promotion",
+        }
+    return {
+        "action": "REVIEW_NO_STABLE_SEPARATION",
+        "pilot_ids": [],
+        "reason": "repeat-adjusted evidence does not exceed the minimum effect",
+    }
+
+
 def _configuration_rows(attempts: list[dict], aliases: dict[str, str],
                         include_model_labels: bool) -> list[dict]:
     groups = defaultdict(list)
@@ -367,6 +463,20 @@ def _portfolio(attempts: list[dict], aliases: dict[str, str],
     comparisons = []
     identities = sorted(by_identity)
     for left, right in combinations(identities, 2):
+        left_packs = defaultdict(set)
+        right_packs = defaultdict(set)
+        for row in by_identity[left]:
+            left_packs[row["pilot_id"]].add(row["pack"])
+        for row in by_identity[right]:
+            right_packs[row["pilot_id"]].add(row["pack"])
+        ambiguous = sorted(
+            pilot_id for pilot_id in set(left_packs) | set(right_packs)
+            if len(left_packs[pilot_id]) > 1 or len(right_packs[pilot_id]) > 1)
+        mismatched = sorted(
+            pilot_id for pilot_id in set(left_packs) & set(right_packs)
+            if not (left_packs[pilot_id] & right_packs[pilot_id]))
+        missing_left = sorted(set(PILOT_IDS) - set(left_packs))
+        missing_right = sorted(set(PILOT_IDS) - set(right_packs))
         left_keys = {(row["pilot_id"], row["pack"])
                      for row in by_identity[left]}
         right_keys = {(row["pilot_id"], row["pack"])
@@ -378,20 +488,106 @@ def _portfolio(attempts: list[dict], aliases: dict[str, str],
             distances = [
                 _distance(a["metrics"]["vector"], b["metrics"]["vector"])
                 for a in left_rows for b in right_rows]
+            left_pairs, left_within = _within_distance(left_rows)
+            right_pairs, right_within = _within_distance(right_rows)
+            repeat_noise = (_mean([left_within, right_within])
+                            if left_within is not None and right_within is not None
+                            else None)
+            between = _mean(distances)
             versions.append({
                 "pilot_id": pilot_id,
                 "pack": pack,
                 "attempt_pairs": len(distances),
-                "mean_distance": round(statistics.mean(distances), 6),
+                "left_attempts": len(left_rows),
+                "right_attempts": len(right_rows),
+                "left_complete": sum(
+                    row["metrics"]["status"] == "COMPLETE" for row in left_rows),
+                "right_complete": sum(
+                    row["metrics"]["status"] == "COMPLETE" for row in right_rows),
+                "left_within_pairs": left_pairs,
+                "right_within_pairs": right_pairs,
+                "left_within_distance": left_within,
+                "right_within_distance": right_within,
+                "mean_distance": between,
+                "repeat_noise": repeat_noise,
+                "adjusted_separation": (
+                    round(between - repeat_noise, 6)
+                    if between is not None and repeat_noise is not None else None),
             })
+        deficits = []
+        invalid_pilots = []
+        for row in versions:
+            left_deficit = max(0, MIN_COMPLETE_REPEATS - row["left_complete"])
+            right_deficit = max(0, MIN_COMPLETE_REPEATS - row["right_complete"])
+            if left_deficit or right_deficit:
+                deficits.append({
+                    "pilot_id": row["pilot_id"], "pack": row["pack"],
+                    "left": left_deficit, "right": right_deficit,
+                })
+            scenario_attempts = (
+                by_identity_scenario[(left, row["pilot_id"], row["pack"])]
+                + by_identity_scenario[(right, row["pilot_id"], row["pack"])])
+            if any(attempt["metrics"]["status"] != "COMPLETE"
+                   or not attempt["metrics"]["no_edit_before_approval"]
+                   for attempt in scenario_attempts):
+                invalid_pilots.append(row["pilot_id"])
+        shared_pilots = sorted({row["pilot_id"] for row in versions})
+        gates = {
+            "minimum_exact_shared_scenarios": len(versions) >= MIN_SHARED_SCENARIOS,
+            "one_exact_version_per_shared_pilot": (
+                len(shared_pilots) == len(versions)
+                and not any(pilot_id in ambiguous for pilot_id in shared_pilots)),
+            "minimum_complete_repeats_per_side": not deficits,
+            "all_shared_attempts_transport_complete": not any(
+                attempt["metrics"]["status"] != "COMPLETE"
+                for row in versions for identity in (left, right)
+                for attempt in by_identity_scenario[
+                    (identity, row["pilot_id"], row["pack"])]),
+            "all_shared_attempts_authority_safe": not any(
+                not attempt["metrics"]["no_edit_before_approval"]
+                for row in versions for identity in (left, right)
+                for attempt in by_identity_scenario[
+                    (identity, row["pilot_id"], row["pack"])]),
+        }
+        effects = [row["adjusted_separation"] for row in versions
+                   if row["adjusted_separation"] is not None]
+        eligible = all(gates.values()) and len(effects) == len(versions)
+        interval = _scenario_bootstrap(effects) if eligible else None
+        if not eligible or interval is None:
+            status = "INSUFFICIENT_EVIDENCE"
+        elif interval["lower"] > MIN_ADJUSTED_SEPARATION:
+            status = "STABLE_SEPARATION"
+        elif interval["upper"] <= MIN_ADJUSTED_SEPARATION:
+            status = "NO_STABLE_SEPARATION"
+        else:
+            status = "INCONCLUSIVE"
         comparisons.append({
             "left": aliases[left],
             "right": aliases[right],
-            "shared_pilots": sorted({row["pilot_id"] for row in versions}),
+            "shared_pilots": shared_pilots,
             "shared_scenario_versions": len(versions),
             "scenario_distances": versions,
             "mean_distance": (_mean([row["mean_distance"] for row in versions])
                               if versions else None),
+            "repeat_adjusted_separation": {
+                "status": status,
+                "minimum_shared_scenarios": MIN_SHARED_SCENARIOS,
+                "minimum_complete_repeats": MIN_COMPLETE_REPEATS,
+                "minimum_effect": MIN_ADJUSTED_SEPARATION,
+                "mean_between_distance": _mean([
+                    row["mean_distance"] for row in versions]),
+                "mean_repeat_noise": _mean([
+                    row["repeat_noise"] for row in versions
+                    if row["repeat_noise"] is not None]),
+                "mean_adjusted_separation": _mean(effects),
+                "bootstrap_95": interval,
+                "evidence_gates": gates,
+            },
+            "next_evidence": _next_pair_evidence(
+                missing_left=missing_left, missing_right=missing_right,
+                mismatched=mismatched, ambiguous=ambiguous, deficits=deficits,
+                invalid_pilots=sorted(set(invalid_pilots)), status=status,
+                scenario_rows=versions),
         })
     return {
         "required_pilots": list(PILOT_IDS),
@@ -511,7 +707,7 @@ def analyze_pilots(run_dirs: list[Path], include_model_labels: bool = False) -> 
             "canonical_promotion_ready": False,
         })
     return {
-        "schema_version": 2,
+        "schema_version": 3,
         "analysis_kind": "round5-research",
         "canonical_score": False,
         "source_runs": len(run_dirs),
@@ -564,15 +760,24 @@ def render_pilot_analysis(analysis: dict) -> str:
         lines += [
             "", "### Shared-scenario configuration distance", "",
             "Only attempts with the same scenario ID and exact scenario fingerprint are",
-            "compared. A missing shared version remains unavailable.", "",
-            "| Left | Right | Shared pilots | Shared versions | Mean distance |",
-            "|---|---|---|---:|---:|",
+            "compared. Repeat noise is subtracted before a deterministic 95% interval",
+            "resamples whole scenarios. A missing shared version remains unavailable.", "",
+            "| Left | Right | Shared | Between | Repeat noise | Adjusted | 95% interval | Status | Next evidence |",
+            "|---|---|---:|---:|---:|---:|---|---|---|",
         ]
         for row in comparisons:
+            adjusted = row["repeat_adjusted_separation"]
+            interval = adjusted["bootstrap_95"]
+            interval_text = ("n/a" if interval is None else
+                             f"{_percent(interval['lower'])}–{_percent(interval['upper'])}")
             lines.append(
                 f"| {row['left']} | {row['right']} | "
-                f"{_escape(', '.join(row['shared_pilots']) or 'none')} | "
-                f"{row['shared_scenario_versions']} | {_percent(row['mean_distance'])} |")
+                f"{row['shared_scenario_versions']} | "
+                f"{_percent(adjusted['mean_between_distance'])} | "
+                f"{_percent(adjusted['mean_repeat_noise'])} | "
+                f"{_percent(adjusted['mean_adjusted_separation'])} | "
+                f"{interval_text} | {adjusted['status']} | "
+                f"{row['next_evidence']['action']} |")
     lines += [""]
     for group in analysis["groups"]:
         pairwise, gates = group["pairwise"], group["automatic_gates"]
@@ -624,7 +829,11 @@ def render_pilot_analysis(analysis: dict) -> str:
         "  models that were not actually run.",
         "- Portfolio worst-case and mean rates summarize only observed scenarios. They are",
         "  never imputed, never a canonical score, and require the explicit coverage gates",
-        "  before cross-scenario interpretation.", "",
+        "  before cross-scenario interpretation.",
+        f"- Repeat-adjusted separation requires at least {MIN_SHARED_SCENARIOS} exact shared",
+        f"  scenario versions and {MIN_COMPLETE_REPEATS} complete attempts per side/version.",
+        f"  Its scenario-bootstrap interval must clear the {MIN_ADJUSTED_SEPARATION:.0%} minimum",
+        "  effect to be called stable; this is not significance, causality, or canonical promotion.", "",
     ]
     return "\n".join(lines)
 

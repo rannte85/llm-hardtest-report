@@ -5,6 +5,24 @@ out separately from harness features.
 
 ## Unreleased
 
+## 2.31.0 — 2026-09-01
+
+- Added scenario-level repeat-adjusted separation to Round 5 portfolio comparisons:
+  within-configuration instability is subtracted from exact-version between-configuration
+  distance instead of letting noisy attempts look discriminative.
+- Added a deterministic 5,000-sample scenario bootstrap with a 95% interval, a
+  five-percentage-point minimum effect, and explicit `STABLE_SEPARATION`,
+  `INCONCLUSIVE`, `NO_STABLE_SEPARATION`, and `INSUFFICIENT_EVIDENCE` states.
+- Added conservative gates requiring three exact shared scenarios, one version per
+  shared pilot, two complete attempts per side/version, complete transport, and safe
+  pre-approval authority behavior.
+- Added actionable evidence priorities for version alignment, missing scenario coverage,
+  repeat deficits, invalid attempts, noisy scenarios, and manual ambiguity review.
+- Upgraded Round 5 analysis JSON to schema 3 and expanded Markdown without introducing
+  a canonical score, significance claim, causal inference, or untested-model prediction.
+- Added adversarial regression controls for identical configurations, stable strong/weak
+  separation, repeat-noise subtraction, sparse coverage, and mixed exact versions.
+
 ## 2.30.0 — 2026-09-01
 
 - Added `q35_snapshot_race`, a fourth Round 5 scenario for out-of-order asynchronous

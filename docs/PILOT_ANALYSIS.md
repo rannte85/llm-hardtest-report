@@ -44,7 +44,7 @@ is statistically supported.
 
 ## Cross-scenario portfolio
 
-Analysis schema 2 adds one portfolio row per exact inference configuration. It shows:
+Analysis schema 3 adds one portfolio row per exact inference configuration. It shows:
 
 - which required q32–q35 scenarios were observed and which remain missing;
 - whether one scenario ID was mixed across multiple fingerprints;
@@ -52,12 +52,34 @@ Analysis schema 2 adds one portfolio row per exact inference configuration. It s
 - scenario-weighted mean public, held-back, and release-ready rates;
 - the worst observed held-back rate as a failure-envelope indicator;
 - authority and tool-protocol failures;
-- pairwise configuration distance over exact shared `(pilot_id, fingerprint)` pairs.
+- pairwise configuration distance over exact shared `(pilot_id, fingerprint)` pairs;
+- repeat-adjusted separation, a deterministic scenario-bootstrap interval, conservative
+  evidence status, and the highest-priority next evidence action.
 
 Missing scenarios remain missing and are never imputed as zero or success. A scenario
 with more repeated attempts does not receive more weight in the displayed means. The
 portfolio is a coverage and failure-envelope view, not a composite benchmark score.
 `canonical_score` remains false.
+
+For each exact shared scenario version, the analyzer averages every cross-configuration
+attempt distance, averages within-configuration attempt distances on both sides, and
+subtracts that repeat noise from the between-configuration distance. It then resamples
+the scenario-level adjusted effects—not individual attempts or vector axes—5,000 times
+with a fixed seed to produce a reproducible 95% percentile interval.
+
+Inference requires at least three exact shared scenario versions, one version per shared
+pilot, two transport-complete attempts per side/version, complete transport for every
+shared attempt, and no pre-approval edit violation. If any gate fails, the status is
+`INSUFFICIENT_EVIDENCE`. Otherwise, the interval is `STABLE_SEPARATION` only when its
+lower bound exceeds the five-percentage-point minimum effect, `NO_STABLE_SEPARATION`
+when its upper bound does not exceed that threshold, and `INCONCLUSIVE` when it crosses
+the threshold. These labels are conservative descriptive evidence, not a significance
+test, causal estimate, model prediction, leaderboard score, or automatic promotion.
+
+The machine and Markdown reports also prioritize the next acquisition step: align mixed
+or mismatched versions, collect missing scenarios, add repeat attempts, replace invalid
+attempts, replicate the noisiest inconclusive scenario, or proceed to manual ambiguity
+review. Missing observations are never synthesized.
 
 ## Automatic evidence gates
 

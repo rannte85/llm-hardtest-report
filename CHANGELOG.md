@@ -5,6 +5,24 @@ out separately from harness features.
 
 ## Unreleased
 
+## 2.32.0 — 2026-09-01
+
+- Added per-axis Round 5 separation attribution for transport, authority, evidence
+  revision, public and held-back correctness, release readiness, report accuracy, and
+  tool-protocol cleanliness.
+- Added positive repeat-adjusted contribution shares while keeping attribution unsigned;
+  it explains observed differences but does not rank either configuration.
+- Added deterministic leave-one-scenario-out robustness for eligible stable comparisons.
+  Every omission reruns the same scenario bootstrap and minimum-effect decision.
+- Added `ROBUST_TO_SINGLE_SCENARIO_REMOVAL`, `SENSITIVE_TO_SINGLE_SCENARIO`,
+  `INSUFFICIENT_SCENARIOS`, and `NOT_APPLICABLE` robustness states.
+- Redirected single-scenario-sensitive evidence to targeted influential-scenario
+  replication before manual ambiguity review.
+- Added a complete-axis observation gate so missing test denominators cannot silently
+  alter the set of equally weighted axes used for inferential separation.
+- Upgraded Round 5 analysis JSON to schema 4 and added adversarial diffuse-signal,
+  single-scenario-leverage, invariant-axis, and repeat-noise controls.
+
 ## 2.31.0 — 2026-09-01
 
 - Added scenario-level repeat-adjusted separation to Round 5 portfolio comparisons:

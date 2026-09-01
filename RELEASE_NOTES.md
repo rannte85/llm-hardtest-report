@@ -1,4 +1,4 @@
-# Release Notes — 2.31.0
+# Release Notes — 2.32.0
 
 This repository is ready to publish as `rannte85/llm-hardtest-report`. It contains no raw
 campaign outputs, credentials, local model files, personal filesystem paths, or
@@ -6,6 +6,14 @@ generated Python caches. The included Luna result is the allowlist-only public b
 not its prompts, responses, transcripts, account details, or local run directory.
 
 The release validation now also covers:
+
+- schema-4 Round 5 axis attribution that exposes which capability dimensions create
+  distance without making a directional model ranking;
+- deterministic leave-one-scenario-out reanalysis for every eligible stable comparison;
+- targeted replication whenever any scenario omission breaks stable separation;
+- a complete-axis gate that prevents missing test denominators from changing the
+  inferential weighting silently;
+- 218 passing source tests plus repository and installed-package selftests;
 
 - repeat-adjusted Round 5 configuration separation over exact shared scenario versions;
 - deterministic scenario-level bootstrap intervals and a conservative five-point

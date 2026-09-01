@@ -4,10 +4,10 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-**Current release: 2.31.0** — adds repeat-adjusted cross-scenario separation for Round 5.
-It subtracts each configuration's repeat instability, bootstraps whole scenarios, uses
-conservative evidence gates, and recommends the next evidence to collect without
-manufacturing a canonical score.
+**Current release: 2.32.0** — explains which Round 5 outcome axes create observed
+separation and tests whether stable evidence survives removal of every single scenario.
+Single-scenario-sensitive results now request targeted replication instead of advancing
+to manual interpretation, without manufacturing a canonical score or model ranking.
 
 LLM Hardtest Report is a local-first command-line benchmark for comparing language
 models as reasoners, coding workers, and safe handoff agents. Point it at one or more
@@ -214,8 +214,12 @@ configurations only on an exact shared scenario fingerprint. Pairwise analysis s
 within-configuration repeat noise and resamples whole scenarios for a deterministic 95%
 interval. It requires three shared exact versions and two complete attempts per side and
 labels evidence as stable, inconclusive, no stable separation, or insufficient. It also
-names the next missing, mismatched, repeated, invalid, or ambiguity-review evidence to
-collect. This remains descriptive research evidence, not significance or promotion.
+names the next missing, mismatched, repeated, invalid, unobserved-axis, or
+ambiguity-review evidence to collect. Axis attribution decomposes the unsigned distance,
+while leave-one-scenario-out
+checks identify stable results that depend on one incident and redirect collection to
+the influential scenarios. This remains descriptive research evidence, not a directional
+ranking, significance test, or promotion.
 Model labels remain
 anonymous unless `--include-model-labels` is explicitly supplied. See
 [Round 5 Cross-Pilot Analysis](docs/PILOT_ANALYSIS.md).

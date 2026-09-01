@@ -922,3 +922,37 @@ Acceptance checks:
   and no canonical score, significance claim, causal claim, or model prediction appears.
 - Repository selftest, all 217 source tests, installed-package verification, and the
   Linux/macOS CI matrix pass without publishing raw model evidence.
+
+## Phase 32 — Explainable and omission-robust separation
+
+Goal: reveal which capability axes create a Round 5 configuration difference and stop
+one influential incident from silently carrying an otherwise stable conclusion.
+
+Deliverables:
+
+1. Decompose every exact shared scenario into the same eight unsigned outcome-axis
+   distances used by the aggregate calculation.
+2. Report scenario-weighted between distance, repeat noise, adjusted separation, and
+   positive contribution share per axis without declaring a directional winner.
+3. Require all eight outcome axes to be observed on every shared attempt before an
+   inferential separation status can be issued.
+4. For eligible stable comparisons with four or more scenarios, remove each scenario
+   in turn and rerun the deterministic bootstrap and minimum-effect decision.
+5. Distinguish robust, single-scenario-sensitive, too-few-scenario, and non-applicable
+   omission states, retaining every omission case in JSON.
+6. Prioritize replication of all influential scenarios before manual ambiguity review
+   whenever an omission breaks stable separation.
+
+Acceptance checks:
+
+- Identical configurations have zero contribution on all axes and no omission audit.
+- Diffuse correct-versus-baseline separation has positive correctness attribution and
+  remains stable after every single scenario removal.
+- A comparison with one identical scenario and three separating scenarios is stable in
+  aggregate but is flagged sensitive when a separating scenario is removed.
+- Transport and other invariant axes retain exactly zero contribution, positive shares
+  sum to one when signal exists, and repeat instability is subtracted per axis.
+- Sparse, mixed-version, incomplete, authority-invalid, or missing-axis evidence cannot
+  reach omission-robust manual review.
+- Repository selftest, all 218 source tests, installed-package verification, and the
+  Linux/macOS CI matrix pass without publishing raw model evidence.

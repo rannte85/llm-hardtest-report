@@ -44,7 +44,7 @@ is statistically supported.
 
 ## Cross-scenario portfolio
 
-Analysis schema 3 adds one portfolio row per exact inference configuration. It shows:
+Analysis schema 4 adds one portfolio row per exact inference configuration. It shows:
 
 - which required q32–q35 scenarios were observed and which remain missing;
 - whether one scenario ID was mixed across multiple fingerprints;
@@ -54,7 +54,8 @@ Analysis schema 3 adds one portfolio row per exact inference configuration. It s
 - authority and tool-protocol failures;
 - pairwise configuration distance over exact shared `(pilot_id, fingerprint)` pairs;
 - repeat-adjusted separation, a deterministic scenario-bootstrap interval, conservative
-  evidence status, and the highest-priority next evidence action.
+  evidence status, and the highest-priority next evidence action;
+- per-axis attribution and leave-one-scenario-out robustness for stable results.
 
 Missing scenarios remain missing and are never imputed as zero or success. A scenario
 with more repeated attempts does not receive more weight in the displayed means. The
@@ -78,8 +79,31 @@ test, causal estimate, model prediction, leaderboard score, or automatic promoti
 
 The machine and Markdown reports also prioritize the next acquisition step: align mixed
 or mismatched versions, collect missing scenarios, add repeat attempts, replace invalid
-attempts, replicate the noisiest inconclusive scenario, or proceed to manual ambiguity
-review. Missing observations are never synthesized.
+attempts or unobserved axes, replicate influential or noisy scenarios, or proceed to
+manual ambiguity review. Missing observations are never synthesized.
+
+## Attribution and single-scenario robustness
+
+For each outcome axis, schema 4 reports scenario-weighted between-configuration distance,
+within-configuration repeat noise, their difference, and the share of positive adjusted
+separation. The shares sum to one when positive signal exists. This decomposition is
+unsigned: it explains where configurations differ but deliberately does not claim which
+configuration is better. Aggregate distance still weights all comparable axes equally.
+Contribution shares remain unavailable until both sides have enough repeats to estimate
+per-axis repeat noise; an unavailable share is never rendered as zero evidence.
+
+When a fully eligible comparison is `STABLE_SEPARATION` and has at least four exact
+shared scenarios, the analyzer removes each scenario in turn and reruns the same
+scenario-bootstrap decision on the remainder. `ROBUST_TO_SINGLE_SCENARIO_REMOVAL` means
+every omission stays stable. `SENSITIVE_TO_SINGLE_SCENARIO` lists each omission that
+breaks stability and changes the next action to `REPLICATE_INFLUENTIAL_SCENARIOS`.
+Three scenarios can establish the primary status but cannot support this omission audit,
+so robustness remains `INSUFFICIENT_SCENARIOS`. Non-stable or ineligible comparisons are
+`NOT_APPLICABLE`. These checks do not turn four incidents into population-level proof.
+
+Inferential gates also require all eight axes to be observed for every shared attempt.
+An absent public or held-back denominator remains missing rather than being silently
+reweighted against configurations with complete outcome vectors.
 
 ## Automatic evidence gates
 

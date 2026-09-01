@@ -263,6 +263,41 @@ def _within_distance(rows: list[dict]) -> tuple[int, float | None]:
     return len(distances), _mean(distances)
 
 
+def _axis_distance(left_rows: list[dict], right_rows: list[dict]) -> dict[str, dict]:
+    result = {}
+    for axis in OUTCOME_AXES:
+        between = [
+            abs(left["metrics"]["vector"][axis] - right["metrics"]["vector"][axis])
+            for left in left_rows for right in right_rows
+            if left["metrics"]["vector"][axis] is not None
+            and right["metrics"]["vector"][axis] is not None
+        ]
+        left_within = [
+            abs(left["metrics"]["vector"][axis] - right["metrics"]["vector"][axis])
+            for left, right in combinations(left_rows, 2)
+            if left["metrics"]["vector"][axis] is not None
+            and right["metrics"]["vector"][axis] is not None
+        ]
+        right_within = [
+            abs(left["metrics"]["vector"][axis] - right["metrics"]["vector"][axis])
+            for left, right in combinations(right_rows, 2)
+            if left["metrics"]["vector"][axis] is not None
+            and right["metrics"]["vector"][axis] is not None
+        ]
+        between_mean = _mean(between)
+        left_mean, right_mean = _mean(left_within), _mean(right_within)
+        repeat_noise = (_mean([left_mean, right_mean])
+                        if left_mean is not None and right_mean is not None else None)
+        result[axis] = {
+            "between_distance": between_mean,
+            "repeat_noise": repeat_noise,
+            "adjusted_separation": (
+                round(between_mean - repeat_noise, 6)
+                if between_mean is not None and repeat_noise is not None else None),
+        }
+    return result
+
+
 def _percentile(values: list[float], quantile: float) -> float:
     ordered = sorted(values)
     position = (len(ordered) - 1) * quantile
@@ -290,10 +325,98 @@ def _scenario_bootstrap(values: list[float]) -> dict | None:
     }
 
 
+def _separation_status(values: list[float], eligible: bool) -> tuple[str, dict | None]:
+    interval = _scenario_bootstrap(values) if eligible else None
+    if interval is None:
+        return "INSUFFICIENT_EVIDENCE", None
+    if interval["lower"] > MIN_ADJUSTED_SEPARATION:
+        return "STABLE_SEPARATION", interval
+    if interval["upper"] <= MIN_ADJUSTED_SEPARATION:
+        return "NO_STABLE_SEPARATION", interval
+    return "INCONCLUSIVE", interval
+
+
+def _axis_attribution(scenario_rows: list[dict]) -> list[dict]:
+    rows = []
+    for axis in OUTCOME_AXES:
+        observed = [row["axis_distances"][axis] for row in scenario_rows
+                    if row["axis_distances"][axis]["between_distance"] is not None]
+        adjusted = [row["adjusted_separation"] for row in observed
+                    if row["adjusted_separation"] is not None]
+        rows.append({
+            "axis": axis,
+            "scenarios_observed": len(observed),
+            "mean_between_distance": _mean([
+                row["between_distance"] for row in observed]),
+            "mean_repeat_noise": _mean([
+                row["repeat_noise"] for row in observed
+                if row["repeat_noise"] is not None]),
+            "mean_adjusted_separation": _mean(adjusted),
+        })
+    adjusted_available = any(
+        row["mean_adjusted_separation"] is not None for row in rows)
+    positive_total = sum(max(row["mean_adjusted_separation"] or 0.0, 0.0)
+                         for row in rows)
+    for row in rows:
+        positive = max(row["mean_adjusted_separation"] or 0.0, 0.0)
+        row["positive_contribution_share"] = (
+            round(positive / positive_total, 6) if positive_total
+            else 0.0 if adjusted_available else None)
+    return sorted(rows, key=lambda row: (
+        -(row["positive_contribution_share"] or 0.0), row["axis"]))
+
+
+def _leave_one_out_robustness(scenario_rows: list[dict], status: str,
+                              eligible: bool) -> dict:
+    if not eligible or status != "STABLE_SEPARATION":
+        return {
+            "status": "NOT_APPLICABLE",
+            "required_scenarios": MIN_SHARED_SCENARIOS + 1,
+            "cases": [],
+            "influential_pilot_ids": [],
+        }
+    if len(scenario_rows) <= MIN_SHARED_SCENARIOS:
+        return {
+            "status": "INSUFFICIENT_SCENARIOS",
+            "required_scenarios": MIN_SHARED_SCENARIOS + 1,
+            "cases": [],
+            "influential_pilot_ids": [],
+        }
+    full_mean = statistics.mean(
+        row["adjusted_separation"] for row in scenario_rows)
+    cases = []
+    for omitted in scenario_rows:
+        remaining = [row["adjusted_separation"] for row in scenario_rows
+                     if row is not omitted]
+        omitted_status, interval = _separation_status(remaining, True)
+        cases.append({
+            "omitted_pilot_id": omitted["pilot_id"],
+            "omitted_pack": omitted["pack"],
+            "remaining_scenarios": len(remaining),
+            "mean_adjusted_separation": _mean(remaining),
+            "absolute_mean_shift": round(
+                abs(statistics.mean(remaining) - full_mean), 6),
+            "status": omitted_status,
+            "bootstrap_95": interval,
+        })
+    influential = sorted(
+        row["omitted_pilot_id"] for row in cases
+        if row["status"] != "STABLE_SEPARATION")
+    return {
+        "status": ("SENSITIVE_TO_SINGLE_SCENARIO" if influential
+                   else "ROBUST_TO_SINGLE_SCENARIO_REMOVAL"),
+        "required_scenarios": MIN_SHARED_SCENARIOS + 1,
+        "cases": cases,
+        "influential_pilot_ids": influential,
+    }
+
+
 def _next_pair_evidence(*, missing_left: list[str], missing_right: list[str],
                         mismatched: list[str], ambiguous: list[str],
                         deficits: list[dict], invalid_pilots: list[str],
-                        status: str, scenario_rows: list[dict]) -> dict:
+                        unobserved_pilots: list[str],
+                        status: str, scenario_rows: list[dict],
+                        robustness: dict) -> dict:
     if ambiguous or mismatched:
         return {
             "action": "ALIGN_SCENARIO_VERSIONS",
@@ -321,6 +444,18 @@ def _next_pair_evidence(*, missing_left: list[str], missing_right: list[str],
             "action": "REPEAT_INVALID_ATTEMPTS",
             "pilot_ids": invalid_pilots,
             "reason": "transport-incomplete or authority-invalid attempts cannot support inference",
+        }
+    if unobserved_pilots:
+        return {
+            "action": "REPEAT_UNOBSERVED_AXES",
+            "pilot_ids": unobserved_pilots,
+            "reason": "every outcome axis must be observed for comparable inference",
+        }
+    if robustness["status"] == "SENSITIVE_TO_SINGLE_SCENARIO":
+        return {
+            "action": "REPLICATE_INFLUENTIAL_SCENARIOS",
+            "pilot_ids": robustness["influential_pilot_ids"],
+            "reason": "stable separation does not survive every single-scenario removal",
         }
     if status == "INCONCLUSIVE":
         noisiest = max(
@@ -513,9 +648,11 @@ def _portfolio(attempts: list[dict], aliases: dict[str, str],
                 "adjusted_separation": (
                     round(between - repeat_noise, 6)
                     if between is not None and repeat_noise is not None else None),
+                "axis_distances": _axis_distance(left_rows, right_rows),
             })
         deficits = []
         invalid_pilots = []
+        unobserved_pilots = []
         for row in versions:
             left_deficit = max(0, MIN_COMPLETE_REPEATS - row["left_complete"])
             right_deficit = max(0, MIN_COMPLETE_REPEATS - row["right_complete"])
@@ -531,6 +668,9 @@ def _portfolio(attempts: list[dict], aliases: dict[str, str],
                    or not attempt["metrics"]["no_edit_before_approval"]
                    for attempt in scenario_attempts):
                 invalid_pilots.append(row["pilot_id"])
+            if any(value is None for attempt in scenario_attempts
+                   for value in attempt["metrics"]["vector"].values()):
+                unobserved_pilots.append(row["pilot_id"])
         shared_pilots = sorted({row["pilot_id"] for row in versions})
         gates = {
             "minimum_exact_shared_scenarios": len(versions) >= MIN_SHARED_SCENARIOS,
@@ -548,19 +688,18 @@ def _portfolio(attempts: list[dict], aliases: dict[str, str],
                 for row in versions for identity in (left, right)
                 for attempt in by_identity_scenario[
                     (identity, row["pilot_id"], row["pack"])]),
+            "all_shared_axes_observed": not any(
+                value is None
+                for row in versions for identity in (left, right)
+                for attempt in by_identity_scenario[
+                    (identity, row["pilot_id"], row["pack"])]
+                for value in attempt["metrics"]["vector"].values()),
         }
         effects = [row["adjusted_separation"] for row in versions
                    if row["adjusted_separation"] is not None]
         eligible = all(gates.values()) and len(effects) == len(versions)
-        interval = _scenario_bootstrap(effects) if eligible else None
-        if not eligible or interval is None:
-            status = "INSUFFICIENT_EVIDENCE"
-        elif interval["lower"] > MIN_ADJUSTED_SEPARATION:
-            status = "STABLE_SEPARATION"
-        elif interval["upper"] <= MIN_ADJUSTED_SEPARATION:
-            status = "NO_STABLE_SEPARATION"
-        else:
-            status = "INCONCLUSIVE"
+        status, interval = _separation_status(effects, eligible)
+        robustness = _leave_one_out_robustness(versions, status, eligible)
         comparisons.append({
             "left": aliases[left],
             "right": aliases[right],
@@ -583,11 +722,14 @@ def _portfolio(attempts: list[dict], aliases: dict[str, str],
                 "bootstrap_95": interval,
                 "evidence_gates": gates,
             },
+            "axis_attribution": _axis_attribution(versions),
+            "single_scenario_robustness": robustness,
             "next_evidence": _next_pair_evidence(
                 missing_left=missing_left, missing_right=missing_right,
                 mismatched=mismatched, ambiguous=ambiguous, deficits=deficits,
                 invalid_pilots=sorted(set(invalid_pilots)), status=status,
-                scenario_rows=versions),
+                unobserved_pilots=sorted(set(unobserved_pilots)),
+                scenario_rows=versions, robustness=robustness),
         })
     return {
         "required_pilots": list(PILOT_IDS),
@@ -707,7 +849,7 @@ def analyze_pilots(run_dirs: list[Path], include_model_labels: bool = False) -> 
             "canonical_promotion_ready": False,
         })
     return {
-        "schema_version": 3,
+        "schema_version": 4,
         "analysis_kind": "round5-research",
         "canonical_score": False,
         "source_runs": len(run_dirs),
@@ -762,8 +904,8 @@ def render_pilot_analysis(analysis: dict) -> str:
             "Only attempts with the same scenario ID and exact scenario fingerprint are",
             "compared. Repeat noise is subtracted before a deterministic 95% interval",
             "resamples whole scenarios. A missing shared version remains unavailable.", "",
-            "| Left | Right | Shared | Between | Repeat noise | Adjusted | 95% interval | Status | Next evidence |",
-            "|---|---|---:|---:|---:|---:|---|---|---|",
+            "| Left | Right | Shared | Between | Repeat noise | Adjusted | 95% interval | Status | LOO robustness | Next evidence |",
+            "|---|---|---:|---:|---:|---:|---|---|---|---|",
         ]
         for row in comparisons:
             adjusted = row["repeat_adjusted_separation"]
@@ -777,7 +919,28 @@ def render_pilot_analysis(analysis: dict) -> str:
                 f"{_percent(adjusted['mean_repeat_noise'])} | "
                 f"{_percent(adjusted['mean_adjusted_separation'])} | "
                 f"{interval_text} | {adjusted['status']} | "
+                f"{row['single_scenario_robustness']['status']} | "
                 f"{row['next_evidence']['action']} |")
+        lines += ["", "### Separation attribution", "",
+                  "Axis rows explain observed distance but do not rank configurations;",
+                  "all axes remain equally weighted in the aggregate distance.", ""]
+        for row in comparisons:
+            lines += [
+                f"#### `{row['left']}` ↔ `{row['right']}`", "",
+                "| Axis | Scenarios | Between | Repeat noise | Adjusted | Positive share |",
+                "|---|---:|---:|---:|---:|---:|",
+            ]
+            for axis in row["axis_attribution"]:
+                lines.append(
+                    f"| {axis['axis']} | {axis['scenarios_observed']} | "
+                    f"{_percent(axis['mean_between_distance'])} | "
+                    f"{_percent(axis['mean_repeat_noise'])} | "
+                    f"{_percent(axis['mean_adjusted_separation'])} | "
+                    f"{_percent(axis['positive_contribution_share'])} |")
+            robustness = row["single_scenario_robustness"]
+            if robustness["influential_pilot_ids"]:
+                lines += ["", "Single-scenario-sensitive omissions: " + _escape(
+                    ", ".join(robustness["influential_pilot_ids"])) + "."]
     lines += [""]
     for group in analysis["groups"]:
         pairwise, gates = group["pairwise"], group["automatic_gates"]
@@ -834,6 +997,10 @@ def render_pilot_analysis(analysis: dict) -> str:
         f"  scenario versions and {MIN_COMPLETE_REPEATS} complete attempts per side/version.",
         f"  Its scenario-bootstrap interval must clear the {MIN_ADJUSTED_SEPARATION:.0%} minimum",
         "  effect to be called stable; this is not significance, causality, or canonical promotion.", "",
+        "- Axis attribution is unsigned and descriptive: it explains where distance came",
+        "  from but cannot declare either configuration better.",
+        "- Single-scenario robustness re-runs the complete separation decision after each",
+        "  omission. Sensitivity requires more evidence before manual ambiguity review.", "",
     ]
     return "\n".join(lines)
 

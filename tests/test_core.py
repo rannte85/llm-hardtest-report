@@ -1224,7 +1224,23 @@ class SnapshotCache:
                     pilot_id=pilot_id))
             analysis = analyze_pilots(roots)
             portfolio = analysis["portfolio"]
-        self.assertEqual(analysis["schema_version"], 3)
+            missing_axis_root = roots[0]
+            grade_path = missing_axis_root / "m/round5/attempt-1/research_grade.json"
+            missing_axis_grade = load_json(grade_path)
+            missing_axis_grade["public"] = {
+                "passed": 0, "total": 0, "timed_out": True}
+            missing_axis_grade["release_ready"] = False
+            missing_axis_grade["final_report"]["public_test_claim_accurate"] = False
+            missing_axis_grade["final_report"]["accurate"] = False
+            save_json(grade_path, missing_axis_grade)
+            missing_axis_summary_path = missing_axis_root / "pilot_summary.json"
+            missing_axis_summary = load_json(missing_axis_summary_path)
+            for summary_row in missing_axis_summary["attempts"]:
+                if summary_row["model"] == "m" and summary_row["grade"]["attempt"] == 1:
+                    summary_row["grade"] = missing_axis_grade
+            save_json(missing_axis_summary_path, missing_axis_summary)
+            missing_axis_comparison = analyze_pilots(roots)["portfolio"]["pairwise"][0]
+        self.assertEqual(analysis["schema_version"], 4)
         self.assertEqual(portfolio["required_pilots"], [
             "q32_retry_compatibility", "q33_batch_delivery", "q34_config_overlay",
             "q35_snapshot_race",
@@ -1248,6 +1264,19 @@ class SnapshotCache:
         self.assertEqual(adjusted["bootstrap_95"]["upper"], 0.0)
         self.assertEqual(
             comparison["next_evidence"]["action"], "REVIEW_NO_STABLE_SEPARATION")
+        self.assertEqual(
+            comparison["single_scenario_robustness"]["status"], "NOT_APPLICABLE")
+        self.assertEqual(
+            {row["axis"] for row in comparison["axis_attribution"]},
+            {"transport_complete", "authority_safe", "evidence_revision",
+             "public_rate", "hidden_rate", "release_ready", "report_accurate",
+             "tool_protocol_clean"})
+        self.assertFalse(missing_axis_comparison["repeat_adjusted_separation"]
+                         ["evidence_gates"]["all_shared_axes_observed"])
+        self.assertEqual(missing_axis_comparison["repeat_adjusted_separation"]["status"],
+                         "INSUFFICIENT_EVIDENCE")
+        self.assertEqual(missing_axis_comparison["next_evidence"]["action"],
+                         "REPEAT_UNOBSERVED_AXES")
 
     def test_round_five_portfolio_detects_repeat_adjusted_stable_separation(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1269,8 +1298,42 @@ class SnapshotCache:
         self.assertEqual(adjusted["status"], "STABLE_SEPARATION")
         self.assertGreater(adjusted["bootstrap_95"]["lower"], 0.05)
         self.assertEqual(adjusted["mean_repeat_noise"], 0.0)
+        self.assertEqual(
+            comparison["single_scenario_robustness"]["status"],
+            "ROBUST_TO_SINGLE_SCENARIO_REMOVAL")
+        contributions = {row["axis"]: row["positive_contribution_share"]
+                         for row in comparison["axis_attribution"]}
+        self.assertEqual(contributions["transport_complete"], 0.0)
+        self.assertGreater(contributions["hidden_rate"], 0.0)
+        self.assertAlmostEqual(sum(contributions.values()), 1.0, places=5)
         self.assertEqual(comparison["next_evidence"]["action"],
                          "MANUAL_AMBIGUITY_REVIEW")
+
+    def test_round_five_portfolio_detects_single_scenario_leverage(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            config = self._config()
+            config["models"].append({
+                **config["models"][0],
+                "key": "weak", "label": "Weak", "model": "fake-weak",
+            })
+            roots = []
+            for pilot_id in PILOT_IDS:
+                roots.append(run_pilot(
+                    config, Path(tmp), None, 2,
+                    agent_factory=lambda model, run, selected=pilot_id: self.FakeAgent(
+                        mode=("correct" if model["key"] == "m"
+                              or selected == "q32_retry_compatibility" else "baseline"),
+                        pilot_id=selected),
+                    pilot_id=pilot_id))
+            comparison = analyze_pilots(roots)["portfolio"]["pairwise"][0]
+        self.assertEqual(
+            comparison["repeat_adjusted_separation"]["status"], "STABLE_SEPARATION")
+        robustness = comparison["single_scenario_robustness"]
+        self.assertEqual(robustness["status"], "SENSITIVE_TO_SINGLE_SCENARIO")
+        self.assertNotIn("q32_retry_compatibility", robustness["influential_pilot_ids"])
+        self.assertTrue(robustness["influential_pilot_ids"])
+        self.assertEqual(
+            comparison["next_evidence"]["action"], "REPLICATE_INFLUENTIAL_SCENARIOS")
 
     def test_round_five_portfolio_subtracts_repeat_instability(self):
         with tempfile.TemporaryDirectory() as tmp:

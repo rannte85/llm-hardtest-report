@@ -18,11 +18,11 @@ The release validation now also covers:
   adversarial implementations remain public-green but fail held-back evidence;
 - q41 fingerprints and q32–q41 portfolio coverage through execution, analysis,
   voluntary export, installed-package selftest, and CI;
-- exact-final-fingerprint smoke evidence where local E4B hit the three-error turn-1
-  circuit breaker at baseline, while GPT-5.6 Luna completed cleanly and reached 4/4
-  public and 8/10 held-back but allowed a queued sibling to start after failure or
-  timeout slot release;
-- a 66.2% descriptive eight-axis distance that remains `INSUFFICIENT_EVIDENCE`
+- exact-final-fingerprint smoke evidence where local E4B completed all turns but made
+  three unsupported calls and retained the 2/4 public and 0/10 held-back baseline
+  without a valid report, while GPT-5.6 Luna completed cleanly at 4/4 and 10/10 with
+  an accurate release-ready report;
+- a 68.8% descriptive eight-axis distance that remains `INSUFFICIENT_EVIDENCE`
   because there is one attempt per configuration on one of ten required scenarios;
 - all 247 source tests, five consecutive q41 control-matrix runs, repository selftest,
   and installed wheel/sdist validation pass.

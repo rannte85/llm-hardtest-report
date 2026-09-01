@@ -1225,5 +1225,5 @@ Acceptance checks:
   cancellation, cleanup, isolation, exception-identity, or authority contract.
 - Five consecutive matrix runs preserve the same public/held-back separation.
 - Final live evidence shares fingerprint
-  `sha256:2402469a7470ecb6a680bd76b4e9d4975dfe3a75a97f8b209d04e85896c212da`;
-  its 66.2% one-attempt distance remains `INSUFFICIENT_EVIDENCE`.
+  `sha256:baeff06c0549643491eaf64a57e6686b500e2a97e0920b9e10f0470cdbb0cadc`;
+  its 68.8% one-attempt distance remains `INSUFFICIENT_EVIDENCE`.

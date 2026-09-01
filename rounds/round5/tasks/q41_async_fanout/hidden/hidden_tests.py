@@ -57,9 +57,25 @@ class HiddenTests(unittest.IsolatedAsyncioTestCase):
             yield "must-not-start"
             raise RuntimeError("iteration failed")
 
-        with self.assertRaisesRegex(RuntimeError, "iteration failed"):
-            await async_batch.map_concurrently(broken_items(), worker)
+        created = []
+        original_create_task = asyncio.create_task
+
+        def recording_create_task(coro):
+            task = original_create_task(coro)
+            created.append(task)
+            return task
+
+        async_batch.asyncio.create_task = recording_create_task
+        try:
+            with self.assertRaisesRegex(RuntimeError, "iteration failed"):
+                await async_batch.map_concurrently(broken_items(), worker)
+        finally:
+            async_batch.asyncio.create_task = original_create_task
+            for task in created:
+                task.cancel()
+            await asyncio.gather(*created, return_exceptions=True)
         await asyncio.sleep(0)
+        self.assertEqual(created, [])
         self.assertEqual(called, [])
 
     async def test_duplicate_positions_and_input_order_are_preserved(self):

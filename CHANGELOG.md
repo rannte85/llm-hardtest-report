@@ -19,12 +19,12 @@ out separately from harness features.
 - Integrated q41 with fingerprints, ten-scenario portfolios, CLI selection, public
   export, installed assets, selftest, documentation, and CI.
 - On final fingerprint
-  `sha256:2402469a7470ecb6a680bd76b4e9d4975dfe3a75a97f8b209d04e85896c212da`,
-  local E4B hit the unsupported-tool circuit breaker in turn 1 at the 2/4·0/10
-  baseline. GPT-5.6 Luna completed cleanly and revised its plan, reaching 4/4·8/10;
-  it missed the pre-slot-release failure flag needed to keep queued siblings from
-  starting after a failure or timeout.
-- Their observed eight-axis distance is 66.2%, explicitly `INSUFFICIENT_EVIDENCE`
+  `sha256:baeff06c0549643491eaf64a57e6686b500e2a97e0920b9e10f0470cdbb0cadc`,
+  local E4B completed all turns but made three unsupported calls, did not revise or
+  edit, and retained the 2/4·0/10 baseline without a valid report. GPT-5.6 Luna
+  completed cleanly, revised its plan, and reached 4/4·10/10 with an accurate report
+  and release-ready result.
+- Their observed eight-axis distance is 68.8%, explicitly `INSUFFICIENT_EVIDENCE`
   because each configuration has one attempt on one of ten scenarios and no repeat-
   noise estimate exists.
 - All 247 source tests, five consecutive q41 control-matrix runs, repository selftest,

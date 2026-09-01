@@ -1383,7 +1383,7 @@ class PackTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[1]
         metadata = [validate_pack(root / "rounds" / f"round{number}")
                     for number in (1, 2, 3, 4, 5)]
-        self.assertEqual([item["unit_count"] for item in metadata], [20, 20, 5, 6, 10])
+        self.assertEqual([item["unit_count"] for item in metadata], [20, 20, 5, 6, 11])
 
     def test_round_five_scenario_fingerprints_are_isolated(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1427,6 +1427,16 @@ class PackTests(unittest.TestCase):
             self.assertEqual(
                 pilot_fingerprint("q41_async_fanout", root),
                 before["q41_async_fanout"])
+            self.assertEqual(
+                pilot_fingerprint("q42_shared_http_cache", root),
+                before["q42_shared_http_cache"])
+            q42_control = root / "tasks/q42_shared_http_cache/_control_complete.py"
+            q42_control.write_text(
+                q42_control.read_text(encoding="utf-8") + "\n# control drift\n",
+                encoding="utf-8")
+            self.assertNotEqual(
+                pilot_fingerprint("q42_shared_http_cache", root),
+                before["q42_shared_http_cache"])
             cache = root / "tasks/q33_batch_delivery/repo/__pycache__/ignored.pyc"
             cache.parent.mkdir(exist_ok=True)
             cache.write_bytes(b"generated")
@@ -1469,6 +1479,7 @@ class RoundFiveResearchTests(unittest.TestCase):
                     "q39_job_lease": "job_queue.py",
                     "q40_ssrf_redirect": "safe_http.py",
                     "q41_async_fanout": "async_batch.py",
+                    "q42_shared_http_cache": "shared_cache.py",
                 }
                 filename = filenames[self.pilot_id]
                 path = workdir / filename
@@ -1569,6 +1580,10 @@ class SnapshotCache:
                     content = ("The batch wraps semaphore wait time inside each timeout and "
                                "uses bare gather, so healthy queued work times out and sibling "
                                "tasks continue after a worker failure without cancellation.")
+                elif self.pilot_id == "q42_shared_http_cache":
+                    content = ("The URL-only shared cache ignores Authorization tenants and "
+                               "Vary language dimensions, so one authenticated variant can "
+                               "leak into another request.")
                 else:
                     subject = ("session retry"
                                if self.pilot_id == "q32_retry_compatibility"
@@ -1627,6 +1642,17 @@ class SnapshotCache:
                                "Nested and independent calls invalidate timeout-around-semaphore, "
                                "bare gather, cancel-without-await, completion-order, deduplication, "
                                "global coordination, and swallowed-cancellation plans.")
+                elif self.pilot_id == "q42_shared_http_cache":
+                    content = ("Validate header grammar fail-closed; bypass Authorization, Cookie, "
+                               "Range, and client conditionals; reject private, no-store, "
+                               "Set-Cookie, and Vary:* storage; select case-insensitive exact Vary "
+                               "dimensions; account for Age and strict max-age equality; revalidate "
+                               "with ETag and preserve the body while merging 304 metadata; bound "
+                               "stale-if-error; and single-flight only identical requests while "
+                               "waking waiters after failure. This invalidates URL-only keys, "
+                               "sensitive caching, case-sensitive Vary, ignored Age, inclusive "
+                               "freshness, 304 body replacement, unbounded stale fallback, global "
+                               "coalescing, and failed-flight poisoning.")
                 else:
                     content = ("Version-1 old clients reject unknown fields, so any new response "
                                "schema field is invalid and must be omitted.")
@@ -1642,6 +1668,7 @@ class SnapshotCache:
                     "q39_job_lease": "job_queue.py",
                     "q40_ssrf_redirect": "safe_http.py",
                     "q41_async_fanout": "async_batch.py",
+                    "q42_shared_http_cache": "shared_cache.py",
                 }
                 functions = {
                     "q32_retry_compatibility": "SessionService.refresh",
@@ -1654,6 +1681,7 @@ class SnapshotCache:
                     "q39_job_lease": "JobQueue.claim",
                     "q40_ssrf_redirect": "SafeHttpClient.get",
                     "q41_async_fanout": "map_concurrently",
+                    "q42_shared_http_cache": "SharedHttpCache.get",
                 }
                 filename, function = filenames[self.pilot_id], functions[self.pilot_id]
                 invalidated = {
@@ -1679,6 +1707,10 @@ class SnapshotCache:
                     "q41_async_fanout": ("timeout around semaphore, bare gather, cancel without "
                                           "await, completion order, deduplication, global "
                                           "coordination, and swallowed cancellation"),
+                    "q42_shared_http_cache": ("URL-only keys, sensitive caching, case-sensitive "
+                                                "Vary, ignoring Age, inclusive freshness, 304 "
+                                                "body replacement, unbounded stale fallback, "
+                                                "global coalescing, and failed-flight poisoning"),
                 }[self.pilot_id]
                 content = (
                     "=== PILOT REPORT ===\n"
@@ -1996,6 +2028,33 @@ class SnapshotCache:
         self.assertEqual(public["models"][0]["attempts"][0]["hidden"]["passed"], 10)
         self.assertEqual(warnings, [])
 
+    def test_round_five_shared_http_cache_scenario_is_selectable_and_graded(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            agent = self.FakeAgent(pilot_id="q42_shared_http_cache")
+            root = run_pilot(
+                self._config(), Path(tmp), ["m"], 1,
+                agent_factory=lambda model, run: agent,
+                pilot_id="q42_shared_http_cache")
+            summary = load_json(root / "pilot_summary.json")
+            grade = summary["attempts"][0]["grade"]
+            attempt_exists = (root / "m/round5/q42_shared_http_cache/attempt-1"
+                              / "research_grade.json").is_file()
+            analysis = analyze_pilots([root])
+            public, warnings = build_public_pilot_result(root)
+        self.assertTrue(attempt_exists)
+        self.assertEqual(summary["pilot_id"], "q42_shared_http_cache")
+        self.assertEqual(grade["public"], {"passed": 4, "total": 4,
+                                           "timed_out": False})
+        self.assertEqual(grade["hidden"], {"passed": 10, "total": 10,
+                                           "timed_out": False})
+        self.assertTrue(grade["evidence_revision_observed"])
+        self.assertTrue(grade["release_ready"])
+        self.assertTrue(grade["final_report"]["accurate"])
+        self.assertEqual(analysis["groups"][0]["pilot_id"], "q42_shared_http_cache")
+        self.assertEqual(public["pilot"]["id"], "q42_shared_http_cache")
+        self.assertEqual(public["models"][0]["attempts"][0]["hidden"]["passed"], 10)
+        self.assertEqual(warnings, [])
+
     def test_round_five_portfolio_requires_repeated_exact_scenario_coverage(self):
         with tempfile.TemporaryDirectory() as tmp:
             config = self._config()
@@ -2033,11 +2092,11 @@ class SnapshotCache:
             "q32_retry_compatibility", "q33_batch_delivery", "q34_config_overlay",
             "q35_snapshot_race", "q36_jsonl_stream", "q37_archive_boundary",
             "q38_webhook_replay", "q39_job_lease", "q40_ssrf_redirect",
-            "q41_async_fanout",
+            "q41_async_fanout", "q42_shared_http_cache",
         ])
         self.assertEqual(len(portfolio["configurations"]), 2)
         for row in portfolio["configurations"]:
-            self.assertEqual(row["attempts"], 20)
+            self.assertEqual(row["attempts"], 22)
             self.assertEqual(row["missing_pilots"], [])
             self.assertEqual(row["pack_ambiguous_pilots"], [])
             # This test owns scenario/repeat coverage. Individual hidden-test
@@ -2057,7 +2116,7 @@ class SnapshotCache:
             for row in collection["configurations"]))
         comparison = portfolio["pairwise"][0]
         self.assertEqual(comparison["shared_pilots"], portfolio["required_pilots"])
-        self.assertEqual(comparison["shared_scenario_versions"], 10)
+        self.assertEqual(comparison["shared_scenario_versions"], 11)
         self.assertEqual(comparison["mean_distance"], 0.0)
         adjusted = comparison["repeat_adjusted_separation"]
         self.assertEqual(adjusted["status"], "NO_STABLE_SEPARATION")
@@ -2323,13 +2382,15 @@ class SnapshotCache:
         rows = [{
             "pilot_id": pilot_id,
             "pack": "sha256:" + str(index) * 64,
-            "adjusted_separation": 0.0 if index < 7 else 0.5,
+            # Keep the non-zero leave-one-out lower bound strictly above the
+            # 0.05 decision threshold as the pilot portfolio grows.
+            "adjusted_separation": 0.0 if index < 7 else 0.6,
         } for index, pilot_id in enumerate(PILOT_IDS)]
         robustness = _leave_one_out_robustness(
             rows, "STABLE_SEPARATION", True)
         self.assertEqual(robustness["status"], "SENSITIVE_TO_SINGLE_SCENARIO")
         self.assertEqual(
-            robustness["influential_pilot_ids"], list(PILOT_IDS[-3:]))
+            robustness["influential_pilot_ids"], list(PILOT_IDS[7:]))
 
     def test_round_five_portfolio_subtracts_repeat_instability(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -2634,6 +2695,7 @@ class PilotAnalysisTests(unittest.TestCase):
                     "q33_batch_delivery", "q34_config_overlay", "q35_snapshot_race",
                     "q36_jsonl_stream", "q37_archive_boundary", "q38_webhook_replay",
                     "q39_job_lease", "q40_ssrf_redirect", "q41_async_fanout",
+                    "q42_shared_http_cache",
                 ])
             self.assertFalse(row["ready_for_cross_scenario_interpretation"])
         comparison = analysis["portfolio"]["pairwise"][0]
@@ -2644,12 +2706,12 @@ class PilotAnalysisTests(unittest.TestCase):
             comparison["next_evidence"]["action"], "COLLECT_MISSING_SCENARIOS")
         collection = analysis["portfolio"]["evidence_collection_plan"]
         self.assertEqual(
-            collection["summary"]["minimum_additional_complete_attempts"], 36)
+            collection["summary"]["minimum_additional_complete_attempts"], 40)
         self.assertEqual(collection["scenario_priorities"][0]["pilot_id"],
                          "q33_batch_delivery")
         self.assertTrue(all(
-            len(row["actions"]) == 9
-            and row["additional_complete_attempts"] == 18
+            len(row["actions"]) == 10
+            and row["additional_complete_attempts"] == 20
             for row in collection["configurations"]))
 
     def test_cross_pilot_portfolio_marks_multiple_versions_as_ambiguous(self):
@@ -2698,7 +2760,7 @@ class PilotAnalysisTests(unittest.TestCase):
         self.assertEqual(action["action"], "RECOLLECT_CLEAN_COHORT")
         self.assertEqual(action["additional_complete_attempts"], 2)
         self.assertTrue(action["exclude_invalid_run_directories"])
-        self.assertEqual(configuration["additional_complete_attempts"], 20)
+        self.assertEqual(configuration["additional_complete_attempts"], 22)
 
     def test_evidence_plan_does_not_count_cross_configuration_pack_mismatch(self):
         configurations = []
@@ -2744,7 +2806,7 @@ class PilotAnalysisTests(unittest.TestCase):
         self.assertIn("### Evidence collection plan", default_text)
         self.assertIn("### Shared-scenario directional advantage", default_text)
         self.assertIn("Expected / tail", default_text)
-        self.assertIn("Minimum additional complete attempts: **36**", default_text)
+        self.assertIn("Minimum additional complete attempts: **40**", default_text)
         for private in ("Private Strong", "Private Weak", "private/strong",
                         "private/weak", str(run)):
             self.assertNotIn(private, default_text)

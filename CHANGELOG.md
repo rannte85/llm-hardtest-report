@@ -5,6 +5,24 @@ out separately from harness features.
 
 ## Unreleased
 
+## 2.47.0 — 2026-09-01
+
+- Added `q42_shared_http_cache`, an orthogonal Round 5 incident spanning authenticated
+  shared-cache isolation, case-insensitive `Vary` selection, strict response policy,
+  freshness/`Age` boundaries, conditional 304 transitions, bounded stale fallback, and
+  exact-request single-flight cleanup.
+- Added a 14-state deterministic control matrix: the URL-only baseline is 0/4 public
+  and 0/10 held-back, the complete control is 4/4 and 10/10, and all twelve partial or
+  tampered controls remain public-green while failing held-back evidence.
+- Expanded CLI selection, exact scenario fingerprints, q32–q42 portfolio coverage,
+  acquisition planning, anonymous public export, packaged assets, selftest, and docs.
+- Generalized scenario fingerprinting to include every task-root Python control
+  dependency; all existing q32–q41 fingerprints remain unchanged. q42 fingerprint is
+  `sha256:c1a1d19d78c91ef335735734cf0ff15fff3fa25aa3aed986101e86ebc29b539f`.
+- All 259 source tests and the repository selftest pass; fresh wheel and sdist 2.47.0
+  installs both contain q42, reproduce its registered fingerprint, and pass their
+  installed selftests.
+
 ## 2.46.0 — 2026-09-01
 
 - Added a strict Round 5 public-release fingerprint registry containing every q32–q41

@@ -1443,3 +1443,37 @@ Acceptance:
 - A zeroed or otherwise unknown fingerprint is rejected.
 - Current and historical q41 evidence produces two groups and a portfolio version-
   alignment blocker rather than a pooled comparison.
+
+## Phase 49 — Shared HTTP cache isolation and revalidation pilot (completed)
+
+Goal: add an orthogonal scenario that distinguishes agents able to reason across shared
+representation security, HTTP cache state transitions, time boundaries, and concurrent
+request coalescing.
+
+Deliverables:
+
+1. Add `q42_shared_http_cache` with a visible authenticated cross-tenant leak and wrong
+   language variant, followed by late header, policy, freshness, 304, stale, and
+   single-flight constraints.
+2. Require fail-closed header validation; sensitive-request bypass; private/no-store,
+   Set-Cookie, and `Vary:*` exclusion; case-insensitive exact variants; strict `Age` and
+   max-age boundaries; validator-driven 304 body preservation and metadata rekeying;
+   bounded stale-if-error; and exact-request flight cleanup.
+3. Build baseline, complete, conflicting-header, Cookie, Range, Set-Cookie, `Vary:*`,
+   conflicting max-age, ignored-Age, stale-Vary, unbounded-stale, global-flight,
+   failed-flight, and protected-authority controls.
+4. Integrate q42 with CLI selection, isolated fingerprints, q32–q42 portfolios,
+   acquisition planning, anonymous public export, installed assets, selftest, and docs.
+5. Fingerprint task-root Python control dependencies while proving q32–q41 remain
+   unchanged.
+
+Acceptance:
+
+- The URL-only baseline is 0/4 public and 0/10 held-back.
+- The complete control is 4/4 public and 10/10 held-back.
+- Every incomplete/adversarial control is 4/4 public and fails at least one distinct
+  held-back contract.
+- q32–q41 fingerprints remain unchanged; q42 fingerprint is
+  `sha256:c1a1d19d78c91ef335735734cf0ff15fff3fa25aa3aed986101e86ebc29b539f`.
+- Full portfolio readiness requires two complete exact-version attempts per
+  configuration across all eleven q32–q42 scenarios.

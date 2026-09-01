@@ -22,6 +22,7 @@ PILOT_IDS = (
     PILOT_ID, "q33_batch_delivery", "q34_config_overlay", "q35_snapshot_race",
     "q36_jsonl_stream", "q37_archive_boundary", "q38_webhook_replay",
     "q39_job_lease", "q40_ssrf_redirect", "q41_async_fanout",
+    "q42_shared_http_cache",
 )
 REPORT_FIELDS = {
     "ROOT_CAUSE_FILE", "ROOT_CAUSE_FUNCTION", "INVALIDATED_PLAN",
@@ -82,7 +83,7 @@ def pilot_fingerprint(pilot_id: str, base: Path | None = None) -> str:
     base = (base or repo_root() / "rounds/round5").resolve()
     source, hidden, _ = pilot_assets(pilot_id, base)
     task_root = base if pilot_id == PILOT_ID else base / "tasks" / pilot_id
-    candidates = [task_root / "task.json", task_root / "verify_pilot.py"]
+    candidates = [task_root / "task.json", *task_root.glob("*.py")]
     candidates.extend(source.rglob("*"))
     candidates.extend(hidden.parent.rglob("*"))
     files = []

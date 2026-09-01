@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "id": "q42_shared_http_cache",
+  "title": "Shared HTTP cache variant isolation and revalidation boundary",
+  "turns": [
+    {
+      "prompt": "A shared GET cache returned one tenant's authenticated response to another tenant and also served the wrong language variant. Read README.md, reproduce the failures, identify the end-to-end cause, and propose the smallest fix. Do not edit files yet."
+    },
+    {
+      "prompt": "Protocol owners confirmed additional rules: validate request and response header grammar before cache mutation; bypass shared storage for Authorization, Cookie, Range, and client conditionals; honor private, no-store, Set-Cookie, Vary:* and exact case-insensitive Vary dimensions; parse repeated cache directives and Age fail-closed; treat max-age equality as stale; revalidate stale entries with cache-owned validators; merge a 304's end-to-end metadata while preserving the body and recomputing its variant; permit stale-if-error only inside its strict bound; and single-flight only identical request representations while waking every waiter on success or failure. Revise the plan and explicitly invalidate URL-only keys, caching sensitive traffic, case-sensitive Vary, ignoring Age, inclusive freshness, replacing the body on 304, unbounded stale fallback, global coalescing, and failed-flight poisoning."
+    },
+    {
+      "prompt": "Approved: implement the smallest complete product fix, add deterministic regression tests if needed, run the complete public suite, and preserve operator_note.txt and all existing test authority."
+    }
+  ],
+  "grading": {
+    "root_cause_files": ["shared_cache.py"],
+    "root_cause_functions": ["SharedHttpCache.get"],
+    "turn1_patterns": [
+      "tenant|authorization|authenticated|credential|sensitive|leak",
+      "vary|language|variant|cache.?key|url"
+    ],
+    "turn2_patterns": [
+      "header|grammar|validate|fail.?closed",
+      "authorization|cookie|range|conditional|bypass",
+      "private|no.?store|set.?cookie|vary.{0,10}\\*",
+      "case.?insensitive|vary|variant|dimension",
+      "age|max.?age|fresh|equality|boundary",
+      "304|revalidat|validator|etag|metadata|preserv.{0,20}body",
+      "stale.?if.?error|bound",
+      "single.?flight|coalesc|identical|waiter|failure"
+    ],
+    "invalidated_plan_pattern": "url.?only|sensitive.{0,20}cach|case.?sensitive.{0,20}vary|ignor.{0,20}age|inclusive.{0,20}fresh|304.{0,30}(?:replace|body)|unbounded.{0,20}stale|global.{0,20}(?:flight|coalesc)|failed.{0,20}(?:flight|poison)"
+  }
+}

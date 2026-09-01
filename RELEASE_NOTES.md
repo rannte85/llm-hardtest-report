@@ -1,4 +1,4 @@
-# Release Notes — 2.46.0
+# Release Notes — 2.47.0
 
 This repository is ready to publish as `rannte85/llm-hardtest-report`. It contains no raw
 campaign outputs, credentials, local model files, personal filesystem paths, or
@@ -6,6 +6,24 @@ generated Python caches. The included Luna result is the allowlist-only public b
 not its prompts, responses, transcripts, account details, or local run directory.
 
 This release adds:
+
+- `q42_shared_http_cache`, a new Round 5 shared-cache security and protocol incident
+  covering sensitive-request bypass, exact `Vary` variants, `Age`/freshness boundaries,
+  304 revalidation, bounded stale fallback, and scoped single-flight recovery;
+- fourteen deterministic q42 controls: 0/4·0/10 baseline, 4/4·10/10 complete control,
+  and twelve public-green incomplete or tampered implementations that fail held-back
+  checks;
+- q32–q42 CLI, portfolio, acquisition-plan, public-export, package, selftest, and
+  documentation integration;
+- task-root Python control dependencies in exact scenario fingerprints without changing
+  any existing q32–q41 fingerprint; q42 is
+  `sha256:c1a1d19d78c91ef335735734cf0ff15fff3fa25aa3aed986101e86ebc29b539f`;
+- all 259 source tests, the repository selftest, and fresh wheel/sdist 2.47.0 installed
+  selftests passing, with both artifacts reproducing the registered q42 fingerprint.
+
+## Previous release: 2.46.0
+
+The previous release added:
 
 - a strict bundled registry of every Round 5 scenario fingerprint published through
   v2.45.1, together with the exact grading contract used by that fingerprint;

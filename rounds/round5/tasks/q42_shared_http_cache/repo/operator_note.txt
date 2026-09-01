@@ -1,0 +1,1 @@
+The shared cache is a security boundary: uncertainty must bypass or fail closed, never widen reuse.

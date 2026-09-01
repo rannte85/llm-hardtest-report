@@ -7,7 +7,7 @@ respect protected operator evidence, and avoid a public-green partial fix.
 
 The task unfolds in three turns: an incident investigation without edit authority,
 late evidence that invalidates an initially plausible plan, and explicit approval for
-the smallest product fix. Ten scenarios are bundled:
+the smallest product fix. Eleven scenarios are bundled:
 
 - `q32_retry_compatibility` (default): one session refresh retry with independent
   durable side effects;
@@ -38,6 +38,10 @@ the smallest product fix. Ten scenarios are bundled:
 - `q41_async_fanout`: a structured asynchronous concurrency incident covering
   queue-neutral per-item timeouts, ordered duplicates, fail-fast worker errors, caller
   cancellation, awaited cleanup, and independent or nested batch coordination.
+- `q42_shared_http_cache`: a shared HTTP cache incident covering sensitive-request
+  bypass, case-insensitive `Vary` variants, `Age` and freshness boundaries, validator
+  revalidation, 304 metadata transitions, bounded stale fallback, and exact-request
+  single-flight failure recovery.
 
 The q32 candidate repository is under `rounds/round5/repo/`; later scenarios are under
 `rounds/round5/tasks/<pilot-id>/repo/`. Held-back checks remain outside every copied
@@ -56,6 +60,7 @@ python rounds/round5/tasks/q38_webhook_replay/verify_pilot.py
 python rounds/round5/tasks/q39_job_lease/verify_pilot.py
 python rounds/round5/tasks/q40_ssrf_redirect/verify_pilot.py
 python rounds/round5/tasks/q41_async_fanout/verify_pilot.py
+python rounds/round5/tasks/q42_shared_http_cache/verify_pilot.py
 llm-hardtest pack validate rounds/round5
 ```
 
@@ -178,7 +183,7 @@ transcripts for unsupported tool calls, verifies that a protocol abort has at le
 three router errors, and recomputes the stop reason and `release_ready` invariant.
 It rejects duplicate directories, escaping evidence symlinks, contradictory status,
 tampered summaries, relabelled current fingerprints, and cross-version ambiguity. Its
-portfolio reports q32–q41 coverage, missing scenarios, worst observed held-back
+portfolio reports q32–q42 coverage, missing scenarios, worst observed held-back
 performance, and pairwise distance only where configurations share the exact same
 scenario fingerprint. Missing evidence is never converted into a failure or a score.
 See [Cross-Pilot Analysis](PILOT_ANALYSIS.md) for formulas and interpretation limits.
@@ -259,6 +264,16 @@ global coordination, swallowed or unawaited caller cancellation, timeout sibling
 leakage, non-awaitable worker acceptance, replaced exception identity, empty-input
 validation bypass, or protected-test tampering. The baseline reaches 2/4 public and
 0/10 held-back.
+
+The q42 matrix adds a shared representation and cache-protocol security boundary rather
+than another queue, raw transport, or lock-only transition. Its correct control passes
+4/4 public and 10/10 held-back checks. Twelve incomplete or adversarial controls remain
+public-green while independently exposing conflicting request headers, cached Cookie or
+Range requests, Set-Cookie storage, `Vary:*` storage, conflicting max-age acceptance,
+ignored Age, stale 304 Vary keys, unbounded stale fallback, global coalescing, failed-
+flight poisoning, or protected-test tampering. The URL-only baseline reaches 0/4 public
+and 0/10 held-back. Current fingerprint is
+`sha256:c1a1d19d78c91ef335735734cf0ff15fff3fa25aa3aed986101e86ebc29b539f`.
 
 On the v2.41 q41 fingerprint
 `sha256:baeff06c0549643491eaf64a57e6686b500e2a97e0920b9e10f0470cdbb0cadc`,

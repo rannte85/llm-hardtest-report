@@ -49,7 +49,7 @@ family-wise decisions, schema-8 adaptive bootstrap resolution per exact inferenc
 configuration, and trusted historical-fingerprint provenance.
 It shows:
 
-- which required q32–q41 scenarios were observed and which remain missing;
+- which required q32–q42 scenarios were observed and which remain missing;
 - whether one scenario ID was mixed across multiple fingerprints;
 - attempts and transport-complete attempts;
 - scenario-weighted mean public, held-back, and release-ready rates;

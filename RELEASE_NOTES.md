@@ -21,6 +21,10 @@ The release validation now also covers:
 - regression cases where a complete portfolio needs zero attempts, a q32-only
   two-configuration portfolio needs 36, ambiguous versions have no numeric total, and
   invalid history requires two new clean attempts;
+- q41 queue-time checks with wide per-worker timeout headroom and accumulated queue
+  delay, removing loaded-runner scheduling jitter without weakening the queue-neutral
+  contract; current fingerprint
+  `sha256:b4a74e5d7fd3b4aeec0a58ac4f134408ad65840edfc13812223a58bcf173bb2e`;
 - all 249 source tests, repository selftest, current community-data checks, and fresh
   wheel/sdist installed-package validation pass locally.
 

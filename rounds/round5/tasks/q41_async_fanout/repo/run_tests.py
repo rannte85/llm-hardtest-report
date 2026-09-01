@@ -27,12 +27,12 @@ class PublicTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_queued_time_is_not_charged_to_item_timeout(self):
         async def worker(value):
-            await asyncio.sleep(0.10)
+            await asyncio.sleep(0.02)
             return value
 
         result = await map_concurrently(
-            ["first", "second"], worker, max_concurrency=1, timeout=0.15)
-        self.assertEqual(result, ["first", "second"])
+            list(range(8)), worker, max_concurrency=1, timeout=0.08)
+        self.assertEqual(result, list(range(8)))
 
     async def test_failure_cancels_and_awaits_sibling_cleanup(self):
         started = asyncio.Event()

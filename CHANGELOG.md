@@ -19,6 +19,11 @@ out separately from harness features.
 - Added Markdown planning tables, JSON action records, privacy-preserving configuration
   aliases, and regression coverage for complete, missing, ambiguous, and invalid
   portfolios. Canonical scoring and automatic execution remain disabled.
+- Hardened q41's queue-neutral timeout checks against loaded-runner scheduling jitter:
+  each worker now has wide timeout headroom while accumulated queue delay alone exceeds
+  the timeout. The current fingerprint is
+  `sha256:b4a74e5d7fd3b4aeec0a58ac4f134408ad65840edfc13812223a58bcf173bb2e`;
+  v2.41 live evidence remains historical and is not silently pooled with it.
 - All 249 source tests, repository selftest, current community-data checks, and fresh
   wheel/sdist installed-package validation pass locally.
 

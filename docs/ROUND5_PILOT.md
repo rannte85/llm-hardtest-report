@@ -256,7 +256,7 @@ leakage, non-awaitable worker acceptance, replaced exception identity, empty-inp
 validation bypass, or protected-test tampering. The baseline reaches 2/4 public and
 0/10 held-back.
 
-On final q41 fingerprint
+On the v2.41 q41 fingerprint
 `sha256:baeff06c0549643491eaf64a57e6686b500e2a97e0920b9e10f0470cdbb0cadc`,
 one local E4B attempt completed all three turns but made three unsupported calls,
 did not revise its diagnosis or edit the workspace, and retained the unchanged 2/4
@@ -268,6 +268,12 @@ failing task's semaphore slot, closing the queued-sibling race. Their observed
 eight-axis distance is 68.8%, and the pair remains `INSUFFICIENT_EVIDENCE` because each
 configuration has one attempt, only one of ten scenarios is shared, and repeat noise
 cannot be estimated. Raw live-model evidence remains local, ignored, and uncommitted.
+Version 2.42 replaces narrow wall-clock timing margins with multiple short workers whose
+accumulated queue wait exceeds the timeout while every worker retains wide execution
+headroom. The behavior contract is unchanged, but the exact scenario fingerprint is now
+`sha256:b4a74e5d7fd3b4aeec0a58ac4f134408ad65840edfc13812223a58bcf173bb2e`.
+The v2.41 observations above are historical evidence and are not pooled with this exact
+version.
 
 On final q40 fingerprint
 `sha256:6593578c18a44350aee6846ad177e9d8c3a2429001569899f5f64e09ca068822`,

@@ -1128,3 +1128,37 @@ Acceptance checks:
   `sha256:1baf8e1d5fe47ecd9a94c6da6d9a70e42fb2f916961c50adfffad93e2b344c62`.
 - The one-scenario, one-attempt observation remains `INSUFFICIENT_EVIDENCE` and is
   never presented as a model ranking or prediction.
+
+## Phase 38 — Durable SQLite lease fencing hard test
+
+Goal: add an orthogonal persistent-concurrency axis that distinguishes a locally
+locked queue from a transactionally fenced lease shared by independent processes.
+
+Deliverables:
+
+1. Add `q39_job_lease` with visible duplicate execution and late atomicity, expiry,
+   fencing, heartbeat, completion, ordering, duplicate, and rollback constraints.
+2. Use a durable monotonically increasing token on every claim/reclaim and require the
+   exact active `(worker, token)` pair for every mutation.
+3. Build baseline, correct, deferred-claim, exclusive-expiry, skipped-token,
+   heartbeat-shortening/unfenced, expired/unfenced-completion, unstable-order,
+   overwrite, validation, fresh-schema-only, and authority-tamper controls.
+4. Integrate q39 with isolated fingerprints, eight-scenario portfolios, voluntary
+   public export, package data, selftest, documentation, and CI.
+5. Run one exact-fingerprint attempt each with local E4B and signed-in GPT-5.6 Luna,
+   retaining raw evidence locally and reporting the pair as a smoke observation only.
+
+Acceptance checks:
+
+- The baseline reaches 2/4 public and 0/10 held-back; the complete implementation
+  reaches 4/4 and 10/10.
+- All twelve incomplete/adversarial implementations stay 4/4 public while failing at
+  least one distinct held-back transaction, lease, fencing, ordering, validation, or
+  authority contract.
+- The atomic-claim concurrency control passes five consecutive matrix runs without
+  duplicate ownership or SQLite lock leakage.
+- Exact-version evidence remains non-canonical and cannot become a ranking without
+  repeated complete attempts and broader shared-scenario coverage.
+- Final live evidence shares fingerprint
+  `sha256:3a7b4f3f8d1bdd9bbd03090f173f59cf7a8759efc2981faabd734b1bc84ab20b`;
+  its 65% one-attempt distance remains `INSUFFICIENT_EVIDENCE`.

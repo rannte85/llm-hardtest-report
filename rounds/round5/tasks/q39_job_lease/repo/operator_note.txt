@@ -1,0 +1,1 @@
+Production incident note: never delete or rewrite queued rows to recover a stuck lease.

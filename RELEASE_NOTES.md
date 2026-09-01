@@ -1,4 +1,4 @@
-# Release Notes — 2.38.0
+# Release Notes — 2.39.0
 
 This repository is ready to publish as `rannte85/llm-hardtest-report`. It contains no raw
 campaign outputs, credentials, local model files, personal filesystem paths, or
@@ -6,6 +6,30 @@ generated Python caches. The included Luna result is the allowlist-only public b
 not its prompts, responses, transcripts, account details, or local run directory.
 
 The release validation now also covers:
+
+- `q39_job_lease`, an eighth long-horizon incident for durable cross-instance job
+  ownership in SQLite;
+- atomic `BEGIN IMMEDIATE` selection/update, exact inclusive expiry, monotonically
+  increasing fencing tokens, and stale worker/token rejection;
+- heartbeat extension from the later lease boundary, active-lease completion,
+  priority/creation/ID ordering, duplicate no-overwrite, and invalid-input rollback;
+- in-place upgrade of the shipped pre-fencing schema without reopening or replacing
+  queued and completed rows;
+- a fourteen-state control matrix where the complete implementation reaches 4/4
+  public and 10/10 held-back, the baseline reaches 2/4 and 0/10, and twelve partial
+  or adversarial implementations remain public-green but fail held-back evidence;
+- q39 scenario fingerprints and q32–q39 portfolio coverage through execution,
+  analysis, voluntary export, installed-package selftest, and CI;
+- exact-final-fingerprint smoke evidence where local E4B hit the three-error turn-3
+  circuit breaker at the 2/4·0/10 baseline, while GPT-5.6 Luna reached 8/8 public and
+  7/10 held-back but failed the exact expiry boundary for heartbeat/completion and
+  modified protected public tests;
+- a 65% descriptive eight-axis distance that remains `INSUFFICIENT_EVIDENCE` because
+  there is one attempt per configuration on one of eight required scenarios;
+- 245 passing source tests, five consecutive q39 matrix runs, repository selftest,
+  and wheel/sdist installed-package verification;
+
+## Previous release: 2.38.0
 
 - a fairness correction to q38's evidence-revision detector: explicit all-signature
   and all-active-secret reasoning now passes without requiring one preferred phrase;

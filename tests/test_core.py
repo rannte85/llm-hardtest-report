@@ -1379,7 +1379,7 @@ class PackTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[1]
         metadata = [validate_pack(root / "rounds" / f"round{number}")
                     for number in (1, 2, 3, 4, 5)]
-        self.assertEqual([item["unit_count"] for item in metadata], [20, 20, 5, 6, 7])
+        self.assertEqual([item["unit_count"] for item in metadata], [20, 20, 5, 6, 8])
 
     def test_round_five_scenario_fingerprints_are_isolated(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1414,6 +1414,9 @@ class PackTests(unittest.TestCase):
             self.assertEqual(
                 pilot_fingerprint("q38_webhook_replay", root),
                 before["q38_webhook_replay"])
+            self.assertEqual(
+                pilot_fingerprint("q39_job_lease", root),
+                before["q39_job_lease"])
             cache = root / "tasks/q33_batch_delivery/repo/__pycache__/ignored.pyc"
             cache.parent.mkdir(exist_ok=True)
             cache.write_bytes(b"generated")
@@ -1453,6 +1456,7 @@ class RoundFiveResearchTests(unittest.TestCase):
                     "q36_jsonl_stream": "jsonl_stream.py",
                     "q37_archive_boundary": "secure_extract.py",
                     "q38_webhook_replay": "webhook.py",
+                    "q39_job_lease": "job_queue.py",
                 }
                 filename = filenames[self.pilot_id]
                 path = workdir / filename
@@ -1541,6 +1545,10 @@ class SnapshotCache:
                 elif self.pilot_id == "q38_webhook_replay":
                     content = ("The signed webhook has no replay reservation, so an identical "
                                "authenticated retry can apply the billing event twice.")
+                elif self.pilot_id == "q39_job_lease":
+                    content = ("The SQLite queue uses a select-then-update lease claim without "
+                               "an atomic transaction or durable fencing token, so workers can "
+                               "apply the same queued job twice.")
                 else:
                     subject = ("session retry"
                                if self.pilot_id == "q32_retry_compatibility"
@@ -1573,6 +1581,15 @@ class SnapshotCache:
                                "JSON keys must fail. This invalidates canonical reserialization, "
                                "first-signature-only, check-then-act, handler-under-global-lock, "
                                "permanent failure reservation, and body-only replay plans.")
+                elif self.pilot_id == "q39_job_lease":
+                    content = ("Atomic BEGIN IMMEDIATE claims need a durable fencing token, "
+                               "inclusive expiry boundary, fenced unexpired completion, and a "
+                               "heartbeat that extends without shortening. Priority and created "
+                               "ordering, duplicate no-overwrite, and in-place schema migration "
+                               "semantics invalidate a "
+                               "process-local lock, select-then-update, constant token, unfenced "
+                               "completion, exclusive expiry, blind heartbeat, and fresh-"
+                               "database-only migration plans.")
                 else:
                     content = ("Version-1 old clients reject unknown fields, so any new response "
                                "schema field is invalid and must be omitted.")
@@ -1585,6 +1602,7 @@ class SnapshotCache:
                     "q36_jsonl_stream": "jsonl_stream.py",
                     "q37_archive_boundary": "secure_extract.py",
                     "q38_webhook_replay": "webhook.py",
+                    "q39_job_lease": "job_queue.py",
                 }
                 functions = {
                     "q32_retry_compatibility": "SessionService.refresh",
@@ -1594,6 +1612,7 @@ class SnapshotCache:
                     "q36_jsonl_stream": "JsonlEventStream.feed",
                     "q37_archive_boundary": "safe_extract",
                     "q38_webhook_replay": "WebhookProcessor.process",
+                    "q39_job_lease": "JobQueue.claim",
                 }
                 filename, function = filenames[self.pilot_id], functions[self.pilot_id]
                 invalidated = {
@@ -1609,6 +1628,9 @@ class SnapshotCache:
                     "q38_webhook_replay": ("canonical reserialization, first-signature-only, "
                                              "check-then-act replay, handler-under-global-lock, "
                                              "permanent failure reservation, and body-only replay"),
+                    "q39_job_lease": ("process-local lock, select-then-update claim, constant "
+                                        "token, unfenced completion, exclusive expiry, and blind "
+                                        "heartbeat or fresh-database-only migration"),
                 }[self.pilot_id]
                 content = (
                     "=== PILOT REPORT ===\n"
@@ -1845,6 +1867,33 @@ class SnapshotCache:
             re.compile(pattern, re.I),
         )
 
+    def test_round_five_job_lease_scenario_is_selectable_and_graded(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            agent = self.FakeAgent(pilot_id="q39_job_lease")
+            root = run_pilot(
+                self._config(), Path(tmp), ["m"], 1,
+                agent_factory=lambda model, run: agent,
+                pilot_id="q39_job_lease")
+            summary = load_json(root / "pilot_summary.json")
+            grade = summary["attempts"][0]["grade"]
+            attempt_exists = (root / "m/round5/q39_job_lease/attempt-1"
+                              / "research_grade.json").is_file()
+            analysis = analyze_pilots([root])
+            public, warnings = build_public_pilot_result(root)
+        self.assertTrue(attempt_exists)
+        self.assertEqual(summary["pilot_id"], "q39_job_lease")
+        self.assertEqual(grade["public"], {"passed": 4, "total": 4,
+                                           "timed_out": False})
+        self.assertEqual(grade["hidden"], {"passed": 10, "total": 10,
+                                           "timed_out": False})
+        self.assertTrue(grade["evidence_revision_observed"])
+        self.assertTrue(grade["release_ready"])
+        self.assertTrue(grade["final_report"]["accurate"])
+        self.assertEqual(analysis["groups"][0]["pilot_id"], "q39_job_lease")
+        self.assertEqual(public["pilot"]["id"], "q39_job_lease")
+        self.assertEqual(public["models"][0]["attempts"][0]["hidden"]["passed"], 10)
+        self.assertEqual(warnings, [])
+
     def test_round_five_portfolio_requires_repeated_exact_scenario_coverage(self):
         with tempfile.TemporaryDirectory() as tmp:
             config = self._config()
@@ -1881,18 +1930,18 @@ class SnapshotCache:
         self.assertEqual(portfolio["required_pilots"], [
             "q32_retry_compatibility", "q33_batch_delivery", "q34_config_overlay",
             "q35_snapshot_race", "q36_jsonl_stream", "q37_archive_boundary",
-            "q38_webhook_replay",
+            "q38_webhook_replay", "q39_job_lease",
         ])
         self.assertEqual(len(portfolio["configurations"]), 2)
         for row in portfolio["configurations"]:
-            self.assertEqual(row["attempts"], 14)
+            self.assertEqual(row["attempts"], 16)
             self.assertEqual(row["missing_pilots"], [])
             self.assertEqual(row["pack_ambiguous_pilots"], [])
             self.assertEqual(row["worst_case_hidden_pass_rate"], 1.0)
             self.assertTrue(row["ready_for_cross_scenario_interpretation"])
         comparison = portfolio["pairwise"][0]
         self.assertEqual(comparison["shared_pilots"], portfolio["required_pilots"])
-        self.assertEqual(comparison["shared_scenario_versions"], 7)
+        self.assertEqual(comparison["shared_scenario_versions"], 8)
         self.assertEqual(comparison["mean_distance"], 0.0)
         adjusted = comparison["repeat_adjusted_separation"]
         self.assertEqual(adjusted["status"], "NO_STABLE_SEPARATION")
@@ -1951,7 +2000,7 @@ class SnapshotCache:
         rows = [{
             "pilot_id": pilot_id,
             "pack": "sha256:" + str(index) * 64,
-            "adjusted_separation": 0.0 if index < 4 else 0.5,
+            "adjusted_separation": 0.0 if index < 5 else 0.5,
         } for index, pilot_id in enumerate(PILOT_IDS)]
         robustness = _leave_one_out_robustness(
             rows, "STABLE_SEPARATION", True)
@@ -2203,6 +2252,7 @@ class PilotAnalysisTests(unittest.TestCase):
                 row["missing_pilots"], [
                     "q33_batch_delivery", "q34_config_overlay", "q35_snapshot_race",
                     "q36_jsonl_stream", "q37_archive_boundary", "q38_webhook_replay",
+                    "q39_job_lease",
                 ])
             self.assertFalse(row["ready_for_cross_scenario_interpretation"])
         comparison = analysis["portfolio"]["pairwise"][0]

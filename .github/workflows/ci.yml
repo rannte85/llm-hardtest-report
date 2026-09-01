@@ -101,3 +101,7 @@ jobs:
             rounds/round5/tasks/q36_jsonl_stream/verify_pilot.py
           PYTHONDONTWRITEBYTECODE=1 python \
             rounds/round5/tasks/q37_archive_boundary/verify_pilot.py
+          PYTHONDONTWRITEBYTECODE=1 python \
+            rounds/round5/tasks/q38_webhook_replay/verify_pilot.py
+          PYTHONDONTWRITEBYTECODE=1 python \
+            rounds/round5/tasks/q39_job_lease/verify_pilot.py

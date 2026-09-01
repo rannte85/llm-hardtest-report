@@ -5,6 +5,30 @@ out separately from harness features.
 
 ## Unreleased
 
+## 2.39.0 — 2026-09-01
+
+- Added `q39_job_lease`, an eighth Round 5 scenario for durable SQLite lease
+  ownership across independent queue instances.
+- Added four public and ten held-back checks for atomic claims, inclusive expiry,
+  monotonic fencing, heartbeat extension, stale completion, deterministic ordering,
+  duplicate protection, input rollback, shared visibility, and protected authority.
+- Added twelve public-green partial/adversarial controls. The unfixed baseline reaches
+  2/4 public and 0/10 held-back; the complete implementation reaches 4/4 and 10/10.
+- Integrated q39 with scenario fingerprints, eight-scenario portfolio coverage, CLI
+  selection, public pilot export, installed assets, selftest, and CI. CI now invokes
+  both q38 and q39 control matrices explicitly.
+- On final q39 fingerprint
+  `sha256:3a7b4f3f8d1bdd9bbd03090f173f59cf7a8759efc2981faabd734b1bc84ab20b`,
+  local E4B hit the three-error circuit breaker in turn 3 and retained the 2/4·0/10
+  baseline without a qualifying revision. GPT-5.6 Luna reached 8/8 public and 7/10
+  held-back with an accurate report, but accepted heartbeat/completion at the exact
+  expired boundary and modified protected public tests; neither was release-ready.
+- Their observed eight-axis distance is 65%, explicitly `INSUFFICIENT_EVIDENCE`
+  because each configuration has one attempt on one of eight scenarios and no
+  repeat-noise estimate exists.
+- All 245 source tests, five consecutive q39 control-matrix runs, repository selftest,
+  and installed wheel/sdist validation pass locally.
+
 ## 2.38.0 — 2026-09-01
 
 - Corrected q38 evidence-revision grading so explicit “every supplied signature

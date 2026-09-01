@@ -30,9 +30,10 @@ class PublicTests(unittest.IsolatedAsyncioTestCase):
             await asyncio.sleep(0.02)
             return value
 
+        values = list(range(20))
         result = await map_concurrently(
-            list(range(8)), worker, max_concurrency=1, timeout=0.08)
-        self.assertEqual(result, list(range(8)))
+            values, worker, max_concurrency=1, timeout=0.2)
+        self.assertEqual(result, values)
 
     async def test_failure_cancels_and_awaits_sibling_cleanup(self):
         started = asyncio.Event()

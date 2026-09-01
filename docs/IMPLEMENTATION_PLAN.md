@@ -1344,3 +1344,28 @@ Acceptance checks:
   adjustment.
 - Missing, incomplete, unsafe, repeat-deficient, or partially observed pairs remain
   ineligible and cannot shrink or expand the tested family after seeing outcomes.
+
+## Phase 45 — Load-stable q41 control timing
+
+Goal: preserve q41's queue-neutral timeout discrimination without treating loaded CI
+scheduling delay as a model or harness defect.
+
+Deliverables:
+
+1. Increase per-worker execution headroom from 80 ms to 200 ms in both public and
+   held-back queue checks.
+2. Increase the serialized queue to 20 workers so implementations that start timeout
+   clocks before semaphore acquisition still cross the deadline.
+3. Update the protected public-test hash and exact scenario fingerprint rather than
+   silently pooling earlier evidence.
+4. Include unexpected public and complete-control test output in verifier failures.
+
+Acceptance checks:
+
+- Three q41 matrices running concurrently all preserve the intended 14-state result.
+- The correct control passes 4/4 public and 10/10 held-back checks.
+- The baseline remains 2/4 public and 0/10 held-back.
+- All twelve incomplete or adversarial controls remain public-green and fail at least
+  one held-back check.
+- Current fingerprint is
+  `sha256:1186a977c1b4264fcf47497c027299b84f627ae1308f6488d85cfa34d1443679`.

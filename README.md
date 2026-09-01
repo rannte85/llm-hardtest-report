@@ -4,8 +4,8 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-**Current release: 2.44.0** — controls family-wise discrimination and directional
-claims when three or more Round 5 configurations create simultaneous pair comparisons.
+**Current release: 2.44.1** — controls family-wise discrimination and directional
+claims, with a load-stable q41 structured-concurrency control matrix on macOS CI.
 
 LLM Hardtest Report is a local-first command-line benchmark for comparing language
 models as reasoners, coding workers, and safe handoff agents. Point it at one or more

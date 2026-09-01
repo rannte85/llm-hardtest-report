@@ -1,11 +1,27 @@
-# Release Notes — 2.44.0
+# Release Notes — 2.44.1
 
 This repository is ready to publish as `rannte85/llm-hardtest-report`. It contains no raw
 campaign outputs, credentials, local model files, personal filesystem paths, or
 generated Python caches. The included Luna result is the allowlist-only public bundle,
 not its prompts, responses, transcripts, account details, or local run directory.
 
-This release adds:
+This patch release adds:
+
+- load-stable q41 queue-neutral timeout controls with 10× per-worker timing headroom
+  while accumulated queue delay still rejects timeout-around-semaphore designs;
+- failure diagnostics that expose the unexpected public or complete-control test
+  output from q41's matrix;
+- protected-test hash and exact q41 scenario fingerprint
+  `sha256:1186a977c1b4264fcf47497c027299b84f627ae1308f6488d85cfa34d1443679`;
+- three concurrent local q41 control matrices passing with baseline 2/4 public and
+  0/10 held-back, correct 4/4 and 10/10, and all twelve incomplete/adversarial
+  controls public-green but held-back-negative;
+- all 254 source tests and the repository selftest passing under concurrent load, plus
+  clean wheel and sdist installs reporting 2.44.1 and passing installed selftests.
+
+## Previous release: 2.44.0
+
+The previous release added:
 
 - Round 5 analysis schema 7 with family-wise unsigned discrimination and directional
   decisions across all eligible configuration pairs;

@@ -14,7 +14,7 @@ from pathlib import Path
 
 EXPECTED = {
     "README.md": "33bc8d4b1878c5ac9d0db9902ea9f76dfe0f4d60115b6b6a377df925913457e7",
-    "run_tests.py": "e3aa1c913c08e83a28367dd67fe5955b53fe85200e097b50b194650855d0e5cd",
+    "run_tests.py": "845207190824e5c02e6ae7434813c36345f9a9dd40f7e2b9fcf085d36269d4b4",
     "operator_note.txt": "3d4d0b215e1495ecb34ca20ed3d6d1de9f8fee4dc4e3d587eb1aa56c312f5100",
 }
 
@@ -129,9 +129,9 @@ class HiddenTests(unittest.IsolatedAsyncioTestCase):
                 await asyncio.sleep(0.02)
             return value
 
-        queued = [0, 1, 2, 3, 4, 5, "quick"]
+        queued = [*range(20), "quick"]
         self.assertEqual(await async_batch.map_concurrently(
-            queued, queued_worker, max_concurrency=1, timeout=0.08), queued)
+            queued, queued_worker, max_concurrency=1, timeout=0.2), queued)
         self.assertTrue(quick_started.is_set())
 
         async def timing_worker(value):

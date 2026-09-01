@@ -5,6 +5,24 @@ out separately from harness features.
 
 ## Unreleased
 
+## 2.44.1 — 2026-09-01
+
+- Hardened q41's public and held-back queue-neutral timeout controls against loaded
+  macOS runner scheduling: each 20 ms worker now receives 200 ms of execution
+  headroom, while 20 queued workers still accumulate enough wait to expose timeout-
+  around-semaphore implementations.
+- Added unexpected public/complete-control output to q41 verifier failures so a future
+  timing or semantic regression identifies the failing test instead of reporting only
+  a score.
+- Updated the protected public-test hash and q41 exact scenario fingerprint to
+  `sha256:1186a977c1b4264fcf47497c027299b84f627ae1308f6488d85cfa34d1443679`;
+  historical q41 evidence remains version-isolated and is not silently pooled.
+- Three concurrent q41 matrices pass locally with the intended 14-state separation:
+  baseline 2/4 public and 0/10 held-back, correct 4/4 and 10/10, and all twelve
+  incomplete/adversarial controls public-green but held-back-negative.
+- All 254 source tests and the repository selftest pass under concurrent load; fresh
+  wheel and sdist installs both report version 2.44.1 and pass the installed selftest.
+
 ## 2.44.0 — 2026-09-01
 
 - Added Round 5 analysis schema 7 with family-wise unsigned discrimination and

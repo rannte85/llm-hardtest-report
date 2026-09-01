@@ -200,6 +200,7 @@ def main() -> int:
         "empty_skips_validation", "tamper",
     )
     results = {}
+    diagnostics = []
     with tempfile.TemporaryDirectory(prefix="llm-hardtest-r5-q41-") as tmp:
         for state in states:
             repo = Path(tmp) / state
@@ -208,6 +209,12 @@ def main() -> int:
             public = _run([sys.executable, "run_tests.py"], repo)
             hidden = _run([sys.executable, str(HIDDEN), str(repo)], repo)
             results[state] = (public[:2], hidden[:2])
+            if state != "baseline" and public[0] != public[1]:
+                diagnostics.append(
+                    f"{state} unexpected public failure:\n{public[2][-1500:]}")
+            if state == "correct" and hidden[0] != hidden[1]:
+                diagnostics.append(
+                    f"correct unexpected hidden failure:\n{hidden[2][-1500:]}")
             print(f"{state:28} public {public[0]}/{public[1]} "
                   f"hidden {hidden[0]}/{hidden[1]}")
     checks = [
@@ -227,6 +234,8 @@ def main() -> int:
         print("PILOT_CONTROL_MATRIX=False")
         for message in failed:
             print("- " + message)
+        for diagnostic in diagnostics:
+            print(diagnostic)
         return 1
     print("PILOT_CONTROL_MATRIX=True")
     return 0

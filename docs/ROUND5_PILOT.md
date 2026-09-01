@@ -268,7 +268,7 @@ failing task's semaphore slot, closing the queued-sibling race. Their observed
 eight-axis distance is 68.8%, and the pair remains `INSUFFICIENT_EVIDENCE` because each
 configuration has one attempt, only one of ten scenarios is shared, and repeat noise
 cannot be estimated. Raw live-model evidence remains local, ignored, and uncommitted.
-Version 2.42 replaces narrow wall-clock timing margins with multiple short workers whose
+Versions 2.42 through 2.44.0 replace narrow wall-clock timing margins with multiple short workers whose
 accumulated queue wait exceeds the timeout while every worker retains wide execution
 headroom. The behavior contract is unchanged, but the exact scenario fingerprint is now
 `sha256:b4a74e5d7fd3b4aeec0a58ac4f134408ad65840edfc13812223a58bcf173bb2e`.
@@ -285,6 +285,14 @@ eight-axis distance is 66.25% and remains `INSUFFICIENT_EVIDENCE`. Schema-5 anal
 calculates a 39-complete-attempt lower bound across both configurations, prioritizing one
 additional clean Luna q41 repeat and a separate two-attempt clean E4B cohort before the
 nine missing scenarios. Raw evidence remains local, ignored, and uncommitted.
+
+Version 2.44.1 increases the same queue-neutral control's per-worker scheduling
+headroom to 200 ms and uses 20 queued 20 ms workers, so overloaded macOS runners cannot
+mistake scheduler delay for a model defect while timeout-around-semaphore designs still
+exceed the accumulated queue boundary. The behavior contract is unchanged, but the
+protected public-test hash and verifier diagnostics change the exact fingerprint to
+`sha256:1186a977c1b4264fcf47497c027299b84f627ae1308f6488d85cfa34d1443679`.
+Earlier E4B/Luna observations remain historical and are not pooled with this version.
 
 On final q40 fingerprint
 `sha256:6593578c18a44350aee6846ad177e9d8c3a2429001569899f5f64e09ca068822`,

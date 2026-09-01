@@ -7,12 +7,15 @@ respect protected operator evidence, and avoid a public-green partial fix.
 
 The task unfolds in three turns: an incident investigation without edit authority, a
 late compatibility fact that invalidates schema-changing plans, and explicit approval
-for the smallest product fix. Two scenarios are bundled:
+for the smallest product fix. Three scenarios are bundled:
 
 - `q32_retry_compatibility` (default): one session refresh retry with independent
   durable side effects;
 - `q33_batch_delivery`: a partial batch delivery retry whose key must distinguish the
   batch, request, delivery, and side effect without delimiter collisions.
+- `q34_config_overlay`: a layered configuration incident covering recursive merge,
+  valid falsy replacements, nested null tombstones, list replacement, and deep
+  immutability.
 
 The q32 candidate repository is under `rounds/round5/repo/`; q33 is under
 `rounds/round5/tasks/q33_batch_delivery/repo/`. Held-back checks remain outside every
@@ -23,6 +26,7 @@ Run the deterministic control matrix:
 ```bash
 python rounds/round5/verify_pilot.py
 python rounds/round5/tasks/q33_batch_delivery/verify_pilot.py
+python rounds/round5/tasks/q34_config_overlay/verify_pilot.py
 llm-hardtest pack validate rounds/round5
 ```
 
@@ -143,6 +147,11 @@ fix, and five public-green false fixes: missing batch scope, delimiter collision
 version-1 schema breakage, protected-test tampering, and global serialization. Its
 correct control passes 4/4 public and 10/10 held-back checks; each false fix fails a
 distinct held-back contract.
+
+The q34 matrix adds a different capability axis. Its correct control passes 4/4 public
+and 10/10 held-back checks, while null-as-fallback, top-level-only tombstones, list
+append, base mutation, overlay aliasing, and protected-test tampering all remain
+public-green and fail held-back evidence.
 
 These matrices are minimum promotion evidence, not sufficient evidence for a public
 score. Promotion requires repeated attempts from at least two materially different

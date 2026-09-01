@@ -93,3 +93,5 @@ jobs:
           PYTHONDONTWRITEBYTECODE=1 python rounds/round5/verify_pilot.py
           PYTHONDONTWRITEBYTECODE=1 python \
             rounds/round5/tasks/q33_batch_delivery/verify_pilot.py
+          PYTHONDONTWRITEBYTECODE=1 python \
+            rounds/round5/tasks/q34_config_overlay/verify_pilot.py

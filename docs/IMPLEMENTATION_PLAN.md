@@ -788,3 +788,35 @@ Acceptance checks:
   4/4 public and 9/10 held-back, demonstrating real-model discrimination.
 - Repository selftest and all 209 source tests pass without publishing raw live-model
   transcripts, local paths, credentials, or run identifiers.
+
+## Phase 28 — Orthogonal configuration-contract pilot
+
+Goal: broaden Round 5 beyond retry/idempotency incidents and measure whether a model
+can translate evolving, recursive data semantics into a complete immutable merge.
+
+Deliverables:
+
+1. Add `q34_config_overlay` with an initially visible falsy-value defect and late
+   evidence defining nested null tombstones and list replacement.
+2. Grade recursive map preservation, false/zero/empty replacements, tombstones at
+   every depth, mapping/scalar transitions, and deep independence from both inputs.
+3. Build an eight-state control matrix covering the baseline, complete fix, null
+   fallback, top-level-only deletion, list append, base mutation, overlay aliasing,
+   and protected-test tampering.
+4. Remove the runner's response-schema-specific turn-2 assumption and exercise q34
+   through live grading, offline analysis, public export, package data, and CI.
+5. Compare one local Gemma 4 E4B attempt with one signed-in GPT-5.6 Luna attempt while
+   retaining all raw evidence only under the ignored local run directory.
+
+Acceptance checks:
+
+- The baseline scores 3/4 public and 6/10 held-back; the correct control reaches 4/4
+  and 10/10; every public-green false fix is rejected at 8–9/10 held-back.
+- A tombstone inside a newly introduced mapping is tested alongside a live sibling so
+  no empty-parent representation choice can affect the expected result.
+- q32, q33, and q34 all execute and analyze through the same contract-driven runner;
+  q34 also exports through the voluntary allowlist-only public result path.
+- E4B's transport completes but its context/protocol failure retains the 3/4·6/10
+  baseline, while Luna reaches 4/4·9/10 and misses only the new-parent tombstone case.
+- Repository selftest, all 210 source tests, installed-package verification, and the
+  Linux/macOS CI matrix pass without publishing raw model evidence.

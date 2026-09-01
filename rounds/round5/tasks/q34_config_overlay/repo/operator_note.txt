@@ -1,0 +1,2 @@
+Tenant overlays are persisted and may be replayed. Preserve null tombstones at every
+depth; do not flatten nested maps, append arrays, or mutate inherited configuration.

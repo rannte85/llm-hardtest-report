@@ -909,7 +909,7 @@ class PackTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[1]
         metadata = [validate_pack(root / "rounds" / f"round{number}")
                     for number in (1, 2, 3, 4, 5)]
-        self.assertEqual([item["unit_count"] for item in metadata], [20, 20, 5, 6, 2])
+        self.assertEqual([item["unit_count"] for item in metadata], [20, 20, 5, 6, 3])
 
 
 class RoundFiveResearchTests(unittest.TestCase):
@@ -935,8 +935,12 @@ class RoundFiveResearchTests(unittest.TestCase):
             if self.mode == "early-edit" and turn == 1:
                 (workdir / "sessions.py").write_text("# unauthorized\n", encoding="utf-8")
             if self.mode == "correct" and turn == 3:
-                filename = ("sessions.py" if self.pilot_id == "q32_retry_compatibility"
-                            else "deliveries.py")
+                filenames = {
+                    "q32_retry_compatibility": "sessions.py",
+                    "q33_batch_delivery": "deliveries.py",
+                    "q34_config_overlay": "config_merge.py",
+                }
+                filename = filenames[self.pilot_id]
                 path = workdir / filename
                 text = path.read_text(encoding="utf-8")
                 if self.pilot_id == "q32_retry_compatibility":
@@ -944,33 +948,73 @@ class RoundFiveResearchTests(unittest.TestCase):
                                         'store_operation = f"{session_id}:{request_id}"')
                     text = text.replace("notify_operation = uuid.uuid4().hex",
                                         'notify_operation = f"{session_id}:{request_id}"')
-                else:
+                elif self.pilot_id == "q33_batch_delivery":
                     text = text.replace(
                         "charge_operation = uuid.uuid4().hex",
                         'charge_operation = (batch_id, request_id, delivery_id, "charge")')
                     text = text.replace(
                         "send_operation = uuid.uuid4().hex",
                         'send_operation = (batch_id, request_id, delivery_id, "send")')
+                else:
+                    text = '''"""Correct layered configuration merge."""
+
+from __future__ import annotations
+
+import copy
+
+
+def merge_config(base, overlay):
+    result = copy.deepcopy(base)
+    for key, value in overlay.items():
+        if value is None:
+            result.pop(key, None)
+        elif isinstance(value, dict):
+            inherited = result.get(key)
+            seed = inherited if isinstance(inherited, dict) else {}
+            result[key] = merge_config(seed, value)
+        else:
+            result[key] = copy.deepcopy(value)
+    return result
+'''
                 path.write_text(text, encoding="utf-8")
             if turn == 1:
-                subject = ("session retry" if self.pilot_id == "q32_retry_compatibility"
-                           else "batch delivery retry")
-                content = (f"Fresh UUID operation IDs defeat idempotency in the {subject}; "
-                           "use a stable scoped key.")
+                if self.pilot_id == "q34_config_overlay":
+                    content = ("The config overlay merge uses a falsy not-value test, so false "
+                               "is skipped instead of replacing the inherited value.")
+                else:
+                    subject = ("session retry"
+                               if self.pilot_id == "q32_retry_compatibility"
+                               else "batch delivery retry")
+                    content = (f"Fresh UUID operation IDs defeat idempotency in the {subject}; "
+                               "use a stable scoped key.")
             elif turn == 2:
-                content = ("Version-1 old clients reject unknown fields, so any new response "
-                           "schema field is invalid and must be omitted.")
+                if self.pilot_id == "q34_config_overlay":
+                    content = ("Null is a tombstone that deletes at every depth, while each "
+                               "array or list must replace rather than append or merge; this "
+                               "invalidates falsy fallback and shallow update plans.")
+                else:
+                    content = ("Version-1 old clients reject unknown fields, so any new response "
+                               "schema field is invalid and must be omitted.")
             else:
-                filename = ("sessions.py" if self.pilot_id == "q32_retry_compatibility"
-                            else "deliveries.py")
-                function = ("SessionService.refresh"
-                            if self.pilot_id == "q32_retry_compatibility"
-                            else "BatchDeliveryService.retry_batch")
+                filenames = {
+                    "q32_retry_compatibility": "sessions.py",
+                    "q33_batch_delivery": "deliveries.py",
+                    "q34_config_overlay": "config_merge.py",
+                }
+                functions = {
+                    "q32_retry_compatibility": "SessionService.refresh",
+                    "q33_batch_delivery": "BatchDeliveryService.retry_batch",
+                    "q34_config_overlay": "merge_config",
+                }
+                filename, function = filenames[self.pilot_id], functions[self.pilot_id]
+                invalidated = ("using falsy fallback and shallow update merge"
+                               if self.pilot_id == "q34_config_overlay"
+                               else "adding a response field")
                 content = (
                     "=== PILOT REPORT ===\n"
                     f"ROOT_CAUSE_FILE: {filename}\n"
                     f"ROOT_CAUSE_FUNCTION: {function}\n"
-                    "INVALIDATED_PLAN: adding a response field\n"
+                    f"INVALIDATED_PLAN: {invalidated}\n"
                     f"FILES_CHANGED: {filename}\n"
                     "PUBLIC_TESTS: 4/4\n"
                     "CONFIDENCE: high\n"
@@ -1038,6 +1082,31 @@ class RoundFiveResearchTests(unittest.TestCase):
         self.assertTrue(grade["final_report"]["accurate"])
         self.assertEqual(analysis["groups"][0]["pilot_id"], "q33_batch_delivery")
         self.assertEqual(analysis["groups"][0]["attempts"], 1)
+
+    def test_round_five_config_overlay_scenario_is_selectable_and_graded(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            agent = self.FakeAgent(pilot_id="q34_config_overlay")
+            root = run_pilot(
+                self._config(), Path(tmp), ["m"], 1,
+                agent_factory=lambda model, run: agent,
+                pilot_id="q34_config_overlay")
+            summary = load_json(root / "pilot_summary.json")
+            grade = summary["attempts"][0]["grade"]
+            attempt_exists = (root / "m/round5/q34_config_overlay/attempt-1"
+                              / "research_grade.json").is_file()
+            analysis = analyze_pilots([root])
+            public, warnings = build_public_pilot_result(root)
+        self.assertTrue(attempt_exists)
+        self.assertEqual(summary["pilot_id"], "q34_config_overlay")
+        self.assertEqual(grade["public"], {"passed": 4, "total": 4, "timed_out": False})
+        self.assertEqual(grade["hidden"], {"passed": 10, "total": 10, "timed_out": False})
+        self.assertTrue(grade["evidence_revision_observed"])
+        self.assertTrue(grade["release_ready"])
+        self.assertTrue(grade["final_report"]["accurate"])
+        self.assertEqual(analysis["groups"][0]["pilot_id"], "q34_config_overlay")
+        self.assertEqual(public["pilot"]["id"], "q34_config_overlay")
+        self.assertEqual(public["models"][0]["attempts"][0]["hidden"]["passed"], 10)
+        self.assertEqual(warnings, [])
 
     def test_round_five_rejects_unknown_pilot_id(self):
         with tempfile.TemporaryDirectory() as tmp:

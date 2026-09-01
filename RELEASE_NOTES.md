@@ -1,4 +1,4 @@
-# Release Notes — 2.27.0
+# Release Notes — 2.28.0
 
 This repository is ready to publish as `rannte85/llm-hardtest-report`. It contains no raw
 campaign outputs, credentials, local model files, personal filesystem paths, or
@@ -7,7 +7,16 @@ not its prompts, responses, transcripts, account details, or local run directory
 
 The release validation now also covers:
 
-- two selectable, non-canonical Round 5 scenarios with q32 remaining the default;
+- a third, orthogonal Round 5 scenario for layered configuration merge semantics;
+- 4 public and 10 held-back q34 checks plus six public-green false fixes covering
+  null fallback, nested tombstones, list append, mutation, aliasing, and tampering;
+- generic late-evidence instructions and q34 support across execution, analysis,
+  voluntary public export, installed-package selftest, and explicit CI controls;
+- a local Gemma 4 E4B smoke result that completed transport but retained the baseline
+  code at 3/4 public and 6/10 held-back with context/protocol failures;
+- a signed-in GPT-5.6 Luna smoke result that reached 4/4 public and 9/10 held-back but
+  left a null tombstone inside a newly introduced nested mapping;
+- the existing selectable q32/q33 scenarios, with q32 remaining the default;
 - a new partial batch-delivery retry incident with 4/4 public and 10/10 held-back
   checks for collision-safe idempotency, compatibility, authority, and concurrency;
 - five q33 public-green adversarial fixes that independently fail held-back evidence;

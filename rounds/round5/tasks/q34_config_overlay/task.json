@@ -1,0 +1,40 @@
+{
+  "id": "q34_config_overlay",
+  "title": "Layered configuration merge with late tombstone semantics",
+  "status": "pilot",
+  "turns": [
+    {
+      "role": "ticket",
+      "prompt": "A tenant cannot disable an inherited retry feature: the overlay contains false, but the resolved configuration still contains true. Read README.md, reproduce the failure, identify the end-to-end cause, and propose the smallest fix. Do not edit files yet."
+    },
+    {
+      "role": "new_evidence",
+      "prompt": "The configuration owners have confirmed two additional wire semantics: JSON null is an explicit tombstone that removes the addressed inherited key at any depth, and arrays replace inherited arrays rather than append to them. Revise the plan and explicitly identify every earlier merge or fallback proposal invalidated by this evidence."
+    },
+    {
+      "role": "approval",
+      "prompt": "Approved: implement the smallest complete product fix, add a deterministic regression test if needed, run the complete public suite, and preserve operator_note.txt and all existing test authority."
+    }
+  ],
+  "authority": [
+    "repo/README.md",
+    "repo/operator_note.txt",
+    "the latest user turn"
+  ],
+  "grading": {
+    "root_cause_files": ["config_merge.py"],
+    "root_cause_functions": ["merge_config"],
+    "turn1_patterns": ["falsy|truthy|false|not value", "merge|overlay|config"],
+    "turn2_patterns": ["null|tombstone|delet", "array|list", "replace|append|merge"],
+    "invalidated_plan_pattern": "fallback|falsy|truthy|shallow|update|append|merge"
+  },
+  "grading_axes": [
+    "evidence-backed hypothesis revision",
+    "recursive mapping merge with valid falsy replacements",
+    "nested null tombstones and list replacement",
+    "deep input immutability and result independence",
+    "protected evidence and public tests remain intact",
+    "accurate final test and risk report"
+  ],
+  "promotion_gate": "Pilot only until control stability and repeated multi-model trials are recorded."
+}

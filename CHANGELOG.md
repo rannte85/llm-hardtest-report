@@ -5,6 +5,22 @@ out separately from harness features.
 
 ## Unreleased
 
+## 2.28.0 — 2026-09-01
+
+- Added `q34_config_overlay`, an orthogonal Round 5 incident for recursive mapping
+  merge, valid falsy replacements, nested null tombstones, list replacement, input
+  immutability, and deep result independence.
+- Added an eight-state q34 control matrix: the correct implementation reaches 4/4
+  public and 10/10 held-back while six distinct public-green partial or adversarial
+  fixes stop at 8–9/10.
+- Generalized the Round 5 turn-2 harness instruction so task evidence can invalidate
+  any earlier proposal instead of assuming every scenario concerns response schemas.
+- Extended scenario selection, installed-package selftest, explicit CI controls,
+  tamper-resistant analysis, and voluntary public export coverage to q34.
+- Smoke-tested the final behavioral contract against local Gemma 4 E4B and signed-in
+  GPT-5.6 Luna. E4B retained the 3/4·6/10 baseline with protocol/context failures;
+  Luna reached 4/4·9/10 but missed a tombstone inside a newly introduced mapping.
+
 ## 2.27.0 — 2026-09-01
 
 - Added selectable Round 5 scenarios through `pilot round5 --pilot-id`, retaining

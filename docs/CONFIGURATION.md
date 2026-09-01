@@ -18,6 +18,9 @@ Top-level fields:
   tool-router errors in one agent turn stop that turn as `unsupported_tool_loop`.
   One or two errors may recover and remain recorded as protocol evidence.
 - `round4_tasks`: optional Round 4 task subset.
+- `round4_isolation`: optional Round 4 execution boundary. `macos_seatbelt` requires
+  the complete fail-closed object shown below and a loopback endpoint with an explicit
+  port. Omit it for the default unisolated mode.
 - `models`: one or more model configurations.
 - `panel_focus`: optional generated provenance for a `focus` campaign. It contains
   selected item IDs and pack fingerprints, not source paths or source run names.
@@ -29,6 +32,8 @@ Model fields:
 - `label`: report label.
 - `model`: endpoint or Codex model identifier.
 - `transport`: `openai_compat` or `codex_cli`.
+- `agent_backend`: Round 4 coding-agent scaffold, `codex_cli` (default) or optional
+  `opencode_cli`. This is independent from the Rounds 1–3 transport.
 - `rounds`: optional non-empty subset of the campaign rounds for this model.
 - `base_url`: OpenAI-compatible `/v1` base URL for a custom provider.
 - `api_key_env`: environment variable holding the API key.
@@ -77,20 +82,41 @@ required. Use `discover --base-url <url>` to print server model IDs.
 
 ## Transport and round compatibility
 
-| Transport | Rounds 1–3 | Round 4 | Required API |
+| Completion transport / Round 4 agent | Rounds 1–3 | Round 4 | Required API |
 |---|---:|---:|---|
-| `openai_compat` | Yes | No | `/v1/chat/completions` |
-| `codex_cli`, custom | Yes | Yes | `/v1/responses` through Codex |
-| `codex_cli`, OpenAI | Yes | Yes | Signed-in Codex provider |
+| `openai_compat` transport | Yes | — | `/v1/chat/completions` |
+| `codex_cli` transport | Yes | — | `/v1/responses` through Codex |
+| `opencode_cli` agent | — | Yes | `/v1/chat/completions` |
+| `codex_cli` agent, custom provider | — | Yes | `/v1/responses` through Codex |
+| `codex_cli` agent, OpenAI provider | — | Yes | Signed-in Codex provider |
 
-Selecting Round 4 requires the `codex` executable on `PATH`, even if other model
-entries use `openai_compat` for earlier rounds.
+Selecting Round 4 requires only the configured `agent_backend` executable on `PATH`.
+OpenCode remains optional and is checked only when selected.
+
+Fail-closed macOS example:
+
+```json
+{
+  "round4_isolation": {
+    "mode": "macos_seatbelt",
+    "fail_closed": true,
+    "attempt_state": "isolated",
+    "network": "model_endpoint_only",
+    "post_run_audit": true
+  }
+}
+```
+
+The mode rejects non-macOS hosts, missing `sandbox-exec`, non-loopback endpoints,
+incomplete policy objects, and failed canaries. It never falls back to `none`.
 
 ## Reproducibility notes
 
 - Configuration order is execution order; models are not run concurrently.
 - Model-level `rounds` can divide chat-only and coding-agent evaluations.
 - Every repetition starts from a clean task state.
+- Round 4 also creates fresh agent HOME/XDG state per attempt and reuses it only for
+  turns in that same attempt.
 - Resume requires a config exactly equal to the saved `config.json` snapshot.
 - Replay creates a new one-repetition campaign and never overwrites its parent run.
 - Secrets must live only in environment variables named by `api_key_env`.

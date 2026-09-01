@@ -4,10 +4,9 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-**Current release: 2.35.0** — adds a sixth Round 5 incident for adversarial ZIP
-extraction boundaries. It separates complete cross-platform preflight from ten
-public-green partial fixes across traversal aliases, symlinks, path collisions,
-uncompressed-size limits, overwrite safety, atomicity, and test authority.
+**Current release: 2.36.0** — makes Round 4 agent execution provider-neutral. Codex
+remains the default, OpenCode can drive Chat-Completions-only local servers, and an
+optional fail-closed macOS Seatbelt mode records canary, policy, and audit evidence.
 
 LLM Hardtest Report is a local-first command-line benchmark for comparing language
 models as reasoners, coding workers, and safe handoff agents. Point it at one or more
@@ -18,10 +17,10 @@ The repository, installable tool, Python package, reports, and bundled evaluatio
 rounds all use the **LLM Hardtest** name.
 
 > [!IMPORTANT]
-> This is an evaluation harness, not a security sandbox. Round 4 executes model-driven
-> coding agents against disposable task copies. Use a container or isolated account
-> for untrusted models and servers. Never place production secrets in a campaign
-> environment.
+> This is an evaluation harness, not a complete security sandbox. Optional macOS
+> Seatbelt mode adds a tested defense-in-depth boundary, but containers or isolated
+> accounts remain appropriate for hostile models and servers. Never place production
+> secrets in a campaign environment.
 
 ## Why use it?
 
@@ -41,7 +40,7 @@ rounds all use the **LLM Hardtest** name.
 | 1 | 20 compact reasoning questions | Normalized exact answer | OpenAI-compatible chat or Codex CLI |
 | 2 | 20 hardened reasoning questions | Normalized exact answer | OpenAI-compatible chat or Codex CLI |
 | 3 | Structured diagnosis and multi-turn engineering | Deterministic checks for Q21–Q24; Q25 is queued for review | OpenAI-compatible chat or Codex CLI |
-| 4 | Six repository-based coding-agent tasks | Public/held-back tests, integrity gates, handoff and release signals | Codex CLI and a `/responses`-capable provider |
+| 4 | Six repository-based coding-agent tasks | Public/held-back tests, integrity gates, handoff and release signals | Codex + Responses, or OpenCode + Chat Completions |
 
 Six selectable Round 5 research pilots are included for evolving incident evidence,
 retry idempotency, late compatibility constraints, and public-green partial fixes.
@@ -67,8 +66,9 @@ fully reconciled implementation. Q31 tests follow-through after explicit approva
 
 - Python 3.10 or newer
 - A running OpenAI-compatible server for direct local-model calls
-- For Round 4 and Round 5: [Codex CLI](https://github.com/openai/codex) on `PATH` and a server
-  that supports the OpenAI Responses API
+- For Round 4: [Codex CLI](https://github.com/openai/codex) with Responses support,
+  or optional [OpenCode](https://opencode.ai/) with Chat Completions support
+- For Round 5 research pilots: Codex CLI and Responses support
 
 No model weights or server are installed, started, stopped, or evicted by this tool.
 
@@ -105,6 +105,11 @@ llm-hardtest validate --config benchmark.json
 llm-hardtest doctor --config benchmark.json
 llm-hardtest run --config benchmark.json
 ```
+
+For a Chat-Completions-only local server, install OpenCode and start from
+[`configs/opencode-local-round4.json`](configs/opencode-local-round4.json). Remove the
+top-level `round4_isolation` object on non-macOS systems; an explicitly requested
+Seatbelt boundary never silently falls back to an unisolated run.
 
 The default output is `runs/<campaign>-<timestamp>/REPORT.md`. The whole `runs/`
 directory is ignored by Git so model outputs and large working copies are not
@@ -254,9 +259,12 @@ llm-hardtest pilot submit pilot-bundle.zip --preview
 llm-hardtest pilot submit pilot-bundle.zip --open-pr --yes
 ```
 
-Standard campaign exports use public schema v3. Every item outcome is included by
+Standard campaign exports use public schema v4. Every item outcome is included by
 default as a status, attempt number, wall time, and completion-token count. Prompt and
-response content is never included. Accepted v2 bundles let the community index
+response content is never included. Schema v4 adds a content-free execution scaffold
+(`agent_backend`, isolation mode, network policy, and fail-closed state), preventing
+Codex, OpenCode, isolated, and unisolated results from being silently pooled. Accepted
+v2/v3 bundles let the community index
 recompute item difficulty, corrected discrimination, and within/between-configuration
 disagreement instead of relying only on aggregate scores. Starting in 2.9, community
 item intervals and robust signals cluster by accepted bundle, so repeated attempts or
@@ -279,9 +287,9 @@ The database is built only from already-public, validated repository bundles. It
 not scan local runs, contact model servers, or collect telemetry. Bundle IDs remain the
 independence boundary even when a contribution contains repeated attempts or duplicate
 model rows. See the [database contract](docs/COMMUNITY_DATABASE.md) and published
-[`database-schema-v3.sql`](results/database-schema-v3.sql). Older databases must be
-rebuilt from canonical submission JSON; public bundle v1/v2 inputs remain valid.
-Configuration IDs are recomputed under the v3 identity, so query them again with
+[`database-schema-v4.sql`](results/database-schema-v4.sql). Older databases must be
+rebuilt from canonical submission JSON; public bundle v1/v2/v3 inputs remain valid.
+Configuration IDs are recomputed under the v4 identity, so query them again with
 `results catalog` after rebuilding instead of persisting an older database ID.
 
 ## Discover observed serving settings
@@ -622,6 +630,12 @@ research. It is not sufficient for a contamination-resistant public leaderboard.
 Models may have seen public tasks during training, and a tool-enabled process with
 broad filesystem access may read the benchmark source. See
 [Benchmark integrity](docs/BENCHMARK_INTEGRITY.md) before making comparative claims.
+
+When `round4_isolation.mode` is `macos_seatbelt`, every attempt receives private
+HOME/XDG state. A mandatory preflight checks candidate reads/writes, protected
+benchmark and prior-state denial, external-network denial, and local endpoint access.
+The grader runs only after the candidate exits, outside Seatbelt. Canary failure or
+boundary-disclosure evidence is infrastructure-invalid, never an ordinary model fail.
 
 ## Documentation
 

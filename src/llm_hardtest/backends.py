@@ -4,6 +4,7 @@ import json
 import os
 import re
 import signal
+import shutil
 import subprocess
 import time
 import urllib.error
@@ -183,10 +184,18 @@ class CodexBackend(Backend):
 
     def _env(self) -> dict:
         env = dict(os.environ)
-        if self.model.get("codex_provider", "custom") == "openai":
-            return env
         home = self.state_dir / "codex-homes" / self.model["key"]
         home.mkdir(parents=True, exist_ok=True)
+        if self.model.get("codex_provider", "custom") == "openai":
+            source_home = Path(
+                os.environ.get("CODEX_HOME", str(Path.home() / ".codex")))
+            source_auth = source_home / "auth.json"
+            target_auth = home / "auth.json"
+            if source_auth.is_file() and not target_auth.exists():
+                shutil.copyfile(source_auth, target_auth)
+                target_auth.chmod(0o600)
+            env["CODEX_HOME"] = str(home)
+            return env
         provider = "llm_hardtest_compat"
         base = self.model.get("base_url", "http://127.0.0.1:8000/v1")
         key_env = self.model.get("api_key_env", "LLM_HARDTEST_API_KEY")
@@ -266,6 +275,7 @@ class CodexBackend(Backend):
     def _agent_env(self) -> dict:
         env = self._env()
         env["RUST_LOG"] = env.get("RUST_LOG", "error")
+        env.update(getattr(self, "agent_env_overrides", {}))
         return env
 
     def _session_id(self, transcript: str, env: dict, workdir: Path,
@@ -336,6 +346,7 @@ class CodexBackend(Backend):
         else:
             command.append("--strict-config")
         command.append(prompt)
+        command = list(getattr(self, "agent_command_prefix", [])) + command
         env = self._agent_env()
         started = time.time()
         with transcript_path.open("w", encoding="utf-8", errors="replace") as stream:

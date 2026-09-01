@@ -20,7 +20,7 @@ Round 5 follows the same consent boundary with `pilot export --public`,
 `pilot submit --preview`, and `pilot submit --open-pr --yes`. Nothing is uploaded
 automatically.
 
-## Public schema v3
+## Public schema v4
 
 Current exports contain every content-free item outcome, aggregate benchmark results,
 and an allowlisted set of reproducibility fields:
@@ -33,16 +33,19 @@ and an allowlisted set of reproducibility fields:
   attested remote OS/architecture;
 - a public model name, transport, selected generation parameters, and optional
   explicitly configured public metadata;
+- the Round 4 agent backend, isolation mode, network policy, and fail-closed state;
 - aggregate per-round scores, incomplete/review/invalid counts, release readiness,
-  handoff utility, false-green counts, timing, and task-level Round 4 grades.
+  handoff utility, false-green counts, timing, and task-level Round 4 grades;
 - every item ID, attempt number, normalized status, wall time, and completion-token
   count. No prompt, expected answer, extracted answer, or generated content is copied.
 
 The exporter never includes raw prompts or responses, transcripts, diffs, source
 repositories, API keys, environment-variable names, endpoint URLs, campaign/run IDs,
 timestamps, local paths, usernames, model keys, display labels, Codex homes, or error
-messages. The current shape is documented in `results/schema-v3.json`; schema-v1 and
-schema-v2 bundles remain valid. Their serving coordinates normalize to `unreported`:
+messages. The current shape is documented in `results/schema-v4.json`; schema-v1,
+schema-v2, and schema-v3 bundles remain valid. Their missing execution scaffold
+normalizes to the historical Codex/non-isolated default. Legacy serving coordinates
+normalize to `unreported`:
 the loader never reinterprets the historical client environment as a server. The CLI
 applies additional semantic and privacy checks
 without requiring a JSON Schema dependency.
@@ -86,11 +89,12 @@ versions, or pack fingerprints are directly comparable.
 
 `results build` groups records only when model name, runner environment, serving
 environment, transport,
-generation parameters, declared metadata, round, and pack fingerprint match. It
+generation parameters, declared metadata, Round 4 execution scaffold, round, and pack
+fingerprint match. It
 withholds a descriptive pass-rate baseline until five distinct accepted bundles with
 observed scores exist in that exact group. Each bundle contributes one rate regardless
 of its internal attempt count, and the displayed Wilson-style 95% interval is
-calculated across bundle-level rates. Schema-v2 item outcomes also support community difficulty,
+calculated across bundle-level rates. Schema-v2 and later item outcomes also support community difficulty,
 corrected-discrimination, and repeat-stability diagnostics. A future predictive model
 would require substantially more
 representative data, uncertainty reporting, abuse controls, and an explicit statement
@@ -255,7 +259,7 @@ or differently quantized models cannot create a bridge.
 The response follows `results/prediction-readiness-schema-v2.json`, omits bundle and
 contributor identity, and is identical for canonical JSON and verified SQLite. Its
 `predictive_service_authorized` field is always false: a temporal holdout cannot be
-derived because public schema v3 intentionally has no collection timestamp, structural
+derived because public schema v4 intentionally has no collection timestamp, structural
 validation is not maintainer abuse/implausibility review, and one pack snapshot cannot
 establish future server/pack drift stability. Passing operator targets therefore yields
 `DESIGN_TARGET_MET_VALIDATION_REQUIRED`, never a deployment authorization.

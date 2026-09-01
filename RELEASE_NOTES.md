@@ -1,4 +1,4 @@
-# Release Notes — 2.35.0
+# Release Notes — 2.36.0
 
 This repository is ready to publish as `rannte85/llm-hardtest-report`. It contains no raw
 campaign outputs, credentials, local model files, personal filesystem paths, or
@@ -6,6 +6,26 @@ generated Python caches. The included Luna result is the allowlist-only public b
 not its prompts, responses, transcripts, account details, or local run directory.
 
 The release validation now also covers:
+
+- GitHub issue #1's provider-neutral Round 4 execution contract, with Codex as the
+  compatibility default and optional OpenCode support for Chat-Completions-only local
+  model servers;
+- fresh attempt-scoped Codex/OpenCode state, persistent same-attempt multi-turn
+  sessions, retained JSONL/transcript/final/exit/timeout/usage evidence, and
+  infrastructure-invalid propagation for malformed agent outcomes;
+- optional fail-closed macOS Seatbelt protection for benchmark assets, held-back
+  checks, references, prior attempts, completed repositories, and global agent state;
+- mandatory workdir, protected-read, external-network, and endpoint canaries plus
+  policy hashes and post-run boundary-disclosure audit, with the grader outside the
+  candidate boundary;
+- public schema v4 and community database schema v4 execution-scaffold identity,
+  preventing Codex/OpenCode and isolated/unisolated results from being pooled;
+- deterministic fake executable controls and real macOS Seatbelt integration controls,
+  without adding OpenCode as a mandatory dependency or changing canonical scoring;
+- 242 passing source tests plus repository selftest, unchanged Round 4 trap proofs,
+  pack validation, and deterministic community-index/database checks;
+
+## Previous release: 2.35.0
 
 - `q37_archive_boundary`, a sixth long-horizon incident that requires complete
   validation of untrusted ZIP metadata before any destination write;

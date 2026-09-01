@@ -9,6 +9,7 @@ import shutil
 import sqlite3
 import stat
 import subprocess
+import sys
 import tempfile
 import threading
 import unittest
@@ -77,6 +78,12 @@ from llm_hardtest.round5 import PILOT_IDS, pilot_fingerprint, run_pilot
 from llm_hardtest.round12 import run as run_round12
 from llm_hardtest.round3 import _fields, _grade
 from llm_hardtest.round4 import run as run_round4
+from llm_hardtest.isolation import (
+    IsolationError, MacOSSeatbeltIsolation, make_isolation,
+)
+from llm_hardtest.round4_agents import (
+    OpenCodeRound4Agent, Round4AgentError, make_round4_agent,
+)
 
 
 class AnswerTests(unittest.TestCase):
@@ -559,6 +566,25 @@ class ServerSetupTests(unittest.TestCase):
             self.assertEqual(doctor_config(config), 0)
         probe.assert_called_once_with(config["models"][0], 30)
 
+    def test_doctor_uses_opencode_without_probing_responses(self):
+        config = {
+            "name": "test", "repetitions": 1, "rounds": [4],
+            "round4_tasks": ["q26_hidden_tests"],
+            "models": [{"key": "local", "model": "local/model",
+                        "transport": "openai_compat", "agent_backend": "opencode_cli",
+                        "codex_provider": "custom",
+                        "base_url": "http://127.0.0.1:8000/v1", "rounds": [4]}],
+        }
+        with patch("llm_hardtest.cli.discover_models", return_value=["local/model"]), \
+                patch("llm_hardtest.orchestrator.shutil.which",
+                      side_effect=lambda name: "/usr/bin/opencode"
+                      if name == "opencode" else None), \
+                patch("llm_hardtest.cli._probe_codex") as codex_probe, \
+                patch("llm_hardtest.cli._probe_opencode") as opencode_probe:
+            self.assertEqual(doctor_config(config), 0)
+        codex_probe.assert_not_called()
+        opencode_probe.assert_called_once_with(config["models"][0], 30, None)
+
     def test_doctor_rejects_output_limited_short_probe(self):
         config = {
             "name": "test", "repetitions": 1, "rounds": [1],
@@ -637,7 +663,8 @@ class RoundFourProgressTests(unittest.TestCase):
         class FakeRunner:
             MODELS = {}
 
-            def main(self, _args, progress_callback=None):
+            def main(self, _args, progress_callback=None, agent_factory=None):
+                self.agent_factory = agent_factory
                 print("verbose harness output")
                 progress_callback({"event": "start", "item": "q26_hidden_tests",
                                    "attempt": 1})
@@ -661,6 +688,334 @@ class RoundFourProgressTests(unittest.TestCase):
             self.assertEqual(status, 0)
             self.assertEqual([event["event"] for event in events], ["start", "complete"])
             self.assertIn("verbose harness output", (out / "harness.log").read_text())
+
+
+class RoundFourAgentBackendTests(unittest.TestCase):
+    def _fake_opencode(self, root: Path) -> Path:
+        executable = root / "opencode"
+        executable.write_text(
+            f"""#!{sys.executable}
+import json, os, sys, time
+args = sys.argv[1:]
+if args[:2] == ["run", "--help"]:
+    print("--model --format --session --dir --dangerously-skip-permissions")
+    raise SystemExit(0)
+mode = os.environ.get("FAKE_OPENCODE_MODE", "ok")
+if mode == "exit":
+    raise SystemExit(7)
+session = (args[args.index("--session") + 1] if "--session" in args
+           else os.environ["XDG_DATA_HOME"])
+if mode == "wrong-session" and "--session" in args:
+    session = "wrong-session"
+model = args[args.index("--model") + 1]
+if mode == "mismatch":
+    model = "llm-hardtest/wrong-model"
+print(json.dumps({{"type": "step_start", "sessionID": session}}))
+sys.stdout.flush()
+if mode == "timeout":
+    time.sleep(60)
+if mode != "empty":
+    print(json.dumps({{"type": "text", "sessionID": session,
+                      "part": {{"text": "done", "modelID": model}}}}))
+""", encoding="utf-8")
+        executable.chmod(executable.stat().st_mode | stat.S_IXUSR)
+        return executable
+
+    def _model(self):
+        return {
+            "key": "m", "model": "local-model", "agent_backend": "opencode_cli",
+            "transport": "openai_compat", "codex_provider": "custom",
+            "base_url": "http://127.0.0.1:8000/v1",
+        }
+
+    def test_opencode_preserves_session_within_attempt_and_fresh_state_between(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            executable = self._fake_opencode(root)
+            work = root / "work"
+            work.mkdir()
+            with patch("llm_hardtest.round4_agents.shutil.which",
+                       return_value=str(executable)):
+                first = make_round4_agent(
+                    self._model(), root / "state-a", root / "meta-a.json")
+                first.preflight(work)
+                one = first.turn("one", work, root / "evidence-a", 1, 10)
+                two = first.turn(
+                    "two", work, root / "evidence-a", 2, 10, one["session_id"])
+                second = make_round4_agent(
+                    self._model(), root / "state-b", root / "meta-b.json")
+                second.preflight(work)
+                other = second.turn("one", work, root / "evidence-b", 1, 10)
+            self.assertEqual(one["session_id"], two["session_id"])
+            self.assertNotEqual(one["session_id"], other["session_id"])
+            self.assertTrue(one["model_identity_verified"])
+            metadata = load_json(root / "meta-a.json")
+            self.assertEqual(metadata["agent_backend"], "opencode_cli")
+            self.assertEqual(len(metadata["turns"]), 2)
+
+    def test_opencode_nonzero_empty_and_model_mismatch_fail_before_grading(self):
+        for mode, message in (
+                ("exit", "exited 7"),
+                ("empty", "without a final"),
+                ("mismatch", "model mismatch")):
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                executable = self._fake_opencode(root)
+                work = root / "work"
+                work.mkdir()
+                with patch.dict(os.environ, {"FAKE_OPENCODE_MODE": mode}), \
+                        patch("llm_hardtest.round4_agents.shutil.which",
+                              return_value=str(executable)):
+                    agent = make_round4_agent(
+                        self._model(), root / "state", root / "meta.json")
+                    agent.preflight(work)
+                    with self.assertRaisesRegex(Round4AgentError, message):
+                        agent.turn("task", work, root / "evidence", 1, 10)
+
+    def test_opencode_timeout_preserves_partial_transcript(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            executable = self._fake_opencode(root)
+            work = root / "work"
+            work.mkdir()
+            with patch.dict(os.environ, {"FAKE_OPENCODE_MODE": "timeout"}), \
+                    patch("llm_hardtest.round4_agents.shutil.which",
+                          return_value=str(executable)):
+                agent = make_round4_agent(
+                    self._model(), root / "state", root / "meta.json")
+                agent.preflight(work)
+                with self.assertRaisesRegex(Round4AgentError, "timed out"):
+                    agent.turn("task", work, root / "evidence", 1, 1)
+            transcript = root / "evidence" / "transcript_turn1.txt"
+            self.assertTrue(transcript.is_file())
+            self.assertIn("step_start", transcript.read_text(encoding="utf-8"))
+
+    def test_opencode_rejects_wrong_continuation_session(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            executable = self._fake_opencode(root)
+            work = root / "work"
+            work.mkdir()
+            with patch("llm_hardtest.round4_agents.shutil.which",
+                       return_value=str(executable)):
+                agent = make_round4_agent(
+                    self._model(), root / "state", root / "meta.json")
+                agent.preflight(work)
+                first = agent.turn("one", work, root / "evidence", 1, 10)
+                with patch.dict(os.environ, {"FAKE_OPENCODE_MODE": "wrong-session"}):
+                    with self.assertRaisesRegex(Round4AgentError, "wrong session"):
+                        agent.turn(
+                            "two", work, root / "evidence", 2, 10,
+                            first["session_id"])
+
+    def test_opencode_is_optional_but_fails_capability_validation_when_selected(self):
+        config = {
+            "name": "agent", "rounds": [4], "repetitions": 1,
+            "models": [{**self._model(), "rounds": [4]}],
+        }
+        with patch("llm_hardtest.orchestrator.shutil.which",
+                   side_effect=lambda name: None if name == "opencode" else "/bin/tool"):
+            with self.assertRaisesRegex(ValueError, "opencode on PATH"):
+                validate_config(config)
+        validate_config(config, check_runtime=False)
+
+    def test_agent_and_isolation_are_exact_configuration_identity(self):
+        base = {"model": "m", "transport": "openai_compat"}
+        opencode = {**base, "agent_backend": "opencode_cli"}
+        isolation = {
+            "mode": "macos_seatbelt", "fail_closed": True,
+            "attempt_state": "isolated", "network": "model_endpoint_only",
+            "post_run_audit": True,
+        }
+        self.assertNotEqual(_model_identity(base), _model_identity(opencode))
+        self.assertNotEqual(
+            _model_identity(base), _model_identity(base, isolation))
+
+    def test_round4_rerun_preserves_prior_evidence_and_uses_fresh_state(self):
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                payload = json.dumps({"data": [{"id": "local-model"}]}).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(payload)))
+                self.end_headers()
+                self.wfile.write(payload)
+
+            def log_message(self, _format, *_args):
+                pass
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                fake = self._fake_opencode(root)
+                out = root / "model" / "round4"
+                model = {
+                    **self._model(),
+                    "base_url": f"http://127.0.0.1:{server.server_port}/v1",
+                }
+                with patch("llm_hardtest.round4_agents.shutil.which",
+                           return_value=str(fake)):
+                    self.assertEqual(run_round4(
+                        model, 1, out, 20, ["q26_hidden_tests"]), 0)
+                    self.assertEqual(run_round4(
+                        model, 1, out, 20, ["q26_hidden_tests"]), 0)
+                attempt = out / "q26_hidden_tests" / "attempt1"
+                self.assertTrue((attempt / "agent_meta.json").is_file())
+                self.assertTrue((attempt / "retry1" / "agent_meta.json").is_file())
+                result = load_json(out / "run.json")
+                self.assertEqual(
+                    result["grades"][0]["run_meta"]["evidence_subdir"], "retry1")
+        finally:
+            server.shutdown()
+            server.server_close()
+
+
+class RoundFourIsolationTests(unittest.TestCase):
+    def test_explicit_seatbelt_fails_closed_off_macos(self):
+        config = {
+            "mode": "macos_seatbelt", "fail_closed": True,
+            "attempt_state": "isolated", "network": "model_endpoint_only",
+            "post_run_audit": True,
+        }
+        with tempfile.TemporaryDirectory() as tmp, \
+                patch("llm_hardtest.isolation.platform.system", return_value="Linux"):
+            with self.assertRaisesRegex(IsolationError, "unavailable"):
+                make_isolation(
+                    config, Path(tmp) / "state", [], [],
+                    "http://127.0.0.1:8000/v1")
+
+    @unittest.skipUnless(sys.platform == "darwin", "macOS Seatbelt control")
+    def test_seatbelt_canary_and_post_run_quarantine(self):
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                self.send_response(200)
+                self.end_headers()
+
+            def log_message(self, _format, *_args):
+                pass
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                work, state, protected = root / "work", root / "state", root / "hidden"
+                work.mkdir()
+                state.mkdir()
+                protected.mkdir()
+                (protected / "held_back.py").write_text("secret", encoding="utf-8")
+                isolation = MacOSSeatbeltIsolation(
+                    {}, state, [protected], [root / "evidence"],
+                    f"http://127.0.0.1:{server.server_port}/v1")
+                result = isolation.preflight(work)
+                self.assertTrue(result["mandatory_checks_passed"])
+                self.assertEqual(isolation.audit("ordinary output")["status"], "pass")
+                leaked = isolation.audit(isolation.canary_token)
+                self.assertTrue(leaked["boundary_violation"])
+                self.assertRegex(isolation.provenance["policy_hash"], r"^sha256:[0-9a-f]{64}$")
+
+                class MissingDeny(MacOSSeatbeltIsolation):
+                    def _build_profile(self, workdir):
+                        return "\n".join(
+                            line for line in super()._build_profile(workdir).splitlines()
+                            if not line.startswith("(deny file-read*")) + "\n"
+
+                missing_state = root / "missing-state"
+                missing_state.mkdir()
+                missing = MissingDeny(
+                    {}, missing_state, {"held_back_checks": [protected]}, [],
+                    f"http://127.0.0.1:{server.server_port}/v1")
+                with self.assertRaisesRegex(IsolationError, "failed closed"):
+                    missing.preflight(work)
+
+                class UnwritableWork(MacOSSeatbeltIsolation):
+                    def _build_profile(self, workdir):
+                        work_rule = (
+                            f'(allow file-write* (subpath '
+                            f'{json.dumps(str(workdir.resolve()))}))')
+                        return "\n".join(
+                            line for line in super()._build_profile(workdir).splitlines()
+                            if line != work_rule) + "\n"
+
+                unwritable_state = root / "unwritable-state"
+                unwritable_state.mkdir()
+                unwritable = UnwritableWork(
+                    {}, unwritable_state, {"held_back_checks": [protected]}, [],
+                    f"http://127.0.0.1:{server.server_port}/v1")
+                with self.assertRaisesRegex(IsolationError, "failed closed"):
+                    unwritable.preflight(work)
+
+                class UnreadableWork(MacOSSeatbeltIsolation):
+                    def _build_profile(self, workdir):
+                        return (super()._build_profile(workdir)
+                                + f'(deny file-read* (subpath '
+                                  f'{json.dumps(str(workdir.resolve()))}))\n')
+
+                unreadable_state = root / "unreadable-state"
+                unreadable_state.mkdir()
+                unreadable = UnreadableWork(
+                    {}, unreadable_state, {"held_back_checks": [protected]}, [],
+                    f"http://127.0.0.1:{server.server_port}/v1")
+                with self.assertRaisesRegex(IsolationError, "failed closed"):
+                    unreadable.preflight(work)
+        finally:
+            server.shutdown()
+            server.server_close()
+
+    @unittest.skipUnless(sys.platform == "darwin", "macOS Seatbelt integration")
+    def test_isolated_fake_agent_exits_before_external_grader_runs(self):
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                payload = json.dumps({"data": [{"id": "local-model"}]}).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(payload)))
+                self.end_headers()
+                self.wfile.write(payload)
+
+            def log_message(self, _format, *_args):
+                pass
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                fake = RoundFourAgentBackendTests()._fake_opencode(root)
+                out = root / "model" / "round4"
+                model = {
+                    "key": "m", "model": "local-model",
+                    "transport": "openai_compat", "agent_backend": "opencode_cli",
+                    "codex_provider": "custom",
+                    "base_url": f"http://127.0.0.1:{server.server_port}/v1",
+                    "round4_isolation": {
+                        "mode": "macos_seatbelt", "fail_closed": True,
+                        "attempt_state": "isolated",
+                        "network": "model_endpoint_only", "post_run_audit": True,
+                    },
+                }
+                with patch("llm_hardtest.round4_agents.shutil.which",
+                           side_effect=lambda name: (
+                               str(fake) if name == "opencode" else "/usr/bin/sandbox-exec")):
+                    code = run_round4(
+                        model, 1, out, 20, ["q26_hidden_tests"])
+                self.assertEqual(code, 0)
+                result = load_json(out / "run.json")
+                self.assertEqual(result["errors"], [])
+                self.assertEqual(len(result["grades"]), 1)
+                metadata = load_json(
+                    out / "q26_hidden_tests" / "attempt1" / "agent_meta.json")
+                checks = metadata["isolation_preflight"]["checks"]
+                self.assertTrue(all(checks.values()))
+                self.assertEqual(metadata["audit"]["status"], "pass")
+        finally:
+            server.shutdown()
+            server.server_close()
 
 
 class RoundOneTwoTests(unittest.TestCase):
@@ -828,6 +1183,36 @@ class ConfigurationTests(unittest.TestCase):
         config["round4_tasks"] = ["not-a-task"]
         with self.assertRaisesRegex(ValueError, "unknown round4_tasks"):
             validate_config(config)
+
+    def test_round4_isolation_contract_is_strict_and_loopback_only(self):
+        isolation = {
+            "mode": "macos_seatbelt", "fail_closed": True,
+            "attempt_state": "isolated", "network": "model_endpoint_only",
+            "post_run_audit": True,
+        }
+        base = {
+            "repetitions": 1, "rounds": [4], "round4_isolation": isolation,
+            "models": [{
+                "key": "m", "model": "one", "transport": "openai_compat",
+                "agent_backend": "opencode_cli", "codex_provider": "custom",
+                "base_url": "http://127.0.0.1:8000/v1", "rounds": [4],
+            }],
+        }
+        validate_config(base, check_runtime=False)
+        incomplete = json.loads(json.dumps(base))
+        incomplete["round4_isolation"].pop("post_run_audit")
+        with self.assertRaisesRegex(ValueError, "complete fail-closed"):
+            validate_config(incomplete, check_runtime=False)
+        remote = json.loads(json.dumps(base))
+        remote["models"][0]["base_url"] = "https://example.com/v1"
+        with self.assertRaisesRegex(ValueError, "loopback model endpoint"):
+            validate_config(remote, check_runtime=False)
+        inactive = json.loads(json.dumps(base))
+        inactive["round4_isolation"] = {
+            "mode": "none", "fail_closed": True,
+        }
+        with self.assertRaisesRegex(ValueError, "no active isolation fields"):
+            validate_config(inactive, check_runtime=False)
 
     def test_public_serving_environment_contract_is_validated_offline(self):
         base = {
@@ -3060,6 +3445,15 @@ class PanelConfigTests(unittest.TestCase):
 
 
 class PublicResultTests(unittest.TestCase):
+    def test_published_public_v4_schema_declares_execution_scaffold(self):
+        schema = load_json(repo_root() / "results/schema-v4.json")
+        self.assertEqual(schema["properties"]["schema_version"]["const"], 4)
+        model = schema["$defs"]["model"]
+        self.assertIn("execution_scaffold", model["required"])
+        scaffold = schema["$defs"]["executionScaffold"]
+        self.assertEqual(set(scaffold["required"]), {
+            "agent_backend", "isolation_mode", "network", "fail_closed"})
+
     def _run(self, root, model_name="org/model"):
         config = {
             "name": "private-campaign-name", "repetitions": 1, "rounds": [1],
@@ -3199,7 +3593,11 @@ class PublicResultTests(unittest.TestCase):
         self.assertEqual(payload["models"][0]["public_metadata"],
                          {"accelerator_count": 2, "quantization": "Q4_K_M",
                           "server_version": "1.2.3"})
-        self.assertEqual(payload["schema_version"], 3)
+        self.assertEqual(payload["schema_version"], 4)
+        self.assertEqual(payload["models"][0]["execution_scaffold"], {
+            "agent_backend": "codex_cli", "isolation_mode": "none",
+            "network": "unrestricted", "fail_closed": False,
+        })
         self.assertEqual(payload["models"][0]["serving_environment"], {
             "scope": "same_host", "os": payload["environment"]["os"],
             "architecture": payload["environment"]["architecture"],
@@ -3298,6 +3696,21 @@ class PublicResultTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "bundle_id"):
             validate_public_result(payload)
 
+    def test_public_v4_rejects_incoherent_isolation_after_rehash(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "run"
+            self._run(root)
+            payload, _ = build_public_result(root)
+        payload["models"][0]["execution_scaffold"].update({
+            "isolation_mode": "none", "network": "model_endpoint_only",
+            "fail_closed": True,
+        })
+        from llm_hardtest.public_results import _bundle_id
+        body = {key: value for key, value in payload.items() if key != "bundle_id"}
+        payload["bundle_id"] = _bundle_id(body)
+        with self.assertRaisesRegex(ValueError, "execution scaffold"):
+            validate_public_result(payload)
+
     def test_public_export_refuses_overwrite(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "run"
@@ -3347,6 +3760,7 @@ class PublicResultTests(unittest.TestCase):
         payload["schema_version"] = 1
         for model in payload["models"]:
             model.pop("serving_environment")
+            model.pop("execution_scaffold")
             for result in model["rounds"].values():
                 result.pop("items", None)
         from llm_hardtest.public_results import _bundle_id
@@ -3590,7 +4004,7 @@ class PublicResultTests(unittest.TestCase):
             self.assertNotIn(private, database_bytes)
 
     def test_published_database_schema_matches_the_builder(self):
-        published = (repo_root() / "results/database-schema-v3.sql").read_text(
+        published = (repo_root() / "results/database-schema-v4.sql").read_text(
             encoding="utf-8")
         published = "\n".join(
             line for line in published.splitlines()
@@ -4100,17 +4514,17 @@ class PublicResultTests(unittest.TestCase):
             build_database(directory, database)
             normalized = normalize_submissions(submissions)
             changed = list(normalized["configurations"][0])
-            false_os = "Linux" if changed[3] != "Linux" else "Darwin"
-            changed[7] = false_os
-            changed[9] = json.dumps({
-                "architecture": changed[8], "os": false_os,
+            false_os = "Linux" if changed[7] != "Linux" else "Darwin"
+            changed[11] = false_os
+            changed[13] = json.dumps({
+                "architecture": changed[12], "os": false_os,
                 "scope": "same_host"}, separators=(",", ":"), sort_keys=True)
             normalized["configurations"][0] = tuple(changed)
             connection = sqlite3.connect(database)
             connection.execute(
                 "UPDATE configurations SET serving_os = ?, "
                 "serving_environment_json = ? WHERE configuration_id = ?",
-                (changed[7], changed[9], changed[0]))
+                (changed[11], changed[13], changed[0]))
             connection.execute(
                 "UPDATE dataset_metadata SET content_fingerprint = ?",
                 (_content_fingerprint(normalized),))
@@ -4975,6 +5389,7 @@ class PublicResultTests(unittest.TestCase):
             payload["schema_version"] = 2
             for model in payload["models"]:
                 model.pop("serving_environment")
+                model.pop("execution_scaffold")
                 self.assertEqual(normalized_serving_environment(payload, model), {
                     "scope": "unreported", "os": None, "architecture": None})
             body = {key: value for key, value in payload.items()
@@ -5021,6 +5436,7 @@ class PublicResultTests(unittest.TestCase):
             payload = json.loads(json.dumps(original))
             payload["schema_version"] = 1
             payload["models"][0].pop("serving_environment")
+            payload["models"][0].pop("execution_scaffold")
             result = payload["models"][0]["rounds"]["1"]
             result.pop("items")
             result["passed"] = 0

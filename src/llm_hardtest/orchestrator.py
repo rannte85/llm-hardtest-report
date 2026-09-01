@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import shutil
 import re
+import platform
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -99,8 +100,15 @@ def validate_config(config: dict, check_runtime: bool = True) -> None:
             raise ValueError(f'{model.get("key", "model")}: model is required')
         if model.get("transport") not in ("openai_compat", "codex_cli"):
             raise ValueError(f'{model.get("key")}: unsupported transport')
+        if model.get("agent_backend", "codex_cli") not in (
+                "codex_cli", "opencode_cli"):
+            raise ValueError(f'{model.get("key")}: unsupported agent_backend')
         if model.get("codex_provider", "custom") not in ("custom", "openai"):
             raise ValueError(f'{model.get("key")}: unsupported codex_provider')
+        if (model.get("agent_backend") == "opencode_cli"
+                and model.get("codex_provider", "custom") != "custom"):
+            raise ValueError(
+                f'{model.get("key")}: opencode_cli requires a configured base_url')
         if (model.get("transport") == "openai_compat"
                 or model.get("codex_provider", "custom") == "custom"):
             base_url = model.get("base_url", "http://127.0.0.1:8000/v1")
@@ -189,12 +197,62 @@ def validate_config(config: dict, check_runtime: bool = True) -> None:
         unknown = sorted(set(tasks) - set(round4.CANONICAL_TASKS))
         if unknown:
             raise ValueError(f"unknown round4_tasks: {unknown}")
-    needs_codex = any(4 in _model_rounds(model, rounds) for model in config["models"])
-    needs_codex = needs_codex or any(
-        model.get("transport") == "codex_cli" for model in config["models"]
-    )
+    isolation = config.get("round4_isolation")
+    if isolation is not None:
+        allowed = {
+            "mode", "fail_closed", "attempt_state", "network",
+            "post_run_audit",
+        }
+        if not isinstance(isolation, dict) or set(isolation) - allowed:
+            raise ValueError("round4_isolation has unknown or invalid fields")
+        mode = isolation.get("mode", "none")
+        if mode not in {"none", "macos_seatbelt"}:
+            raise ValueError("round4_isolation.mode is unsupported")
+        if mode == "none" and isolation != {"mode": "none"}:
+            raise ValueError(
+                "round4_isolation mode none accepts no active isolation fields")
+        if mode == "macos_seatbelt" and isolation != {
+                "mode": "macos_seatbelt",
+                "fail_closed": True,
+                "attempt_state": "isolated",
+                "network": "model_endpoint_only",
+                "post_run_audit": True}:
+            raise ValueError(
+                "macos_seatbelt requires the complete fail-closed isolation contract")
+        if mode == "macos_seatbelt":
+            for model in config["models"]:
+                if 4 not in _model_rounds(model, rounds):
+                    continue
+                endpoint = urlparse(
+                    model.get("base_url", "http://127.0.0.1:8000/v1"))
+                try:
+                    endpoint_port = endpoint.port
+                except ValueError as exc:
+                    raise ValueError(
+                        f'{model["key"]}: isolation endpoint port is invalid') from exc
+                if (model.get("codex_provider", "custom") != "custom"
+                        or endpoint.hostname not in {"127.0.0.1", "localhost", "::1"}
+                        or endpoint_port is None):
+                    raise ValueError(
+                        f'{model["key"]}: model_endpoint_only isolation requires '
+                        "a loopback model endpoint with an explicit port")
+        if (check_runtime and mode == "macos_seatbelt"
+                and (platform.system() != "Darwin" or not shutil.which("sandbox-exec"))):
+            raise ValueError("macos_seatbelt was requested but is unavailable")
+    needs_codex = any(
+        model.get("transport") == "codex_cli"
+        or (4 in _model_rounds(model, rounds)
+            and model.get("agent_backend", "codex_cli") == "codex_cli")
+        for model in config["models"])
+    needs_opencode = any(
+        4 in _model_rounds(model, rounds)
+        and model.get("agent_backend") == "opencode_cli"
+        for model in config["models"])
     if check_runtime and needs_codex and not shutil.which("codex"):
         raise ValueError("selected Codex transport or round 4 requires the codex CLI on PATH")
+    if check_runtime and needs_opencode and not shutil.which("opencode"):
+        raise ValueError(
+            "selected Round 4 opencode_cli backend requires opencode on PATH")
 
 
 def _round_item_ids(round_no: int) -> set[int]:
@@ -298,8 +356,11 @@ def _execute(config: dict, run_dir: Path, dry_run: bool,
                 if not dry_run:
                     out.mkdir(parents=True, exist_ok=True)
                     progress = _progress_callback(dashboard, model, 4, 1, repetitions)
+                    round4_model = dict(model)
+                    if config.get("round4_isolation") is not None:
+                        round4_model["round4_isolation"] = config["round4_isolation"]
                     code = round4.run(
-                        model, repetitions, out, timeout,
+                        round4_model, repetitions, out, timeout,
                         _item_filter(model, 4) or config.get("round4_tasks"),
                         progress=progress)
                     if code:

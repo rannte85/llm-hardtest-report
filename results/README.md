@@ -4,8 +4,9 @@ This directory contains voluntarily submitted, sanitized benchmark summaries. Th
 project does not automatically collect telemetry or local campaign data.
 
 - `schema-v1.json` documents legacy aggregate-only public results.
-- `schema-v3.json` documents the current item-level, content-free public result shape;
-  v1 and v2 remain available for historical bundles.
+- `schema-v4.json` documents the current item-level, content-free public result shape,
+  including the agent and isolation execution scaffold;
+  v1, v2, and v3 remain available for historical bundles.
 - `submissions/` contains one canonical JSON document per accepted bundle.
 - `INDEX.md` is generated from accepted submissions and contains descriptive examples.
 - `recommendation-schema-v3.json` documents the current full-coordinate deterministic
@@ -19,8 +20,8 @@ project does not automatically collect telemetry or local campaign data.
 - `prediction-readiness-schema-v2.json` documents the current non-authorizing
   evidence-design audit required before any predictive serving model is fitted; v1 is
   retained.
-- `database-schema-v3.sql` documents the current normalized SQLite observation schema.
-  v1 and v2 describe historical generated-database formats; rebuild old databases with
+- `database-schema-v4.sql` documents the current normalized SQLite observation schema.
+  v1, v2, and v3 describe historical generated-database formats; rebuild old databases with
   the current CLI before querying.
 - `pilot-schema-v2.json` documents the current sanitized Round 5 summary shape,
   including protocol-abort and stop-reason fields; v1 remains historical.
@@ -59,7 +60,7 @@ llm-hardtest results pilots build --check
 The index groups only identical public configurations and pack fingerprints. An
 observed baseline remains hidden until five distinct comparable bundles with scored
 outcomes have been accepted; repeating a model entry inside one bundle cannot meet
-that threshold. Schema-v2 and schema-v3 submissions also produce item discrimination
+that threshold. Schema-v2, schema-v3, and schema-v4 submissions also produce item discrimination
 and stability diagnostics without publishing prompts or model outputs.
 
 When pair-specific simultaneous inference confirms item directions, the generated

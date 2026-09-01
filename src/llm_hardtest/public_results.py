@@ -15,7 +15,7 @@ from .report import collect
 from .results import item_status
 
 
-PUBLIC_SCHEMA_VERSION = 3
+PUBLIC_SCHEMA_VERSION = 4
 PUBLIC_METADATA_FIELDS = {
     "model_revision", "quantization", "model_format", "parameter_count_b",
     "server", "server_version", "accelerator", "accelerator_count",
@@ -149,6 +149,28 @@ def normalized_serving_environment(payload: dict, model: dict) -> dict:
     if payload.get("schema_version", 1) >= 3:
         return model["serving_environment"]
     return {"scope": "unreported", "os": None, "architecture": None}
+
+
+def normalized_execution_scaffold(payload: dict, model: dict) -> dict:
+    """Return execution identity, including legacy Round 4 defaults."""
+    if payload.get("schema_version", 1) >= 4:
+        return model["execution_scaffold"]
+    return {
+        "agent_backend": "codex_cli",
+        "isolation_mode": "none",
+        "network": "unrestricted",
+        "fail_closed": False,
+    }
+
+
+def _clean_execution_scaffold(config: dict, model: dict) -> dict:
+    isolation = config.get("round4_isolation") or {}
+    return {
+        "agent_backend": model.get("agent_backend", "codex_cli"),
+        "isolation_mode": isolation.get("mode", "none"),
+        "network": isolation.get("network", "unrestricted"),
+        "fail_closed": bool(isolation.get("fail_closed", False)),
+    }
 
 
 def _clean_metadata(model: dict, warnings: list[str], model_number: int) -> dict:
@@ -310,6 +332,8 @@ def build_public_result(run_dir: Path) -> tuple[dict, list[str]]:
         models.append({
             "public_name": name,
             "transport": model.get("transport"),
+            "execution_scaffold": _clean_execution_scaffold(
+                summary["config"], model),
             "serving_environment": _clean_serving_environment(
                 model, runner_environment, warnings, index),
             "rounds": rounds,
@@ -359,7 +383,7 @@ def validate_public_result(payload: dict) -> dict:
     schema_version = payload.get("schema_version")
     if (set(payload) != required or isinstance(schema_version, bool)
             or not isinstance(schema_version, int)
-            or schema_version not in {1, 2, PUBLIC_SCHEMA_VERSION}):
+            or schema_version not in {1, 2, 3, PUBLIC_SCHEMA_VERSION}):
         raise ValueError("public result has unsupported or unexpected top-level fields")
     without_id = {key: value for key, value in payload.items() if key != "bundle_id"}
     if (not isinstance(payload.get("bundle_id"), str)
@@ -400,12 +424,34 @@ def validate_public_result(payload: dict) -> dict:
         expected = {"public_name", "transport", "rounds", "parameters", "public_metadata"}
         if schema_version >= 3:
             expected.add("serving_environment")
+        if schema_version >= 4:
+            expected.add("execution_scaffold")
         if not isinstance(model, dict) or set(model) != expected:
             raise ValueError(f"public model {index} has unexpected fields")
         if _public_text(model["public_name"]) is None:
             raise ValueError(f"public model {index} has an unsafe public_name")
         if model["transport"] not in {"openai_compat", "codex_cli"}:
             raise ValueError(f"public model {index} has an invalid transport")
+        if schema_version >= 4:
+            scaffold = model["execution_scaffold"]
+            if (not isinstance(scaffold, dict)
+                    or set(scaffold) != {
+                        "agent_backend", "isolation_mode", "network", "fail_closed"}
+                    or scaffold.get("agent_backend") not in {
+                        "codex_cli", "opencode_cli"}
+                    or scaffold.get("isolation_mode") not in {
+                        "none", "macos_seatbelt"}
+                    or scaffold.get("network") not in {
+                        "unrestricted", "model_endpoint_only"}
+                    or not isinstance(scaffold.get("fail_closed"), bool)
+                    or (scaffold["isolation_mode"] == "macos_seatbelt" and (
+                        not scaffold["fail_closed"]
+                        or scaffold["network"] != "model_endpoint_only"))
+                    or (scaffold["isolation_mode"] == "none" and (
+                        scaffold["fail_closed"]
+                        or scaffold["network"] != "unrestricted"))):
+                raise ValueError(
+                    f"public model {index} execution scaffold is invalid")
         if schema_version >= 3:
             serving = model["serving_environment"]
             if (not isinstance(serving, dict)

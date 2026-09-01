@@ -14,9 +14,9 @@ llm-hardtest results database results/submissions \
   --output results/community.sqlite3 --check
 ```
 
-The generated file uses database schema v3, SQLite `user_version=3`, and application
+The generated file uses database schema v4, SQLite `user_version=4`, and application
 ID `0x4c484452` (`LHDR`). Its logical DDL is published in
-[`results/database-schema-v3.sql`](../results/database-schema-v3.sql). Rebuild older
+[`results/database-schema-v4.sql`](../results/database-schema-v4.sql). Rebuild older
 files from canonical JSON with the current CLI; public bundle schemas v1/v2 remain
 accepted and normalize to an explicitly unreported serving environment.
 Because v3 configuration hashes include that explicit serving marker and runner

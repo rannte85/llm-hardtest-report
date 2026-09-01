@@ -7,20 +7,15 @@ copy of a repository with a shell and told to fix something.  This harness
   1. copies ``<task>/repo`` into a private scratch workdir per attempt
      (``hidden/``, ``SOLUTION.md``, ``verify_trap.py`` and ``task.json`` never
      go with it, and the copy is asserted clean before the model is started),
-  2. runs the model as a codex CLI agent inside that copy,
+  2. runs the selected coding-agent backend inside that copy,
   3. hands the resulting directory to ``v4_grade`` — which re-runs the public
      suite, runs the hidden suite, diffs against the pristine repo and applies
      the weighted rubric,
   4. repeats N times from a fresh copy for pass@1 / pass@2 / pass@3,
   5. writes every transcript, diff and test output to JSON.
 
-Why codex for the local models
-------------------------------
-The models are served by oMLX (OpenAI-compatible, http://127.0.0.1:8000).  The
-opencode agent loop crashes on Flash-Next ("QSA caches can only batch rows at
-the same offset"); the codex loop is clean on all four.  So codex is the single
-harness for both the local models and the frontier control, which also keeps the
-agent scaffold identical across arms.
+The packaged runner injects a provider-neutral backend. Direct execution keeps
+the historical Codex implementation as its compatibility default.
 
 Examples
 --------
@@ -42,6 +37,7 @@ import subprocess
 import sys
 import time
 import tempfile
+from pathlib import Path
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -52,6 +48,7 @@ DEFAULT_SCRATCH = os.environ.get(
     os.path.join(tempfile.gettempdir(), "llm-hardtest-v4work"))
 OUT_ROOT = os.path.join(HERE, "out")
 CODEX_HOME_LOCAL = os.path.join(HERE, ".codex_omlx")
+AGENT_STATE_ROOT = os.path.join(HERE, ".agent_state")
 
 OMLX_BASE_URL = os.environ.get("OMLX_BASE_URL", "http://127.0.0.1:8000/v1")
 
@@ -452,7 +449,7 @@ def build_multiturn_prompts(task_key, workdir):
 # one attempt
 # ---------------------------------------------------------------------------
 def run_attempt(model_key, task_key, attempt, run_dir, timeout=3600,
-                dry_run=False, extra_config=()):
+                dry_run=False, extra_config=(), agent_factory=None):
     meta = G.TASK_META[task_key]
     adir = os.path.join(run_dir, task_key, "attempt%d" % attempt)
     os.makedirs(adir, exist_ok=True)
@@ -470,6 +467,47 @@ def run_attempt(model_key, task_key, attempt, run_dir, timeout=3600,
               % (model_key, task_key, attempt, workdir))
         return None
 
+    agent = None
+    evidence_dir = adir
+    if agent_factory:
+        retry = 0
+        while True:
+            suffix = "" if retry == 0 else "-retry%d" % retry
+            candidate_state = os.path.join(
+                AGENT_STATE_ROOT, model_key, task_key,
+                "attempt%d%s" % (attempt, suffix))
+            candidate_evidence = (
+                adir if retry == 0 else os.path.join(adir, "retry%d" % retry))
+            if (not os.path.exists(candidate_state)
+                    and not os.path.exists(
+                        os.path.join(candidate_evidence, "agent_meta.json"))):
+                state_dir = candidate_state
+                evidence_dir = candidate_evidence
+                break
+            retry += 1
+        os.makedirs(evidence_dir, exist_ok=True)
+        metadata_path = os.path.join(evidence_dir, "agent_meta.json")
+        agent = agent_factory(
+            model_key, task_key, attempt, workdir, state_dir, metadata_path)
+        agent.preflight(Path(workdir))
+
+    def invoke(prompt, turn, session=None):
+        if agent is not None:
+            return agent.turn(
+                prompt, Path(workdir), Path(evidence_dir), turn, timeout, session)
+        tpath = os.path.join(
+            adir, "transcript_turn%d.txt" % turn if meta["multi_turn"]
+            else "transcript.txt")
+        lpath = os.path.join(
+            adir, "last_message_turn%d.txt" % turn if meta["multi_turn"]
+            else "last_message.txt")
+        if session is None:
+            return codex_exec(
+                model_key, workdir, prompt, tpath, lpath, timeout=timeout,
+                persist_session=meta["multi_turn"], extra_config=extra_config)
+        return codex_resume(
+            model_key, workdir, session, prompt, tpath, lpath, timeout=timeout)
+
     if meta["multi_turn"]:
         prompts = build_multiturn_prompts(task_key, workdir)
         if not prompts:
@@ -477,21 +515,15 @@ def run_attempt(model_key, task_key, attempt, run_dir, timeout=3600,
             prompts = [build_prompt(task_key, workdir)]
         session_id, transcript_all, last_msg = None, [], ""
         for i, prompt in enumerate(prompts, 1):
-            tpath = os.path.join(adir, "transcript_turn%d.txt" % i)
-            lpath = os.path.join(adir, "last_message_turn%d.txt" % i)
-            if i == 1:
-                res = codex_exec(model_key, workdir, prompt, tpath, lpath,
-                                 timeout=timeout, persist_session=True,
-                                 extra_config=extra_config)
-                session_id = res["session_id"]
-            else:
+            if i > 1:
                 if not session_id:
-                    print("      [warn] no session id — cannot resume; stopping at turn %d" % i)
-                    break
-                res = codex_resume(model_key, workdir, session_id, prompt, tpath, lpath,
-                                   timeout=timeout)
+                    raise RuntimeError(
+                        "agent continuation requires a session id at turn %d" % i)
+            res = invoke(prompt, i, session_id)
+            if i == 1:
+                session_id = res["session_id"]
             if res["rc"] != 0:
-                raise RuntimeError("codex turn %d exited %s" % (i, res["rc"]))
+                raise RuntimeError("agent turn %d exited %s" % (i, res["rc"]))
             transcript_all.append("\n\n########## TURN %d ##########\n%s"
                                   % (i, res["transcript"]))
             last_msg = res["last_message"] or last_msg
@@ -512,12 +544,9 @@ def run_attempt(model_key, task_key, attempt, run_dir, timeout=3600,
                         turns_completed=len(turns_meta), turns_expected=len(prompts))
     else:
         prompt = build_prompt(task_key, workdir)
-        tpath = os.path.join(adir, "transcript.txt")
-        lpath = os.path.join(adir, "last_message.txt")
-        res = codex_exec(model_key, workdir, prompt, tpath, lpath, timeout=timeout,
-                         persist_session=False, extra_config=extra_config)
+        res = invoke(prompt, 1)
         if res["rc"] != 0:
-            raise RuntimeError("codex exited %s" % res["rc"])
+            raise RuntimeError("agent exited %s" % res["rc"])
         transcript, last_msg = res["transcript"], res["last_message"]
         print("      rc=%s %.0fs %s tok%s" % (res["rc"], res["wall"], res["tokens"],
                                               " TIMEOUT" if res["timed_out"] else ""))
@@ -528,16 +557,26 @@ def run_attempt(model_key, task_key, attempt, run_dir, timeout=3600,
 
     run_meta["finish_length"] = looks_like_length_cutoff(transcript)
     run_meta["workdir"] = workdir
+    run_meta["agent_backend"] = (
+        getattr(agent, "name", None) if agent is not None else "codex_cli")
+    run_meta["evidence_subdir"] = os.path.relpath(evidence_dir, adir)
+
+    if agent is not None:
+        audit = agent.audit(transcript)
+        run_meta["agent_audit"] = audit
+        run_meta["agent_provenance"] = agent.provenance
+        if audit.get("boundary_violation"):
+            raise RuntimeError("agent boundary audit failed")
 
     # Preserve the working copy itself, not just the diff.
-    saved = os.path.join(adir, "repo_after")
+    saved = os.path.join(evidence_dir, "repo_after")
     if os.path.exists(saved):
         shutil.rmtree(saved)
     shutil.copytree(workdir, saved, ignore=G.COPY_IGNORE)
 
     grade = G.grade_attempt(task_key, workdir, transcript=transcript,
                             final_message=last_msg, run_meta=run_meta)
-    with open(os.path.join(adir, "grade.json"), "w", encoding="utf-8") as fh:
+    with open(os.path.join(evidence_dir, "grade.json"), "w", encoding="utf-8") as fh:
         json.dump(grade, fh, indent=2, ensure_ascii=False)
     print("      " + G.summarise(grade))
     return grade
@@ -546,7 +585,7 @@ def run_attempt(model_key, task_key, attempt, run_dir, timeout=3600,
 # ---------------------------------------------------------------------------
 # orchestration
 # ---------------------------------------------------------------------------
-def main(argv=None, progress_callback=None):
+def main(argv=None, progress_callback=None, agent_factory=None):
     ap = argparse.ArgumentParser(description="Hard Set v4 execution harness")
     ap.add_argument("--model", help="one of: %s" % ", ".join(MODELS))
     ap.add_argument("--tasks", default="all",
@@ -636,7 +675,8 @@ def main(argv=None, progress_callback=None):
             try:
                 g = run_attempt(args.model, task_key, attempt, run_dir,
                                 timeout=args.timeout, dry_run=args.dry_run,
-                                extra_config=args.extra_config)
+                                extra_config=args.extra_config,
+                                agent_factory=agent_factory)
                 if g:
                     grades.append(g)
                     if progress_callback:
@@ -659,6 +699,7 @@ def main(argv=None, progress_callback=None):
 
     agg = G.aggregate(grades)
     payload = dict(label=label, model=args.model, model_id=MODELS[args.model]["model"],
+                   agent_backend=MODELS[args.model].get("agent_backend", "codex_cli"),
                    reasoning_effort=MODELS[args.model]["reasoning"],
                    sampling="oMLX force_sampling (model-recommended, server-side)"
                             if MODELS[args.model]["provider"] == "omlx" else "provider default",
@@ -703,18 +744,23 @@ def regrade(run_json):
     for old in payload["grades"]:
         task_key, attempt = old["task"], old["run_meta"]["attempt"]
         adir = os.path.join(run_dir, task_key, "attempt%d" % attempt)
-        saved = os.path.join(adir, "repo_after")
+        evidence_subdir = old["run_meta"].get("evidence_subdir", ".")
+        evidence_dir = os.path.normpath(os.path.join(adir, evidence_subdir))
+        if (os.path.commonpath([os.path.abspath(adir), os.path.abspath(evidence_dir)])
+                != os.path.abspath(adir)):
+            raise RuntimeError("invalid evidence_subdir in saved run")
+        saved = os.path.join(evidence_dir, "repo_after")
         if not os.path.isdir(saved):
             print("  skip %s attempt %d — no saved repo_after" % (task_key, attempt))
             continue
         transcript = ""
-        for name in sorted(os.listdir(adir)):
+        for name in sorted(os.listdir(evidence_dir)):
             if name.startswith("transcript"):
-                transcript += _read(os.path.join(adir, name))
+                transcript += _read(os.path.join(evidence_dir, name))
         last = ""
-        for name in sorted(os.listdir(adir)):
+        for name in sorted(os.listdir(evidence_dir)):
             if name.startswith("last_message"):
-                last = _read(os.path.join(adir, name)) or last
+                last = _read(os.path.join(evidence_dir, name)) or last
         g = G.grade_attempt(task_key, saved, transcript=transcript,
                             final_message=last, run_meta=old["run_meta"])
         grades.append(g)

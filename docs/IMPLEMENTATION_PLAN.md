@@ -1,5 +1,23 @@
 # Implementation Plan
 
+## Round 4 pluggable agents and fail-closed isolation — completed in 2.36.0
+
+1. Extract the canonical runner behind a shared attempt-scoped agent contract while
+   retaining Codex as the default.
+2. Add optional OpenCode JSONL execution, same-attempt session continuation, fresh
+   next-attempt state, capability/model checks, and failure artifact retention.
+3. Add generic isolation wiring and macOS Seatbelt policy generation without moving
+   the grader into the candidate boundary.
+4. Fail closed on unavailable isolation, malformed policy, protected-read canaries,
+   candidate work smoke checks, external-network access, or endpoint denial.
+5. Record content-free backend, policy hash, canary, audit, and execution-scaffold
+   identity in local reports, public schema v4, and SQLite schema v4.
+6. Re-run source tests, repository selftest, Round 4 trap proofs, pack validation,
+   isolated fake-agent integration, installed-package smoke, and CI before release.
+
+Canonical Round 4 prompts, repositories, graders, and score thresholds are unchanged.
+Seatbelt is explicitly defense in depth rather than a complete security boundary.
+
 This plan turns observed campaign failures into improvements that can be reviewed,
 tested, and released independently. Each phase must land as its own commit and must
 leave the repository installable and the existing benchmark semantics documented.

@@ -10,6 +10,7 @@ import urllib.request
 from pathlib import Path
 
 from .backends import BackendError, CodexBackend, OpenAICompatBackend
+from .round4_agents import make_round4_agent
 from .common import load_json, repo_root, save_json, slug
 from .orchestrator import _model_rounds, run, validate_config
 from .report import generate
@@ -107,6 +108,27 @@ def _probe_codex(model: dict, timeout: int) -> None:
             raise BackendError("Codex returned no text")
 
 
+def _probe_opencode(model: dict, timeout: int,
+                    isolation: dict | None = None) -> None:
+    probe = dict(model)
+    probe["agent_backend"] = "opencode_cli"
+    if isolation is not None:
+        probe["round4_isolation"] = isolation
+    with tempfile.TemporaryDirectory(prefix="llm-hardtest-doctor-") as tmp:
+        root = Path(tmp)
+        work = root / "work"
+        work.mkdir()
+        agent = make_round4_agent(
+            probe, root / "state", root / "agent_meta.json",
+            {"doctor_boundary_canary": []})
+        agent.preflight(work)
+        result = agent.turn(
+            "Reply with OK. Do not modify files.", work, root / "evidence", 1,
+            timeout)
+        if not result["content"].strip():
+            raise BackendError("OpenCode returned no text")
+
+
 def doctor_config(config: dict, timeout: int = 30) -> int:
     """Probe model discovery and the APIs needed by each selected model."""
     validate_config(config)
@@ -145,10 +167,19 @@ def doctor_config(config: dict, timeout: int = 30) -> int:
                     if not result["content"].strip():
                         raise BackendError("Chat Completions returned no text")
                     print(f"PASS {key}: /chat/completions returned text")
-            if model.get("transport") == "codex_cli" or 4 in selected:
+            needs_round4_codex = (
+                4 in selected
+                and model.get("agent_backend", "codex_cli") == "codex_cli")
+            if model.get("transport") == "codex_cli" or needs_round4_codex:
                 _probe_codex(model, timeout)
-                purpose = "repository-agent rounds" if 4 in selected else "configured transport"
+                purpose = ("repository-agent rounds" if needs_round4_codex
+                           else "configured transport")
                 print(f"PASS {key}: Codex completed through /responses for {purpose}")
+            if 4 in selected and model.get("agent_backend") == "opencode_cli":
+                _probe_opencode(model, timeout, config.get("round4_isolation"))
+                print(
+                    f"PASS {key}: OpenCode completed through Chat Completions for "
+                    "repository-agent rounds")
         except Exception as exc:
             failures.append(f"{key}: {exc}")
     if failures:
@@ -196,6 +227,9 @@ def init_config(path: Path) -> None:
                  "reasoning_effort": _ask("Reasoning effort (blank if unsupported)", "") or None,
                  "context_window": int(_ask("Context window", "131072")),
                  "max_tokens": int(_ask("Maximum output tokens", "16000"))}
+        if 4 in model_rounds:
+            model["agent_backend"] = _ask(
+                "Round 4 agent backend: codex_cli or opencode_cli", "codex_cli")
         if preset != "openai":
             model["base_url"] = base_url
             model["api_key_env"] = api_key_env

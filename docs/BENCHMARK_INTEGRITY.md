@@ -44,8 +44,13 @@ For more trustworthy local runs:
 6. Record the benchmark commit and verify the worktree is clean.
 7. Preserve every attempt, including failures and timeouts.
 
-The bundled runner is designed for trusted local evaluation and artifact isolation;
-it does not by itself enforce all of these operating-system boundaries.
+The default runner is designed for trusted local evaluation and artifact isolation.
+Optional `macos_seatbelt` mode adds per-attempt HOME/XDG state, protected-path deny
+rules, a loopback endpoint allowlist, mandatory canaries, and post-run disclosure
+audit. It fails closed and runs the grader outside the candidate boundary. Seatbelt is
+deprecated platform machinery and defense in depth, not a complete sandbox; it does
+not address memorized public tasks, privileged processes, kernel compromise, or hostile
+system software.
 
 ## Changing graders
 

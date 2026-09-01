@@ -62,10 +62,12 @@ def _bounded_rate_interval(values: list[float], minimum: int, method: str) -> di
     }
 
 
-def _model_identity(model: dict) -> str:
+def _model_identity(model: dict, round4_isolation: dict | None = None) -> str:
     public = {key: value for key, value in model.items()
               if key not in {
                   "key", "label", "public_name", "item_filters", "rounds"}}
+    if round4_isolation is not None:
+        public["round4_isolation"] = round4_isolation
     encoded = json.dumps(public, sort_keys=True, separators=(",", ":"),
                          ensure_ascii=False).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
@@ -128,7 +130,7 @@ def collect_observations(run_dirs: list[Path]) -> dict[tuple[int, str], dict]:
                 raise ValueError(f"invalid saved model config in {run_dir}")
             key = model.get("key")
             model_root = _safe_model_root(run_dir, key)
-            identity = _model_identity(model)
+            identity = _model_identity(model, config.get("round4_isolation"))
             for round_number in (1, 2, 3):
                 round_text = str(round_number)
                 paths = sorted((model_root / f"round{round_number}").glob(

@@ -11,6 +11,7 @@ A comparable configuration is the exact combination of:
 
 - public model name, revision, format, quantization, and declared parameter count;
 - transport, serving implementation and version;
+- Round 4 agent backend, isolation mode, network policy, and fail-closed state;
 - reasoning effort, context window, output limit, and sampling parameters;
 - OS family, architecture, accelerator description/count, and declared memory;
 - benchmark round and immutable pack fingerprint.
@@ -196,3 +197,10 @@ coordinates. Such observations remain usable for their measured outcomes but do 
 count toward readiness environment diversity or portability bridges. Database v3,
 catalog/recommendation v3, comparison/collection-plan v2, and readiness v2 expose the
 same distinction end to end.
+
+Version 2.36 adds the execution scaffold needed to compare repository-agent results
+honestly. Public schema and database schema v4 identify the Round 4 agent backend and
+the requested isolation/network boundary. A Codex run, an OpenCode run, and an
+optionally fail-closed macOS Seatbelt run therefore receive different configuration
+IDs and are never silently pooled. The fields are reproducibility coordinates, not a
+claim that operating-system sandboxing is a complete security boundary.

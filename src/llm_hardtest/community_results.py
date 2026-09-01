@@ -15,7 +15,10 @@ from .calibration import (
 )
 from .github_submit import submission_relative_path
 from .public_pilots import load_public_pilot_bundle
-from .public_results import load_public_bundle, normalized_serving_environment
+from .public_results import (
+    load_public_bundle, normalized_execution_scaffold,
+    normalized_serving_environment,
+)
 
 
 MIN_BASELINE_SUBMISSIONS = 5
@@ -106,6 +109,7 @@ def _configuration_id(payload: dict, model: dict) -> str:
     identity = {
         "runner_environment": payload["environment"],
         "serving_environment": normalized_serving_environment(payload, model),
+        "execution_scaffold": normalized_execution_scaffold(payload, model),
         "public_name": model["public_name"],
         "transport": model["transport"],
         "parameters": model["parameters"],

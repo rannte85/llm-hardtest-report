@@ -101,6 +101,9 @@ def collect(run_dir: Path) -> dict:
 
 
 def render(summary: dict) -> str:
+    config_models = {
+        model["key"]: model for model in summary["config"].get("models", [])}
+    isolation = summary["config"].get("round4_isolation") or {"mode": "none"}
     lines = [
         "# LLM Hardtest — Comprehensive Report", "",
         f'**Run:** `{summary["run_id"]}`  ',
@@ -126,6 +129,13 @@ def render(summary: dict) -> str:
     lines += ["", "## Model Details", ""]
     for model in summary["models"]:
         lines += [f'### {_md_text(model["label"])}', ""]
+        configured = config_models.get(model["key"], {})
+        if "4" in model["rounds"]:
+            lines.append(
+                "- Round 4 scaffold: agent "
+                f'`{configured.get("agent_backend", "codex_cli")}`; isolation '
+                f'`{isolation.get("mode", "none")}`; network '
+                f'`{isolation.get("network", "unrestricted")}`.')
         for number, data in sorted(model["rounds"].items()):
             if number in ("1", "2", "3"):
                 lines.append(f'- Round {number}: {_ratio(data["passed"], data["total"])}; '

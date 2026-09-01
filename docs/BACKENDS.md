@@ -1,7 +1,7 @@
 # Backend Setup
 
-LLM Hardtest Report has two transports. Choose based on the round and the API your
-server implements.
+LLM Hardtest Report has two completion transports and two Round 4 agent backends.
+Choose the completion transport for Rounds 1–3 and `agent_backend` for Round 4.
 
 ## Discover and verify first
 
@@ -51,8 +51,8 @@ documentation and verify the installed version with `doctor`.
 
 ## `codex_cli`
 
-This transport uses Codex as the common agent scaffold. It can run every round and is
-required by Round 4. Two provider modes are available.
+This transport uses Codex for completions and remains the default Round 4 agent
+scaffold. Two provider modes are available.
 
 ### Custom local provider
 
@@ -116,6 +116,30 @@ content.
 The harness passes real credentials only through the environment. Generated custom
 Codex homes contain a permission-restricted dummy auth file; they do not persist the
 actual provider key.
+
+## `opencode_cli` Round 4 agent
+
+OpenCode is optional and does not become a Python dependency. Select it per model:
+
+```json
+{
+  "model": "server-model-id",
+  "transport": "openai_compat",
+  "agent_backend": "opencode_cli",
+  "codex_provider": "custom",
+  "base_url": "http://127.0.0.1:8000/v1"
+}
+```
+
+The harness supplies an inline `@ai-sdk/openai-compatible` provider, private HOME/XDG
+directories, JSON event output, explicit model selection, and `--session` continuation.
+`doctor` verifies the installed CLI flags and makes a real minimal agent call. Non-zero
+exit, timeout, empty output, error event, wrong continuation session, or exposed model
+mismatch is infrastructure-invalid and retains its partial transcript.
+
+OpenCode configuration and flags change across releases. The preflight accepts the
+current non-interactive permission flag exposed by the installed CLI and fails loudly
+when required `run` capabilities are absent.
 
 ## Compatibility reports
 

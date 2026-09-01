@@ -8,7 +8,7 @@ Validated bundles: **1**. Comparable model/round groups: **1**.
 
 | Round | Pack | Public model | Config | Bundles | Observed score | Completion | Serving observations | Baseline |
 |---:|---|---|---|---:|---:|---:|---|---|
-| 1 | `813ba579e28f` | gpt-5.6-luna | `fa8da21319` | 1 | 20/20 | 100.0% | bundle p50/p90 item latency 7.319/7.319s | withheld (<5 observed bundles) |
+| 1 | `813ba579e28f` | gpt-5.6-luna | `6b34b3c14e` | 1 | 20/20 | 100.0% | bundle p50/p90 item latency 7.319/7.319s | withheld (<5 observed bundles) |
 
 ## Community Item Diagnostics
 

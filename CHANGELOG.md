@@ -5,6 +5,30 @@ out separately from harness features.
 
 ## Unreleased
 
+## 2.36.0 — 2026-09-01
+
+- Accepted and implemented GitHub issue #1 without changing any canonical Round 4
+  task, grader, prompt, or score threshold.
+- Added a provider-neutral Round 4 agent contract. `codex_cli` remains the default;
+  optional `opencode_cli` supports Chat-Completions-only local endpoints with JSONL
+  evidence, exact session continuation, model-identity checks when exposed, and fresh
+  HOME/XDG state for every attempt.
+- Made non-zero exits, timeouts, empty output, error events, missing/wrong sessions,
+  model mismatches, and boundary-audit failures infrastructure-invalid while retaining
+  partial transcripts and attempt metadata.
+- Added optional fail-closed `macos_seatbelt` isolation with loopback endpoint-only
+  networking, seven protected-material categories, mandatory positive/negative
+  canaries, policy hashes, post-run disclosure audit, and no unisolated fallback.
+- Kept the grader outside the candidate boundary and described Seatbelt as
+  defense-in-depth rather than a complete sandbox.
+- Added public result schema v4 and community database schema v4 so agent backend,
+  isolation mode, network policy, and fail-closed state participate in exact
+  configuration identity. Historical public v1–v3 bundles remain accepted.
+- Added deterministic fake Codex/OpenCode controls and live macOS Seatbelt controls,
+  including isolated fake-agent execution followed by successful external grading.
+- All 242 source tests, repository selftest, Round 4 trap proofs, pack validation, and
+  generated community-index/database checks pass locally.
+
 ## 2.35.0 — 2026-09-01
 
 - Added `q37_archive_boundary`, a sixth Round 5 scenario for adversarial ZIP member

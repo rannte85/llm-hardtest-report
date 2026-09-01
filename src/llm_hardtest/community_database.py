@@ -22,14 +22,14 @@ from .prediction_readiness import audit_prediction_readiness
 from .public_results import (
     FINGERPRINT, MODEL_PARAMETER_FIELDS, PUBLIC_ITEM_STATUSES,
     PUBLIC_METADATA_FIELDS, PUBLIC_METADATA_NUMERIC_FIELDS, _public_text,
-    normalized_serving_environment,
+    normalized_execution_scaffold, normalized_serving_environment,
 )
 
 
-DATABASE_SCHEMA_VERSION = 3
+DATABASE_SCHEMA_VERSION = 4
 DATABASE_APPLICATION_ID = 0x4C484452  # "LHDR"
 DATABASE_KIND = "validated_public_observation_database"
-DATABASE_FINGERPRINT_METHOD = "canonical_relational_rows_numeric_v3"
+DATABASE_FINGERPRINT_METHOD = "canonical_relational_rows_numeric_v4"
 
 SCHEMA_SQL = """
 PRAGMA foreign_keys = ON;
@@ -62,6 +62,10 @@ CREATE TABLE configurations (
     configuration_id TEXT PRIMARY KEY,
     public_name TEXT NOT NULL,
     transport TEXT NOT NULL,
+    agent_backend TEXT NOT NULL,
+    isolation_mode TEXT NOT NULL,
+    network_policy TEXT NOT NULL,
+    fail_closed INTEGER NOT NULL,
     os TEXT NOT NULL,
     architecture TEXT NOT NULL,
     python TEXT NOT NULL,
@@ -154,7 +158,8 @@ TABLE_COLUMNS = {
         "bundle_id", "public_schema_version", "tool_name", "tool_version",
         "os", "architecture", "python", "submission_mode"),
     "configurations": (
-        "configuration_id", "public_name", "transport", "os", "architecture",
+        "configuration_id", "public_name", "transport", "agent_backend",
+        "isolation_mode", "network_policy", "fail_closed", "os", "architecture",
         "python", "serving_scope", "serving_os", "serving_architecture",
         "serving_environment_json", "reasoning_effort", "context_window", "max_tokens",
         "temperature", "top_p", "top_k", "min_p", "model_revision",
@@ -224,8 +229,11 @@ def normalize_submissions(submissions: list[dict]) -> dict[str, list[tuple]]:
             parameters = model["parameters"]
             metadata = model["public_metadata"]
             serving = normalized_serving_environment(payload, model)
+            scaffold = normalized_execution_scaffold(payload, model)
             configuration = (
                 configuration_id, model["public_name"], model["transport"],
+                scaffold["agent_backend"], scaffold["isolation_mode"],
+                scaffold["network"], int(scaffold["fail_closed"]),
                 environment["os"], environment["architecture"],
                 environment["python"], serving["scope"], serving.get("os"),
                 serving.get("architecture"), _canonical(serving),
@@ -344,7 +352,7 @@ def _expected_schema_manifest() -> list[tuple]:
 
 
 def load_database(path: Path) -> dict[str, list[tuple]]:
-    """Read a self-consistent schema-v3 observation database in read-only mode."""
+    """Read a self-consistent schema-v4 observation database in read-only mode."""
     if not path.is_file() or path.is_symlink():
         raise ValueError(f"community database does not exist as a regular file: {path}")
     try:
@@ -405,7 +413,7 @@ def _validate_relational_semantics(rows: dict[str, list[tuple]]) -> None:
     bundles = {row["bundle_id"]: row for row in _row_dicts(rows, "bundles")}
     for bundle in bundles.values():
         if (not valid_fingerprint(bundle["bundle_id"])
-                or bundle["public_schema_version"] not in {1, 2, 3}
+                or bundle["public_schema_version"] not in {1, 2, 3, 4}
                 or bundle["tool_name"] != "llm-hardtest-report"
                 or _public_text(bundle["tool_version"], maximum=32) is None
                 or bundle["os"] not in {"Linux", "Darwin", "Windows", "Other"}
@@ -432,6 +440,19 @@ def _validate_relational_semantics(rows: dict[str, list[tuple]]) -> None:
                 or set(metadata) - PUBLIC_METADATA_FIELDS
                 or _public_text(configuration["public_name"]) is None
                 or configuration["transport"] not in {"openai_compat", "codex_cli"}
+                or configuration["agent_backend"] not in {
+                    "codex_cli", "opencode_cli"}
+                or configuration["isolation_mode"] not in {
+                    "none", "macos_seatbelt"}
+                or configuration["network_policy"] not in {
+                    "unrestricted", "model_endpoint_only"}
+                or configuration["fail_closed"] not in {0, 1}
+                or (configuration["isolation_mode"] == "macos_seatbelt" and (
+                    configuration["network_policy"] != "model_endpoint_only"
+                    or configuration["fail_closed"] != 1))
+                or (configuration["isolation_mode"] == "none" and (
+                    configuration["network_policy"] != "unrestricted"
+                    or configuration["fail_closed"] != 0))
                 or configuration["os"] not in {"Linux", "Darwin", "Windows", "Other"}
                 or _public_text(configuration["architecture"], maximum=32) is None
                 or not valid_python(configuration["python"])
@@ -474,7 +495,7 @@ def _validate_relational_semantics(rows: dict[str, list[tuple]]) -> None:
         for key in PUBLIC_METADATA_FIELDS - set(metadata):
             if configuration[key] is not None:
                 raise ValueError("community database has undeclared serving metadata")
-        identity_payload = {"schema_version": 3, "environment": {
+        identity_payload = {"schema_version": 4, "environment": {
             "os": configuration["os"],
             "architecture": configuration["architecture"],
             "python": configuration["python"],
@@ -482,6 +503,12 @@ def _validate_relational_semantics(rows: dict[str, list[tuple]]) -> None:
         identity_model = {
             "public_name": configuration["public_name"],
             "transport": configuration["transport"],
+            "execution_scaffold": {
+                "agent_backend": configuration["agent_backend"],
+                "isolation_mode": configuration["isolation_mode"],
+                "network": configuration["network_policy"],
+                "fail_closed": bool(configuration["fail_closed"]),
+            },
             "parameters": parameters,
             "public_metadata": metadata,
             "serving_environment": serving,

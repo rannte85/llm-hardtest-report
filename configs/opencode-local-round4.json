@@ -1,0 +1,30 @@
+{
+  "name": "opencode-local-round4",
+  "repetitions": 1,
+  "rounds": [4],
+  "timeout_seconds": 3600,
+  "round4_tasks": ["q26_hidden_tests"],
+  "round4_isolation": {
+    "mode": "macos_seatbelt",
+    "fail_closed": true,
+    "attempt_state": "isolated",
+    "network": "model_endpoint_only",
+    "post_run_audit": true
+  },
+  "models": [
+    {
+      "key": "local-opencode-agent",
+      "label": "Local model through OpenCode",
+      "model": "replace-with-server-model-id",
+      "transport": "openai_compat",
+      "agent_backend": "opencode_cli",
+      "codex_provider": "custom",
+      "rounds": [4],
+      "public_serving_environment": {"scope": "same_host"},
+      "base_url": "http://127.0.0.1:8000/v1",
+      "api_key_env": "LLM_HARDTEST_API_KEY",
+      "context_window": 131072,
+      "max_tokens": 16000
+    }
+  ]
+}

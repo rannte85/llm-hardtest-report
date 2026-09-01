@@ -5,6 +5,23 @@ out separately from harness features.
 
 ## Unreleased
 
+## 2.42.0 — 2026-09-01
+
+- Added Round 5 analysis schema 5 with a deterministic evidence acquisition plan for
+  every configuration and q32–q41 scenario.
+- Added exact lower-bound counts for missing scenarios and repeat deficits, plus
+  scenario priority by attainable configuration-pair coverage per additional attempt.
+- Added explicit fingerprint-alignment blockers: mixed versions no longer receive a
+  misleading numeric completion estimate.
+- Replaced the impossible advice to append attempts after incomplete or authority-
+  invalid history with `RECOLLECT_CLEAN_COHORT`, requiring two new complete,
+  authority-safe attempts while excluding invalid run directories.
+- Added Markdown planning tables, JSON action records, privacy-preserving configuration
+  aliases, and regression coverage for complete, missing, ambiguous, and invalid
+  portfolios. Canonical scoring and automatic execution remain disabled.
+- All 249 source tests, repository selftest, current community-data checks, and fresh
+  wheel/sdist installed-package validation pass locally.
+
 ## 2.41.0 — 2026-09-01
 
 - Added `q41_async_fanout`, a tenth Round 5 scenario for queue-neutral per-item

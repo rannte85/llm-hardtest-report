@@ -457,18 +457,20 @@ def _next_pair_evidence(*, missing_left: list[str], missing_right: list[str],
             "missing_on_right": missing_right,
             "reason": "missing scenarios are never imputed",
         }
+    if invalid_pilots:
+        return {
+            "action": "RECOLLECT_CLEAN_COHORT",
+            "pilot_ids": invalid_pilots,
+            "reason": (
+                "transport-incomplete or authority-invalid attempts remain descriptive "
+                "evidence but must be excluded from a fresh inferential cohort"),
+        }
     if deficits:
         return {
             "action": "COLLECT_REPEATS",
             "pilot_ids": sorted({row["pilot_id"] for row in deficits}),
             "repeat_deficits": deficits,
             "reason": f"each side needs {MIN_COMPLETE_REPEATS} complete attempts per version",
-        }
-    if invalid_pilots:
-        return {
-            "action": "REPEAT_INVALID_ATTEMPTS",
-            "pilot_ids": invalid_pilots,
-            "reason": "transport-incomplete or authority-invalid attempts cannot support inference",
         }
     if unobserved_pilots:
         return {
@@ -550,6 +552,194 @@ def _configuration_rows(attempts: list[dict], aliases: dict[str, str],
             row["model_label"] = sorted(value["label"] for value in values)[0]
         rows.append(row)
     return rows
+
+
+def _evidence_collection_plan(configurations: list[dict]) -> dict:
+    """Build a finite plan that can actually satisfy the portfolio evidence gates."""
+    total_configurations = len(configurations)
+    pilot_index = {pilot_id: index for index, pilot_id in enumerate(PILOT_IDS)}
+    state_by_configuration = {}
+
+    for configuration in configurations:
+        alias = configuration["configuration"]
+        rows_by_pilot = defaultdict(list)
+        for row in configuration["scenario_results"]:
+            rows_by_pilot[row["pilot_id"]].append(row)
+        states = {}
+        ambiguous = set(configuration["pack_ambiguous_pilots"])
+        for pilot_id in PILOT_IDS:
+            rows = rows_by_pilot[pilot_id]
+            if pilot_id in ambiguous:
+                state = {
+                    "status": "PACK_AMBIGUOUS",
+                    "additional_complete_attempts": None,
+                    "packs": sorted(row["pack"] for row in rows),
+                }
+            elif not rows:
+                state = {
+                    "status": "MISSING",
+                    "additional_complete_attempts": MIN_COMPLETE_REPEATS,
+                    "packs": [],
+                }
+            else:
+                row = rows[0]
+                invalid = row["incomplete"] > 0 or row["authority_violations"] > 0
+                if invalid:
+                    state = {
+                        "status": "FRESH_COHORT_REQUIRED",
+                        "additional_complete_attempts": MIN_COMPLETE_REPEATS,
+                        "packs": [row["pack"]],
+                    }
+                elif row["complete"] < MIN_COMPLETE_REPEATS:
+                    state = {
+                        "status": "REPEAT_DEFICIT",
+                        "additional_complete_attempts": (
+                            MIN_COMPLETE_REPEATS - row["complete"]),
+                        "packs": [row["pack"]],
+                    }
+                else:
+                    state = {
+                        "status": "READY",
+                        "additional_complete_attempts": 0,
+                        "packs": [row["pack"]],
+                    }
+            states[pilot_id] = state
+        state_by_configuration[alias] = states
+
+    # A single pack inside each configuration is still incomparable when the packs
+    # differ across configurations. Do not guess which version should win.
+    for pilot_id in PILOT_IDS:
+        global_packs = {
+            pack for states in state_by_configuration.values()
+            for pack in states[pilot_id]["packs"]
+        }
+        if len(global_packs) > 1:
+            for states in state_by_configuration.values():
+                if states[pilot_id]["packs"]:
+                    states[pilot_id] = {
+                        "status": "VERSION_ALIGNMENT_REQUIRED",
+                        "additional_complete_attempts": None,
+                        "packs": states[pilot_id]["packs"],
+                    }
+
+    pilot_states = {
+        pilot_id: [(alias, states[pilot_id])
+                   for alias, states in state_by_configuration.items()]
+        for pilot_id in PILOT_IDS
+    }
+
+    scenario_priorities = []
+    for pilot_id in PILOT_IDS:
+        values = pilot_states[pilot_id]
+        ready = sum(state["status"] == "READY" for _, state in values)
+        alignment = [alias for alias, state in values
+                     if state["status"] in {
+                         "PACK_AMBIGUOUS", "VERSION_ALIGNMENT_REQUIRED"}]
+        additional_values = [state["additional_complete_attempts"]
+                             for _, state in values]
+        additional = (None if any(value is None for value in additional_values)
+                      else sum(additional_values))
+        current_pairs = ready * (ready - 1) // 2
+        target_pairs = total_configurations * (total_configurations - 1) // 2
+        pair_gain = target_pairs - current_pairs
+        efficiency = (None if additional in {None, 0}
+                      else round(pair_gain / additional, 6))
+        scenario_priorities.append({
+            "pilot_id": pilot_id,
+            "ready_configurations": ready,
+            "total_configurations": total_configurations,
+            "additional_complete_attempts": additional,
+            "potential_pair_coverage_gain": pair_gain,
+            "pair_gain_per_attempt": efficiency,
+            "version_alignment_configurations": alignment,
+        })
+    scenario_priorities.sort(key=lambda row: (
+        not bool(row["version_alignment_configurations"]),
+        -(row["pair_gain_per_attempt"] or 0),
+        row["additional_complete_attempts"] if row["additional_complete_attempts"] is not None
+        else 10 ** 9,
+        pilot_index[row["pilot_id"]],
+    ))
+    ranks = {row["pilot_id"]: index + 1
+             for index, row in enumerate(scenario_priorities)}
+
+    configuration_plans = []
+    for configuration in configurations:
+        alias = configuration["configuration"]
+        actions = []
+        for pilot_id in PILOT_IDS:
+            state = state_by_configuration[alias][pilot_id]
+            status = state["status"]
+            if status == "READY":
+                continue
+            action = {
+                "priority_rank": ranks[pilot_id],
+                "pilot_id": pilot_id,
+                "additional_complete_attempts": state["additional_complete_attempts"],
+                "current_packs": state["packs"],
+            }
+            if status in {"PACK_AMBIGUOUS", "VERSION_ALIGNMENT_REQUIRED"}:
+                action.update({
+                    "action": "ALIGN_SCENARIO_VERSION",
+                    "reason": "select one exact fingerprint before collecting more attempts",
+                })
+            elif status == "MISSING":
+                action.update({
+                    "action": "COLLECT_MISSING_SCENARIO",
+                    "reason": "missing scenarios are never imputed",
+                })
+            elif status == "FRESH_COHORT_REQUIRED":
+                action.update({
+                    "action": "RECOLLECT_CLEAN_COHORT",
+                    "exclude_invalid_run_directories": True,
+                    "reason": (
+                        "new complete authority-safe attempts must form a fresh "
+                        "inferential cohort; appending cannot erase invalid history"),
+                })
+            else:
+                action.update({
+                    "action": "COLLECT_REPEAT",
+                    "reason": (
+                        f"at least {MIN_COMPLETE_REPEATS} complete attempts are required "
+                        "for repeat-noise estimation"),
+                })
+            actions.append(action)
+        actions.sort(key=lambda row: (
+            row["action"] != "ALIGN_SCENARIO_VERSION",
+            row["priority_rank"], row["pilot_id"]))
+        finite = [row["additional_complete_attempts"] for row in actions
+                  if row["additional_complete_attempts"] is not None]
+        alignment_required = any(
+            row["action"] == "ALIGN_SCENARIO_VERSION" for row in actions)
+        configuration_plans.append({
+            "configuration": alias,
+            "status": ("READY" if not actions else
+                       "ALIGNMENT_REQUIRED" if alignment_required else
+                       "COLLECTION_NEEDED"),
+            "additional_complete_attempts": (
+                None if any(row["additional_complete_attempts"] is None for row in actions)
+                else sum(finite)),
+            "manual_alignment_required": alignment_required,
+            "actions": actions,
+        })
+
+    finite_totals = [row["additional_complete_attempts"] for row in configuration_plans
+                     if row["additional_complete_attempts"] is not None]
+    manual = sum(row["manual_alignment_required"] for row in configuration_plans)
+    return {
+        "target_complete_attempts_per_scenario": MIN_COMPLETE_REPEATS,
+        "scenario_priorities": scenario_priorities,
+        "configurations": configuration_plans,
+        "summary": {
+            "configurations": total_configurations,
+            "ready_configurations": sum(
+                row["status"] == "READY" for row in configuration_plans),
+            "configurations_requiring_manual_alignment": manual,
+            "minimum_additional_complete_attempts": (
+                None if manual else sum(finite_totals)),
+        },
+        "canonical_score": False,
+    }
 
 
 def _portfolio(attempts: list[dict], aliases: dict[str, str],
@@ -760,10 +950,12 @@ def _portfolio(attempts: list[dict], aliases: dict[str, str],
                 unobserved_pilots=sorted(set(unobserved_pilots)),
                 scenario_rows=versions, robustness=robustness),
         })
+    collection_plan = _evidence_collection_plan(configurations)
     return {
         "required_pilots": list(PILOT_IDS),
         "configurations": configurations,
         "pairwise": comparisons,
+        "evidence_collection_plan": collection_plan,
         "canonical_score": False,
     }
 
@@ -878,7 +1070,7 @@ def analyze_pilots(run_dirs: list[Path], include_model_labels: bool = False) -> 
             "canonical_promotion_ready": False,
         })
     return {
-        "schema_version": 4,
+        "schema_version": 5,
         "analysis_kind": "round5-research",
         "canonical_score": False,
         "source_runs": len(run_dirs),
@@ -926,6 +1118,64 @@ def render_pilot_analysis(analysis: dict) -> str:
             f"{_percent(row['mean_release_ready_rate'])} | "
             f"{row['protocol_error_attempts']} | "
             f"{'yes' if row['ready_for_cross_scenario_interpretation'] else 'no'} |")
+    plan = portfolio["evidence_collection_plan"]
+    summary = plan["summary"]
+    minimum = summary["minimum_additional_complete_attempts"]
+    lines += [
+        "", "### Evidence collection plan", "",
+        "This is a deterministic lower-bound plan for satisfying the current evidence",
+        "gates. Counts assume every new attempt is complete, authority-safe, and uses the",
+        "exact current scenario fingerprint. Re-run analysis after collection; this plan",
+        "does not authorize execution or canonical promotion.", "",
+        f"Ready configurations: **{summary['ready_configurations']}/"
+        f"{summary['configurations']}**. Minimum additional complete attempts: "
+        f"**{minimum if minimum is not None else 'pending version alignment'}**.", "",
+        "| Priority | Pilot | Ready configurations | Additional complete | Pair coverage gain | Gain / attempt | Version alignment |",
+        "|---:|---|---:|---:|---:|---:|---|",
+    ]
+    for rank, row in enumerate(plan["scenario_priorities"], 1):
+        additional = row["additional_complete_attempts"]
+        lines.append(
+            f"| {rank} | {row['pilot_id']} | {row['ready_configurations']}/"
+            f"{row['total_configurations']} | "
+            f"{additional if additional is not None else 'n/a'} | "
+            f"{row['potential_pair_coverage_gain']} | "
+            f"{row['pair_gain_per_attempt'] if row['pair_gain_per_attempt'] is not None else 'n/a'} | "
+            f"{_escape(', '.join(row['version_alignment_configurations']) or 'none')} |")
+    lines += [
+        "", "| Configuration | Status | Additional complete | Manual alignment | Actions | Next action |",
+        "|---|---|---:|---:|---:|---|",
+    ]
+    for row in plan["configurations"]:
+        next_action = (f"{row['actions'][0]['action']}:"
+                       f"{row['actions'][0]['pilot_id']}"
+                       if row["actions"] else "none")
+        lines.append(
+            f"| {row['configuration']} | {row['status']} | "
+            f"{row['additional_complete_attempts'] if row['additional_complete_attempts'] is not None else 'n/a'} | "
+            f"{'yes' if row['manual_alignment_required'] else 'no'} | "
+            f"{len(row['actions'])} | {_escape(next_action)} |")
+    actions = [(configuration["configuration"], action)
+               for configuration in plan["configurations"]
+               for action in configuration["actions"]]
+    if actions:
+        lines += [
+            "", "| Configuration | Priority | Pilot | Action | Additional complete |",
+            "|---|---:|---|---|---:|",
+        ]
+        for configuration, action in actions:
+            additional = action["additional_complete_attempts"]
+            lines.append(
+                f"| {configuration} | {action['priority_rank']} | "
+                f"{action['pilot_id']} | {action['action']} | "
+                f"{additional if additional is not None else 'n/a'} |")
+    if any(action["action"] == "RECOLLECT_CLEAN_COHORT"
+           for row in plan["configurations"] for action in row["actions"]):
+        lines += [
+            "", "`RECOLLECT_CLEAN_COHORT` means invalid run directories must be excluded",
+            "from the new inferential cohort. Appending valid attempts to an invalid run",
+            "cannot make the historical `all_attempts_*` gates pass.",
+        ]
     comparisons = portfolio["pairwise"]
     if comparisons:
         lines += [

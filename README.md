@@ -4,9 +4,9 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-**Current release: 2.41.0** — adds a structured async fan-out pilot for queue-neutral
-per-item timeouts, bounded concurrency, failure/caller cancellation, awaited child
-cleanup, ordered duplicate results, and isolated nested calls.
+**Current release: 2.42.0** — turns Round 5 evidence gaps into a finite, prioritized
+collection plan with exact per-configuration attempt counts and clean-cohort recovery
+when invalid history would otherwise make a coverage gate impossible to clear.
 
 LLM Hardtest Report is a local-first command-line benchmark for comparing language
 models as reasoners, coding workers, and safe handoff agents. Point it at one or more
@@ -222,9 +222,11 @@ missing scenarios unobserved, exposes the worst observed held-back rate, and com
 configurations only on an exact shared scenario fingerprint. Pairwise analysis subtracts
 within-configuration repeat noise and resamples whole scenarios for a deterministic 95%
 interval. It requires three shared exact versions and two complete attempts per side and
-labels evidence as stable, inconclusive, no stable separation, or insufficient. It also
-names the next missing, mismatched, repeated, invalid, unobserved-axis, or
-ambiguity-review evidence to collect. Axis attribution decomposes the unsigned distance,
+labels evidence as stable, inconclusive, no stable separation, or insufficient. Analysis
+schema 5 also calculates the minimum additional complete attempts per configuration,
+prioritizes scenarios by attainable pair-coverage gain per attempt, and requires a fresh
+cohort when invalid history cannot be repaired by appending attempts. Axis attribution
+decomposes the unsigned distance,
 while leave-one-scenario-out
 checks identify stable results that depend on one incident and redirect collection to
 the influential scenarios. This remains descriptive research evidence, not a directional

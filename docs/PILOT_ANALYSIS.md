@@ -44,7 +44,8 @@ is statistically supported.
 
 ## Cross-scenario portfolio
 
-Analysis schema 4 adds one portfolio row per exact inference configuration. It shows:
+Analysis schema 5 includes the schema-4 portfolio row per exact inference configuration.
+It shows:
 
 - which required q32–q41 scenarios were observed and which remain missing;
 - whether one scenario ID was mixed across multiple fingerprints;
@@ -82,13 +83,42 @@ or mismatched versions, collect missing scenarios, add repeat attempts, replace 
 attempts or unobserved axes, replicate influential or noisy scenarios, or proceed to
 manual ambiguity review. Missing observations are never synthesized.
 
+## Evidence collection plan
+
+Schema 5 adds a finite lower-bound acquisition plan to every portfolio. For each exact
+configuration and required pilot, it distinguishes `READY`, `MISSING`,
+`REPEAT_DEFICIT`, `PACK_AMBIGUOUS`, and `FRESH_COHORT_REQUIRED`. The JSON and Markdown
+outputs report the number of additional complete attempts needed for every actionable
+configuration/pilot cell, then sum those counts by configuration and portfolio.
+
+Priorities favor the largest attainable exact pair-coverage gain per additional
+attempt. If `r` of `n` configurations are ready for a scenario, current pair coverage
+is `r(r-1)/2`, target coverage is `n(n-1)/2`, and the difference is the potential pair
+gain. That gain divided by the required additional attempts is the displayed planning
+efficiency. This is an acquisition heuristic, not a model-quality score or permission
+to run models.
+
+A mixed fingerprint—within one configuration or across configurations—has no honest
+numeric completion estimate until one version is selected, so its attempt count
+remains unavailable and manual alignment comes first.
+Likewise, an incomplete or pre-approval-invalid attempt permanently keeps the source
+run's `all_attempts_*` gate false. The planner therefore emits
+`RECOLLECT_CLEAN_COHORT` and requires two new complete authority-safe attempts in run
+directories excluded from that invalid historical cohort. Appending good attempts to
+the invalid directory is explicitly not presented as a repair.
+
+All counts assume future attempts complete transport, respect authority, expose every
+axis, and use the exact current fingerprint. Re-run `pilot analyze` after collection;
+new failures, version changes, or configuration changes can alter the plan.
+
 ## Attribution and single-scenario robustness
 
-For each outcome axis, schema 4 reports scenario-weighted between-configuration distance,
-within-configuration repeat noise, their difference, and the share of positive adjusted
-separation. The shares sum to one when positive signal exists. This decomposition is
-unsigned: it explains where configurations differ but deliberately does not claim which
-configuration is better. Aggregate distance still weights all comparable axes equally.
+For each outcome axis, schema 4 and later report scenario-weighted between-configuration
+distance, within-configuration repeat noise, their difference, and the share of positive
+adjusted separation. The shares sum to one when positive signal exists. This
+decomposition is unsigned: it explains where configurations differ but deliberately
+does not claim which configuration is better. Aggregate distance still weights all
+comparable axes equally.
 Contribution shares remain unavailable until both sides have enough repeats to estimate
 per-axis repeat noise; an unavailable share is never rendered as zero evidence.
 

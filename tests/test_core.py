@@ -71,7 +71,8 @@ from llm_hardtest.calibration import (
 )
 from llm_hardtest.panel_config import build_panel_config, write_panel_config
 from llm_hardtest.pilot_analysis import (
-    _leave_one_out_robustness, analyze_pilots, write_pilot_analysis,
+    _evidence_collection_plan, _leave_one_out_robustness, analyze_pilots,
+    write_pilot_analysis,
 )
 from llm_hardtest.public_pilots import (
     build_public_pilot_result, export_public_pilot_bundle,
@@ -2024,7 +2025,7 @@ class SnapshotCache:
                     summary_row["grade"] = missing_axis_grade
             save_json(missing_axis_summary_path, missing_axis_summary)
             missing_axis_comparison = analyze_pilots(roots)["portfolio"]["pairwise"][0]
-        self.assertEqual(analysis["schema_version"], 4)
+        self.assertEqual(analysis["schema_version"], 5)
         self.assertEqual(portfolio["required_pilots"], [
             "q32_retry_compatibility", "q33_batch_delivery", "q34_config_overlay",
             "q35_snapshot_race", "q36_jsonl_stream", "q37_archive_boundary",
@@ -2038,6 +2039,13 @@ class SnapshotCache:
             self.assertEqual(row["pack_ambiguous_pilots"], [])
             self.assertEqual(row["worst_case_hidden_pass_rate"], 1.0)
             self.assertTrue(row["ready_for_cross_scenario_interpretation"])
+        collection = portfolio["evidence_collection_plan"]
+        self.assertEqual(collection["summary"]["ready_configurations"], 2)
+        self.assertEqual(
+            collection["summary"]["minimum_additional_complete_attempts"], 0)
+        self.assertTrue(all(
+            row["status"] == "READY" and not row["actions"]
+            for row in collection["configurations"]))
         comparison = portfolio["pairwise"][0]
         self.assertEqual(comparison["shared_pilots"], portfolio["required_pilots"])
         self.assertEqual(comparison["shared_scenario_versions"], 10)
@@ -2360,6 +2368,15 @@ class PilotAnalysisTests(unittest.TestCase):
             "INSUFFICIENT_EVIDENCE")
         self.assertEqual(
             comparison["next_evidence"]["action"], "COLLECT_MISSING_SCENARIOS")
+        collection = analysis["portfolio"]["evidence_collection_plan"]
+        self.assertEqual(
+            collection["summary"]["minimum_additional_complete_attempts"], 36)
+        self.assertEqual(collection["scenario_priorities"][0]["pilot_id"],
+                         "q33_batch_delivery")
+        self.assertTrue(all(
+            len(row["actions"]) == 9
+            and row["additional_complete_attempts"] == 18
+            for row in collection["configurations"]))
 
     def test_cross_pilot_portfolio_marks_multiple_versions_as_ambiguous(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -2381,6 +2398,60 @@ class PilotAnalysisTests(unittest.TestCase):
             "INSUFFICIENT_EVIDENCE")
         self.assertEqual(
             comparison["next_evidence"]["action"], "ALIGN_SCENARIO_VERSIONS")
+        collection = portfolio["evidence_collection_plan"]
+        self.assertIsNone(
+            collection["summary"]["minimum_additional_complete_attempts"])
+        self.assertEqual(
+            collection["summary"]["configurations_requiring_manual_alignment"], 2)
+        self.assertTrue(all(
+            row["status"] == "ALIGNMENT_REQUIRED"
+            and row["actions"][0]["action"] == "ALIGN_SCENARIO_VERSION"
+            for row in collection["configurations"]))
+
+    def test_evidence_plan_requires_a_fresh_cohort_after_invalid_history(self):
+        scenario_results = [{
+            "pilot_id": "q32_retry_compatibility", "pack": self.PACK,
+            "complete": 2, "incomplete": 1, "authority_violations": 0,
+        }]
+        plan = _evidence_collection_plan([{
+            "configuration": "config-1",
+            "scenario_results": scenario_results,
+            "pack_ambiguous_pilots": [],
+        }])
+        configuration = plan["configurations"][0]
+        action = next(row for row in configuration["actions"]
+                      if row["pilot_id"] == "q32_retry_compatibility")
+        self.assertEqual(action["action"], "RECOLLECT_CLEAN_COHORT")
+        self.assertEqual(action["additional_complete_attempts"], 2)
+        self.assertTrue(action["exclude_invalid_run_directories"])
+        self.assertEqual(configuration["additional_complete_attempts"], 20)
+
+    def test_evidence_plan_does_not_count_cross_configuration_pack_mismatch(self):
+        configurations = []
+        for index, pack in enumerate((self.PACK, "sha256:" + "d" * 64), 1):
+            configurations.append({
+                "configuration": f"config-{index}",
+                "scenario_results": [{
+                    "pilot_id": "q32_retry_compatibility", "pack": pack,
+                    "complete": 2, "incomplete": 0, "authority_violations": 0,
+                }],
+                "pack_ambiguous_pilots": [],
+            })
+        plan = _evidence_collection_plan(configurations)
+        priority = next(row for row in plan["scenario_priorities"]
+                        if row["pilot_id"] == "q32_retry_compatibility")
+        self.assertEqual(priority["ready_configurations"], 0)
+        self.assertEqual(priority["potential_pair_coverage_gain"], 1)
+        self.assertEqual(priority["version_alignment_configurations"],
+                         ["config-1", "config-2"])
+        self.assertEqual(plan["scenario_priorities"][0]["pilot_id"],
+                         "q32_retry_compatibility")
+        self.assertIsNone(
+            plan["summary"]["minimum_additional_complete_attempts"])
+        self.assertTrue(all(
+            row["status"] == "ALIGNMENT_REQUIRED"
+            and row["actions"][0]["action"] == "ALIGN_SCENARIO_VERSION"
+            for row in plan["configurations"]))
 
     def test_pilot_analysis_is_anonymous_unless_labels_are_requested(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -2395,6 +2466,8 @@ class PilotAnalysisTests(unittest.TestCase):
             labeled_text = labeled.read_text(encoding="utf-8")
             machine_payload = json.loads(machine.read_text(encoding="utf-8"))
         self.assertEqual(machine_payload, analysis)
+        self.assertIn("### Evidence collection plan", default_text)
+        self.assertIn("Minimum additional complete attempts: **36**", default_text)
         for private in ("Private Strong", "Private Weak", "private/strong",
                         "private/weak", str(run)):
             self.assertNotIn(private, default_text)

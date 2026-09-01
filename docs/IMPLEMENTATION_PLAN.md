@@ -1227,3 +1227,31 @@ Acceptance checks:
 - Final live evidence shares fingerprint
   `sha256:baeff06c0549643491eaf64a57e6686b500e2a97e0920b9e10f0470cdbb0cadc`;
   its 68.8% one-attempt distance remains `INSUFFICIENT_EVIDENCE`.
+
+## Phase 41 — Finite Round 5 evidence acquisition planning
+
+Goal: convert portfolio gate failures into an executable lower-bound collection plan
+without implying that missing or invalid evidence has been repaired.
+
+Deliverables:
+
+1. Classify every configuration/pilot cell as ready, missing, repeat-deficient,
+   fingerprint-ambiguous, or requiring a fresh clean cohort.
+2. Report exact additional complete-attempt counts per cell, configuration, scenario,
+   and portfolio when the fingerprint choice is unambiguous.
+3. Prioritize scenarios by potential exact configuration-pair coverage gained per
+   additional attempt, with deterministic tie-breaking.
+4. Prevent the impossible `append attempts to clear all-attempts gates` workflow by
+   excluding invalid run directories from a fresh inferential cohort.
+5. Render the plan in both JSON and Markdown while retaining anonymous configuration
+   aliases and `canonical_score: false`.
+
+Acceptance checks:
+
+- A complete ten-scenario, two-repeat, two-configuration portfolio requires zero new
+  attempts.
+- Two configurations observed only on q32 require 36 complete attempts: two attempts
+  for each of nine missing scenarios and each configuration.
+- Mixed fingerprints require manual alignment and do not report a false numeric total.
+- Any incomplete or authority-invalid history produces a two-attempt clean-cohort
+  action that explicitly excludes invalid run directories.

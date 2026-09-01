@@ -1,4 +1,4 @@
-# Release Notes — 2.41.0
+# Release Notes — 2.42.0
 
 This repository is ready to publish as `rannte85/llm-hardtest-report`. It contains no raw
 campaign outputs, credentials, local model files, personal filesystem paths, or
@@ -6,6 +6,25 @@ generated Python caches. The included Luna result is the allowlist-only public b
 not its prompts, responses, transcripts, account details, or local run directory.
 
 The release validation now also covers:
+
+- Round 5 analysis schema 5 and its deterministic evidence collection plan;
+- exact lower-bound additional attempt counts per configuration and scenario;
+- priority by attainable exact configuration-pair coverage gain per additional
+  complete attempt;
+- an explicit manual fingerprint-alignment blocker instead of a fabricated count when
+  one scenario ID contains multiple versions;
+- `RECOLLECT_CLEAN_COHORT` when incomplete or authority-invalid history permanently
+  poisons an all-attempts gate, with invalid run directories excluded from the new
+  inferential cohort;
+- anonymous Markdown and JSON planning output that remains non-canonical and never
+  starts collection automatically;
+- regression cases where a complete portfolio needs zero attempts, a q32-only
+  two-configuration portfolio needs 36, ambiguous versions have no numeric total, and
+  invalid history requires two new clean attempts;
+- all 249 source tests, repository selftest, current community-data checks, and fresh
+  wheel/sdist installed-package validation pass locally.
+
+## Previous release: 2.41.0
 
 - `q41_async_fanout`, a tenth long-horizon incident for structured asynchronous task
   lifetime and cleanup;

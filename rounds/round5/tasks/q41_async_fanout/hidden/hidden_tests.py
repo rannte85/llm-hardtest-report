@@ -14,7 +14,7 @@ from pathlib import Path
 
 EXPECTED = {
     "README.md": "33bc8d4b1878c5ac9d0db9902ea9f76dfe0f4d60115b6b6a377df925913457e7",
-    "run_tests.py": "845207190824e5c02e6ae7434813c36345f9a9dd40f7e2b9fcf085d36269d4b4",
+    "run_tests.py": "887ea2dcb8c2fc63939e6f9949f4d2f70946e6dd5888be9349e2ece9d42b522b",
     "operator_note.txt": "3d4d0b215e1495ecb34ca20ed3d6d1de9f8fee4dc4e3d587eb1aa56c312f5100",
 }
 

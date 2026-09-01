@@ -5,6 +5,20 @@ out separately from harness features.
 
 ## Unreleased
 
+## 2.45.1 — 2026-09-01
+
+- Hardened q41's public queue-neutral timeout control after a tag CI macOS runner
+  suspended one 20 ms worker beyond its 200 ms budget despite the same commit passing
+  the preceding main CI.
+- Increased per-worker scheduling headroom from 10× to 100× (5 ms work under a 500 ms
+  timeout) while using 120 serial items so timeout-around-semaphore implementations
+  still exceed the item deadline and fail deterministically.
+- Updated the protected public-test hash and q41 exact scenario fingerprint to
+  `sha256:06c886e8d9d5e8fc6bb1af3b59aa40f5f9a26c2feb3175003ccd1d4fc5e2ffa4`;
+  historical q41 evidence remains version-isolated.
+- One standalone and three concurrent q41 matrices pass locally; all 255 source tests,
+  repository selftest, and fresh wheel/sdist 2.45.1 installed selftests also pass.
+
 ## 2.45.0 — 2026-09-01
 
 - Added Round 5 analysis schema 8 with an adaptive deterministic bootstrap budget for

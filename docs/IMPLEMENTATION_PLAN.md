@@ -1367,7 +1367,7 @@ Acceptance checks:
 - The baseline remains 2/4 public and 0/10 held-back.
 - All twelve incomplete or adversarial controls remain public-green and fail at least
   one held-back check.
-- Current fingerprint is
+- The Phase 45 release fingerprint was
   `sha256:1186a977c1b4264fcf47497c027299b84f627ae1308f6488d85cfa34d1443679`.
 
 ## Phase 46 — Family-wise bootstrap tail resolution
@@ -1395,3 +1395,26 @@ Acceptance checks:
 - Pointwise and family-wise intervals reuse the same deterministic draws.
 - Adaptive sampling does not change evidence gates, material-effect boundaries,
   canonical scoring, or automatic promotion behavior.
+
+## Phase 47 — q41 100× scheduling-headroom hardening (completed)
+
+Goal: remove the remaining overloaded-macOS false negative without weakening the
+queue-charged timeout trap.
+
+Deliverables:
+
+1. Shorten each healthy public-control worker from 20 ms to 5 ms and raise its item
+   timeout from 200 ms to 500 ms.
+2. Expand the serial queue from 20 to 120 items, keeping accumulated work above the
+   timeout so timeout-around-semaphore implementations remain rejected.
+3. Rotate the protected public-test hash and exact q41 scenario fingerprint.
+4. Re-run concurrent q41 matrices, all source tests, selftest, clean installs, and both
+   main/tag CI matrices before publishing v2.45.1.
+
+Acceptance:
+
+- A correct implementation gets 100× nominal per-worker scheduling headroom.
+- The public control remains red for a timeout wrapped around semaphore acquisition.
+- All twelve incomplete/adversarial controls remain public-green and held-back-negative.
+- Current fingerprint is
+  `sha256:06c886e8d9d5e8fc6bb1af3b59aa40f5f9a26c2feb3175003ccd1d4fc5e2ffa4`.

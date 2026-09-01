@@ -4,8 +4,8 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-**Current release: 2.45.0** — keeps family-wise bootstrap tails resolved as the number
-of eligible Round 5 configuration comparisons grows.
+**Current release: 2.45.1** — adds 100× scheduling headroom to q41's queue-neutral
+timeout control while retaining schema-8 family-wise bootstrap resolution.
 
 LLM Hardtest Report is a local-first command-line benchmark for comparing language
 models as reasoners, coding workers, and safe handoff agents. Point it at one or more

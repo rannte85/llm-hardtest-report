@@ -1,4 +1,4 @@
-# Release Notes — 2.45.0
+# Release Notes — 2.45.1
 
 This repository is ready to publish as `rannte85/llm-hardtest-report`. It contains no raw
 campaign outputs, credentials, local model files, personal filesystem paths, or
@@ -6,6 +6,19 @@ generated Python caches. The included Luna result is the allowlist-only public b
 not its prompts, responses, transcripts, account details, or local run directory.
 
 This release adds:
+
+- a 100× nominal scheduling margin for q41's queue-neutral public timeout control:
+  5 ms workers, a 500 ms per-worker timeout, and 120 serialized items;
+- retained discrimination against timeout-around-semaphore implementations because
+  the serialized queue still exceeds the item deadline;
+- protected public-test hash rotation and exact q41 scenario fingerprint
+  `sha256:06c886e8d9d5e8fc6bb1af3b59aa40f5f9a26c2feb3175003ccd1d4fc5e2ffa4`;
+- one standalone and three concurrent q41 matrices, all 255 source tests, repository
+  selftest, and clean wheel/sdist 2.45.1 installed selftests passing locally.
+
+## Previous release: 2.45.0
+
+The previous release added:
 
 - Round 5 analysis schema 8 with deterministic bootstrap samples that scale with the
   complete eligible pair family;

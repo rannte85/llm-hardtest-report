@@ -291,7 +291,7 @@ headroom to 200 ms and uses 20 queued 20 ms workers, so overloaded macOS runners
 mistake scheduler delay for a model defect while timeout-around-semaphore designs still
 exceed the accumulated queue boundary. The behavior contract is unchanged, but the
 protected public-test hash and verifier diagnostics change the exact fingerprint to
-`sha256:1186a977c1b4264fcf47497c027299b84f627ae1308f6488d85cfa34d1443679`.
+`sha256:06c886e8d9d5e8fc6bb1af3b59aa40f5f9a26c2feb3175003ccd1d4fc5e2ffa4`.
 Earlier E4B/Luna observations remain historical and are not pooled with this version.
 
 On final q40 fingerprint

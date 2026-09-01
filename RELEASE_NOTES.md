@@ -1,4 +1,4 @@
-# Release Notes — 2.40.0
+# Release Notes — 2.41.0
 
 This repository is ready to publish as `rannte85/llm-hardtest-report`. It contains no raw
 campaign outputs, credentials, local model files, personal filesystem paths, or
@@ -6,6 +6,28 @@ generated Python caches. The included Luna result is the allowlist-only public b
 not its prompts, responses, transcripts, account details, or local run directory.
 
 The release validation now also covers:
+
+- `q41_async_fanout`, a tenth long-horizon incident for structured asynchronous task
+  lifetime and cleanup;
+- queue-neutral per-item timeouts, bounded concurrency, input-order results with
+  duplicate calls, and isolated nested or independent batches;
+- fail-fast worker errors and caller cancellation that cancel and await every active
+  or queued child before re-raising the original exception unchanged;
+- a fourteen-state control matrix where the complete implementation reaches 4/4
+  public and 10/10 held-back, the baseline reaches 2/4 and 0/10, and twelve partial or
+  adversarial implementations remain public-green but fail held-back evidence;
+- q41 fingerprints and q32–q41 portfolio coverage through execution, analysis,
+  voluntary export, installed-package selftest, and CI;
+- exact-final-fingerprint smoke evidence where local E4B hit the three-error turn-1
+  circuit breaker at baseline, while GPT-5.6 Luna completed cleanly and reached 4/4
+  public and 8/10 held-back but allowed a queued sibling to start after failure or
+  timeout slot release;
+- a 66.2% descriptive eight-axis distance that remains `INSUFFICIENT_EVIDENCE`
+  because there is one attempt per configuration on one of ten required scenarios;
+- all 247 source tests, five consecutive q41 control-matrix runs, repository selftest,
+  and installed wheel/sdist validation pass.
+
+## Previous release: 2.40.0
 
 - `q40_ssrf_redirect`, a ninth long-horizon incident for outbound network authority;
 - whole-answer per-hop DNS validation, mapped/zone IPv6 rejection, numeric-IP

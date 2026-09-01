@@ -107,3 +107,5 @@ jobs:
             rounds/round5/tasks/q39_job_lease/verify_pilot.py
           PYTHONDONTWRITEBYTECODE=1 python \
             rounds/round5/tasks/q40_ssrf_redirect/verify_pilot.py
+          PYTHONDONTWRITEBYTECODE=1 python \
+            rounds/round5/tasks/q41_async_fanout/verify_pilot.py

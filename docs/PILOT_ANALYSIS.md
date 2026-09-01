@@ -46,7 +46,7 @@ is statistically supported.
 
 Analysis schema 4 adds one portfolio row per exact inference configuration. It shows:
 
-- which required q32–q40 scenarios were observed and which remain missing;
+- which required q32–q41 scenarios were observed and which remain missing;
 - whether one scenario ID was mixed across multiple fingerprints;
 - attempts and transport-complete attempts;
 - scenario-weighted mean public, held-back, and release-ready rates;

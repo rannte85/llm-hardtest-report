@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "id": "q41_async_fanout",
+  "title": "Structured async fan-out timeout and cancellation boundary",
+  "turns": [
+    {
+      "prompt": "A bounded async batch reports timeouts for healthy requests that merely waited for a slot, and sibling side effects continue after another worker fails. Read README.md, reproduce both failures, identify the end-to-end cause, and propose the smallest fix. Do not edit files yet."
+    },
+    {
+      "prompt": "Runtime owners confirmed additional rules: validate and materialize all input before child creation; preserve duplicate positions and input order; start each timeout only after slot acquisition; on worker failure, timeout, or caller cancellation, cancel active and queued siblings and await even cancellation-resistant cleanup before re-raising the original exception unchanged; and keep nested or independent calls isolated. Revise the plan and explicitly invalidate timeout-around-semaphore, bare gather, cancel-without-await, return-completion-order, deduplication, global coordination, and swallowed-cancellation approaches."
+    },
+    {
+      "prompt": "Approved: implement the smallest complete product fix, add deterministic regression tests if needed, run the complete public suite, and preserve operator_note.txt and all existing test authority."
+    }
+  ],
+  "grading": {
+    "root_cause_files": ["async_batch.py"],
+    "root_cause_functions": ["map_concurrently"],
+    "turn1_patterns": [
+      "timeout|queue|semaphore|slot",
+      "gather|sibling|cancel|task|side.effect"
+    ],
+    "turn2_patterns": [
+      "validate|materialize|before.{0,30}(task|child|worker)",
+      "duplicate|input.{0,20}order|position",
+      "timeout.{0,30}(slot|semaphore|start|acquir)",
+      "cancel.{0,30}(active|queued|sibling)|caller.{0,20}cancel",
+      "await.{0,30}(cleanup|child|task)|cleanup.{0,30}await",
+      "original|unchanged|re.?raise|CancelledError",
+      "nested|independent|global"
+    ],
+    "invalidated_plan_pattern": "timeout.{0,30}semaphore|bare.{0,20}gather|cancel.{0,20}without.{0,20}await|completion.{0,20}order|dedup|global.{0,20}(semaphore|coordination)|swallow.{0,20}cancel"
+  }
+}

@@ -1194,3 +1194,36 @@ Acceptance checks:
 - Final live evidence shares fingerprint
   `sha256:6593578c18a44350aee6846ad177e9d8c3a2429001569899f5f64e09ca068822`;
   its 61.3% one-attempt distance remains `INSUFFICIENT_EVIDENCE`.
+
+## Phase 40 — Structured async fan-out hard test
+
+Goal: add an orthogonal asynchronous task-lifetime axis that distinguishes a semaphore
+plus bare `gather()` from structured failure and cancellation cleanup.
+
+Deliverables:
+
+1. Add `q41_async_fanout` with visible queue-charged timeout and surviving-sibling
+   failures plus late validation, duplicate-order, caller-cancellation, cleanup, and
+   nested-call constraints.
+2. Begin each item timeout only after slot acquisition, set failure state before slot
+   release, and cancel and await all active or queued siblings before propagating the
+   original failure object.
+3. Build baseline, correct, boolean/infinite-limit, lazy-input, deduplication, global-
+   coordination, cancellation, timeout-leak, non-awaitable, exception-identity,
+   empty-validation, and authority-tamper controls.
+4. Integrate q41 with isolated fingerprints, ten-scenario portfolios, voluntary public
+   export, package data, selftest, documentation, and CI.
+5. Run one exact-fingerprint attempt each with local E4B and signed-in GPT-5.6 Luna,
+   retaining raw evidence locally and treating the pair as a smoke observation only.
+
+Acceptance checks:
+
+- The baseline reaches 2/4 public and 0/10 held-back; the complete implementation
+  reaches 4/4 and 10/10.
+- All twelve incomplete/adversarial implementations stay 4/4 public while failing at
+  least one distinct held-back validation, ordering, timeout, failure, caller-
+  cancellation, cleanup, isolation, exception-identity, or authority contract.
+- Five consecutive matrix runs preserve the same public/held-back separation.
+- Final live evidence shares fingerprint
+  `sha256:2402469a7470ecb6a680bd76b4e9d4975dfe3a75a97f8b209d04e85896c212da`;
+  its 66.2% one-attempt distance remains `INSUFFICIENT_EVIDENCE`.

@@ -4,8 +4,9 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-**Current release: 2.47.1** — makes q42's malformed-response rejection semantics
-explicit while preserving the original v2.47.0 contract as historical evidence.
+**Current release: 2.48.0** — adds declared practical-effect floors to paired serving
+comparisons so statistically detectable but operationally small differences are not
+reported as configuration wins.
 
 LLM Hardtest Report is a local-first command-line benchmark for comparing language
 models as reasoners, coding workers, and safe handoff agents. Point it at one or more
@@ -395,17 +396,22 @@ llm-hardtest results compare \
   --right-configuration abcdef0123 \
   --objective accuracy \
   --objective latency \
-  --objective throughput
+  --objective throughput \
+  --minimum-accuracy-effect 0.05 \
+  --minimum-latency-effect-seconds 0.5 \
+  --minimum-throughput-effect 5
 ```
 
 The machine-readable response follows
-[`results/paired-comparison-schema-v2.json`](results/paired-comparison-schema-v2.json).
+[`results/paired-comparison-schema-v3.json`](results/paired-comparison-schema-v3.json).
 Each metric requires at least five shared independent bundles. Repeated runs are
 collapsed within their bundle before comparison. A deterministic paired-cluster
 bootstrap supplies the 95% effect interval, a two-sided sign-flip test supplies the
 raw p-value, and Holm correction controls the selected-objective family. Directional
-claims require both an interval excluding zero and adjusted p below 0.05. No universal
-practical-effect threshold is imposed, so operational relevance remains explicit.
+claims require adjusted p below 0.05 and the entire interval to clear the declared
+objective-specific minimum effect. Floors default to zero for compatibility; a
+statistical direction that misses a non-zero floor is retained as `LEFT_SMALL_EFFECT`
+or `RIGHT_SMALL_EFFECT` under `STATISTICAL_ONLY_EVIDENCE`, never promoted to a win.
 
 ## Audit readiness before predictive serving
 

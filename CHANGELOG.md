@@ -5,6 +5,20 @@ out separately from harness features.
 
 ## Unreleased
 
+## 2.48.0 — 2026-09-01
+
+- Added objective-specific minimum practical effects to paired exact-configuration
+  comparisons for accuracy, completion, latency, and throughput.
+- Directional promotion now requires both Holm-controlled statistical evidence and a
+  paired bootstrap interval entirely beyond the declared operational floor.
+- Added `LEFT_SMALL_EFFECT`, `RIGHT_SMALL_EFFECT`, and
+  `STATISTICAL_ONLY_EVIDENCE` so detectable but operationally small differences remain
+  visible without being presented as configuration wins.
+- Added CLI flags for every effect unit, strict finite/non-negative validation,
+  left/right symmetry and sparse-evidence controls, JSON/SQLite parity, Markdown
+  rendering, installed-package smoke coverage, and immutable paired-comparison schema
+  v3; v1/v2 remain historical.
+
 ## 2.47.1 — 2026-09-01
 
 - Clarified q42's malformed-response contract after a live model exposed an ambiguous

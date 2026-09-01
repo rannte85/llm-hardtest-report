@@ -78,7 +78,8 @@ jobs:
           llm-hardtest results compare \
             --database community.sqlite3 --round 1 \
             --left-configuration 0123456789 \
-            --right-configuration abcdef0123 --objective accuracy --json
+            --right-configuration abcdef0123 --objective accuracy \
+            --minimum-accuracy-effect 0.05 --json
           llm-hardtest results readiness \
             --database community.sqlite3 --round 1 \
             --objective accuracy --json

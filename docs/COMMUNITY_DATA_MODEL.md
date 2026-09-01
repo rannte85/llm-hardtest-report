@@ -81,6 +81,13 @@ floor", or "most stable configuration for this task mix". Every recommendation m
 show the exact population filter, pack version, sample size, interval, and missing
 metadata.
 
+When two exact configurations share contributor bundles, `results compare` can also
+apply user-declared minimum practical effects separately to accuracy, completion,
+latency seconds, and throughput. Holm-controlled directions whose paired interval does
+not clear the declared floor remain visible as small effects but are not configuration
+wins. These floors express the caller's operational decision, not a universal benchmark
+constant or evidence about an untested environment.
+
 Version 2.13 provides the first read-only form of this interface:
 
 ```bash

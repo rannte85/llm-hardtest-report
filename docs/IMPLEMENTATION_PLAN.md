@@ -1505,3 +1505,32 @@ Acceptance:
   never pooled with the v2.47.1 fingerprint.
 - Current q42 fingerprint is
   `sha256:ff9d7064a5fc5edb83889887db389772b1b03e529cb22ae9b4e58b5a108d9fb2`.
+
+## Phase 51 — Practical-effect-aware paired comparisons (completed)
+
+Goal: stop a statistically detectable but operationally negligible difference from
+being presented as a serving-configuration win.
+
+Deliverables:
+
+1. Accept finite non-negative objective-specific floors for accuracy, completion,
+   latency seconds, and throughput tokens/second; reject floors for unselected axes.
+2. Require both Holm-adjusted p below 0.05 and the entire paired bootstrap interval
+   beyond the declared floor for `LEFT_BETTER` or `RIGHT_BETTER`.
+3. Preserve sub-threshold statistical directions as `LEFT_SMALL_EFFECT` or
+   `RIGHT_SMALL_EFFECT` and summarize an otherwise non-decisive comparison as
+   `STATISTICAL_ONLY_EVIDENCE`.
+4. Keep a zero default exactly backward compatible, preserve left/right symmetry, and
+   expose the contract identically through canonical JSON, verified SQLite, CLI,
+   Markdown, and immutable public schema v3.
+
+Acceptance:
+
+- The existing seven-bundle accuracy/latency/throughput tradeoff is unchanged at zero
+  floors.
+- Floors above the observed accuracy and latency intervals retain both statistical
+  directions but produce no configuration win.
+- Lower floors recover the practical mixed tradeoff, and swapping sides negates effects
+  and intervals while swapping directional labels without changing p-values or floors.
+- Negative, non-finite, boolean, over-one rate, unknown, and unselected-axis floors fail
+  validation; JSON, SQLite, and CLI outputs remain identical.

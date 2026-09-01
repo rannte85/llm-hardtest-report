@@ -13,7 +13,7 @@ from .community_results import (
 from .public_results import normalized_serving_environment
 
 
-PAIRED_COMPARISON_SCHEMA_VERSION = 2
+PAIRED_COMPARISON_SCHEMA_VERSION = 3
 SIGN_FLIP_EXACT_LIMIT = 65_536
 SIGN_FLIP_MONTE_CARLO_SAMPLES = 20_000
 
@@ -140,11 +140,40 @@ def _holm_adjust(rows: list[dict]) -> None:
         row["p_holm"] = round(previous, 8)
 
 
+def _minimum_effects(objectives: list[str], values: dict | None) -> dict[str, float]:
+    """Validate objective-specific practical-effect floors."""
+    if values is None:
+        values = {}
+    if not isinstance(values, dict) or any(not isinstance(key, str) for key in values):
+        raise ValueError("comparison minimum effects must be an object")
+    unknown = set(values) - set(objectives)
+    if unknown:
+        raise ValueError(
+            "minimum effect supplied for unselected objective(s): "
+            + ", ".join(sorted(unknown)))
+    normalized = {}
+    for objective in objectives:
+        value = values.get(objective, 0.0)
+        try:
+            numeric = float(value)
+        except (OverflowError, TypeError, ValueError):
+            numeric = math.nan
+        if (isinstance(value, bool) or not isinstance(value, (int, float))
+                or not math.isfinite(numeric) or numeric < 0):
+            raise ValueError(
+                f"minimum {objective} effect must be a finite non-negative number")
+        if objective in {"accuracy", "completion"} and numeric > 1:
+            raise ValueError(f"minimum {objective} effect cannot exceed 1")
+        normalized[objective] = numeric
+    return normalized
+
+
 def compare_paired_observations(observations: list[dict], *, round_number: int,
                                 left_configuration: str,
                                 right_configuration: str,
                                 pack: str | None = None,
-                                objectives: list[str] | None = None) -> dict:
+                                objectives: list[str] | None = None,
+                                minimum_effects: dict | None = None) -> dict:
     """Compare two exact configurations only within shared independent bundles."""
     if isinstance(round_number, bool) or round_number not in {1, 2, 3, 4}:
         raise ValueError("comparison round must be one of 1, 2, 3, or 4")
@@ -164,6 +193,7 @@ def compare_paired_observations(observations: list[dict], *, round_number: int,
             or set(objectives) - RECOMMENDATION_OBJECTIVES):
         raise ValueError("comparison objectives must be unique values from: "
                          + ", ".join(sorted(RECOMMENDATION_OBJECTIVES)))
+    minimum_effects = _minimum_effects(objectives, minimum_effects)
 
     round_rows = [row for row in observations if row["round"] == round_number]
     available_packs = sorted({row["pack"] for row in round_rows})
@@ -178,6 +208,7 @@ def compare_paired_observations(observations: list[dict], *, round_number: int,
         "left_configuration": left_configuration,
         "right_configuration": right_configuration,
         "objectives": objectives,
+        "minimum_practical_effects": minimum_effects,
         "minimum_paired_bundles": MIN_BASELINE_SUBMISSIONS,
         "multiplicity_method": "holm_across_tested_objectives",
         "familywise_alpha": 0.05,
@@ -247,10 +278,12 @@ def compare_paired_observations(observations: list[dict], *, round_number: int,
             "left_mean": round(statistics.mean(left_values), 6) if left_values else None,
             "right_mean": round(statistics.mean(right_values), 6) if right_values else None,
             "left_advantage": round(statistics.mean(effects), 6) if effects else None,
+            "minimum_practical_effect": minimum_effects[objective],
             "interval95": None,
             "p_raw": None,
             "p_holm": None,
             "test": None,
+            "practical_threshold_met": None,
             "classification": "INSUFFICIENT",
         }
         if len(effects) >= MIN_BASELINE_SUBMISSIONS:
@@ -268,16 +301,27 @@ def compare_paired_observations(observations: list[dict], *, round_number: int,
         if row["classification"] == "INSUFFICIENT":
             continue
         interval = row["interval95"]
-        if row["p_holm"] < 0.05 and interval["low"] > 0:
+        threshold = row["minimum_practical_effect"]
+        if row["p_holm"] < 0.05 and interval["low"] > threshold:
+            row["practical_threshold_met"] = True
             row["classification"] = "LEFT_BETTER"
-        elif row["p_holm"] < 0.05 and interval["high"] < 0:
+        elif row["p_holm"] < 0.05 and interval["high"] < -threshold:
+            row["practical_threshold_met"] = True
             row["classification"] = "RIGHT_BETTER"
+        elif row["p_holm"] < 0.05 and interval["low"] > 0:
+            row["practical_threshold_met"] = False
+            row["classification"] = "LEFT_SMALL_EFFECT"
+        elif row["p_holm"] < 0.05 and interval["high"] < 0:
+            row["practical_threshold_met"] = False
+            row["classification"] = "RIGHT_SMALL_EFFECT"
         else:
+            row["practical_threshold_met"] = False
             row["classification"] = "INCONCLUSIVE"
     result["objectives_result"] = objective_rows
     result["tested_objectives"] = sum(row["p_raw"] is not None for row in objective_rows)
     directions = {row["classification"] for row in objective_rows}
     decisive = directions & {"LEFT_BETTER", "RIGHT_BETTER"}
+    statistical_only = directions & {"LEFT_SMALL_EFFECT", "RIGHT_SMALL_EFFECT"}
     if not result["tested_objectives"]:
         result["status"] = "INSUFFICIENT_EVIDENCE"
         result["reason"] = "no objective has five paired independent bundles"
@@ -290,6 +334,11 @@ def compare_paired_observations(observations: list[dict], *, round_number: int,
     elif len(decisive) == 2:
         result["status"] = "MIXED_DIRECTIONAL_EVIDENCE"
         result["reason"] = "Holm-controlled paired objectives favor different configurations"
+    elif statistical_only:
+        result["status"] = "STATISTICAL_ONLY_EVIDENCE"
+        result["reason"] = (
+            "a Holm-controlled direction exists but its interval does not clear the "
+            "declared minimum practical effect")
     else:
         result["status"] = "INCONCLUSIVE"
         result["reason"] = "paired evidence is available but no selected objective is decisive"
@@ -318,8 +367,8 @@ def render_paired_comparison(result: dict) -> str:
         ]
     if result["objectives_result"]:
         lines += [
-            "| Objective | Paired bundles | Left mean | Right mean | Left advantage | 95% interval | Raw p | Holm p | Result |",
-            "|---|---:|---:|---:|---:|---:|---:|---:|---|",
+            "| Objective | Paired bundles | Left mean | Right mean | Left advantage | Minimum practical effect | 95% interval | Raw p | Holm p | Result |",
+            "|---|---:|---:|---:|---:|---:|---:|---:|---:|---|",
         ]
         for row in result["objectives_result"]:
             interval = row["interval95"]
@@ -330,7 +379,8 @@ def render_paired_comparison(result: dict) -> str:
                 f"{row['left_mean'] if row['left_mean'] is not None else 'n/a'} | "
                 f"{row['right_mean'] if row['right_mean'] is not None else 'n/a'} | "
                 f"{row['left_advantage'] if row['left_advantage'] is not None else 'n/a'} "
-                f"{row['unit']} | {rendered_interval} | "
+                f"{row['unit']} | {row['minimum_practical_effect']} {row['unit']} | "
+                f"{rendered_interval} | "
                 f"{row['p_raw'] if row['p_raw'] is not None else 'n/a'} | "
                 f"{row['p_holm'] if row['p_holm'] is not None else 'n/a'} | "
                 f"{row['classification']} |")
@@ -340,9 +390,11 @@ def render_paired_comparison(result: dict) -> str:
         "Repeated runs inside one bundle are collapsed before pairing. Positive left",
         "advantage always favors the left configuration; latency uses right minus left",
         "seconds so lower latency remains better. Directional claims require both a",
-        "paired-cluster bootstrap interval excluding zero and Holm-adjusted p < 0.05.",
-        "No practical-effect threshold is imposed, so users must judge whether a",
-        "statistically directional effect is operationally meaningful. This is not a",
+        "paired-cluster bootstrap interval clearing the declared objective-specific",
+        "minimum practical effect and Holm-adjusted p < 0.05. A zero threshold preserves",
+        "the historical non-zero decision rule. `LEFT_SMALL_EFFECT` and",
+        "`RIGHT_SMALL_EFFECT` retain a statistical direction without promoting a change",
+        "that misses the declared operational floor. This is not a",
         "prediction for an untested model, pack, environment, or serving setting.", "",
     ]
     if result["status"] == "PACK_REQUIRED":

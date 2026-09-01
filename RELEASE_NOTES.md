@@ -1,4 +1,27 @@
-# Release Notes — 2.47.1
+# Release Notes — 2.48.0
+
+This release makes head-to-head serving comparisons operationally interpretable:
+
+- `results compare` accepts minimum practical effects for accuracy, completion,
+  latency seconds, and throughput tokens/second;
+- `LEFT_BETTER` and `RIGHT_BETTER` now require the paired 95% interval to clear that
+  floor as well as Holm-adjusted p < 0.05;
+- statistically directional results below the floor are preserved as
+  `LEFT_SMALL_EFFECT` or `RIGHT_SMALL_EFFECT` with overall
+  `STATISTICAL_ONLY_EVIDENCE`, rather than being promoted as wins;
+- schema v3 records the complete threshold contract and per-objective threshold result,
+  while schema v1/v2 remain unchanged for historical clients;
+- canonical JSON and verified SQLite paths use the same implementation and CLI flags;
+- all 261 source tests and repository selftest pass; fresh wheel and sdist installs
+  report 2.48.0, accept the new flags, emit schema v3, and pass installed selftests,
+  while both artifacts pass Twine checks.
+
+## Previous release: 2.47.1
+
+The previous release clarified q42 malformed cache metadata semantics while preserving
+the original v2.47.0 fingerprint and grading contract as historical evidence.
+
+# Historical release notes — 2.47.1
 
 This repository is ready to publish as `rannte85/llm-hardtest-report`. It contains no raw
 campaign outputs, credentials, local model files, personal filesystem paths, or

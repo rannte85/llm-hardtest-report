@@ -530,6 +530,18 @@ def main(argv=None) -> int:
         choices=("accuracy", "completion", "latency", "throughput"),
         help="paired objective; repeat for multiple axes (default: accuracy)")
     p_results_compare.add_argument(
+        "--minimum-accuracy-effect", type=float,
+        help="minimum practical accuracy-rate advantage (0..1)")
+    p_results_compare.add_argument(
+        "--minimum-completion-effect", type=float,
+        help="minimum practical completion-rate advantage (0..1)")
+    p_results_compare.add_argument(
+        "--minimum-latency-effect-seconds", type=float,
+        help="minimum practical latency advantage in seconds")
+    p_results_compare.add_argument(
+        "--minimum-throughput-effect", type=float,
+        help="minimum practical throughput advantage in tokens/second")
+    p_results_compare.add_argument(
         "--json", action="store_true", help="emit machine-readable JSON")
     p_results_compare.add_argument(
         "--output", help="write the paired comparison instead of stdout")
@@ -823,12 +835,21 @@ def main(argv=None) -> int:
                 if args.database and args.directory is not None:
                     raise ValueError(
                         "compare accepts either a submission directory or --database")
+                minimum_effects = {
+                    objective: value for objective, value in {
+                        "accuracy": args.minimum_accuracy_effect,
+                        "completion": args.minimum_completion_effect,
+                        "latency": args.minimum_latency_effect_seconds,
+                        "throughput": args.minimum_throughput_effect,
+                    }.items() if value is not None
+                }
                 comparison_arguments = {
                     "round_number": args.round,
                     "pack": args.pack,
                     "left_configuration": args.left_configuration,
                     "right_configuration": args.right_configuration,
                     "objectives": args.objective,
+                    "minimum_effects": minimum_effects,
                 }
                 if args.database:
                     result = compare_database(

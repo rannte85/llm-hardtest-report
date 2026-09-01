@@ -15,8 +15,9 @@ project does not automatically collect telemetry or local campaign data.
   are retained for historical clients.
 - `collection-plan-schema-v2.json` documents the current independent-bundle
   evidence-gap and acquisition-plan response; v1 is retained for compatibility.
-- `paired-comparison-schema-v2.json` documents current cluster-paired head-to-head
-  comparison of two exact observed serving configurations; v1 is retained.
+- `paired-comparison-schema-v3.json` documents current cluster-paired head-to-head
+  comparison with declared objective-specific practical-effect floors; v1 and v2 are
+  retained for historical clients.
 - `prediction-readiness-schema-v2.json` documents the current non-authorizing
   evidence-design audit required before any predictive serving model is fitted; v1 is
   retained.

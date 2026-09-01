@@ -177,15 +177,19 @@ llm-hardtest results compare \
   --round 1 --pack sha256:<exact-pack-fingerprint> \
   --left-configuration 0123456789 \
   --right-configuration abcdef0123 \
-  --objective accuracy --objective latency --json
+  --objective accuracy --objective latency \
+  --minimum-accuracy-effect 0.05 \
+  --minimum-latency-effect-seconds 0.5 --json
 ```
 
 The database adapter first collapses repeated runs to one metric value per bundle and
 configuration, then retains only shared bundles for each selected objective. It feeds
 the same paired bootstrap, sign-flip, and Holm implementation as canonical JSON, so
-identical evidence produces byte-identical output. Standalone database integrity and
-semantic checks run before analysis. The response exposes neither pairing bundle IDs
-nor contributor history.
+identical evidence and minimum-effect floors produce byte-identical output. A direction
+is promoted only when its interval clears the declared objective-specific floor; a
+Holm-controlled direction below that floor remains visible as a small effect. Standalone
+database integrity and semantic checks run before analysis. The response exposes
+neither pairing bundle IDs nor contributor history.
 
 ## Predictive-service readiness audit
 

@@ -211,7 +211,9 @@ llm-hardtest results compare results/submissions \
   --round 1 --pack sha256:<full-pack-fingerprint> \
   --left-configuration 0123456789 \
   --right-configuration abcdef0123 \
-  --objective accuracy --objective latency --json
+  --objective accuracy --objective latency \
+  --minimum-accuracy-effect 0.05 \
+  --minimum-latency-effect-seconds 0.5 --json
 
 llm-hardtest results compare --database results/community.sqlite3 \
   --round 1 --pack sha256:<full-pack-fingerprint> \
@@ -225,14 +227,17 @@ regardless of repeated runs or duplicate model rows. An objective is tested only
 five shared bundles containing both measurements. Accuracy, completion, and throughput
 use left minus right; latency uses right minus left so positive advantage always favors
 the left configuration. The deterministic paired-bundle bootstrap interval and
-two-sided sign-flip p-value must both support a direction after Holm correction across
-all tested objectives.
+two-sided sign-flip p-value must support a direction after Holm correction across all
+tested objectives, and the full interval must clear the declared minimum practical
+effect. An omitted floor is zero. A non-zero floor that is not cleared produces an
+explicit small-effect classification rather than a configuration win.
 
-The response follows `results/paired-comparison-schema-v2.json`. It contains exact
+The response follows `results/paired-comparison-schema-v3.json`. It contains exact
 public configuration records, shared counts, effects, intervals, tests, and decisions,
 but never the bundle IDs that formed a pair or contributor/tool history. Left/right
-swaps reproduce the same p-values and exactly negated effects and intervals. Statistical
-direction is not a universal practical-effect claim or an untested-setting prediction.
+swaps reproduce the same p-values, thresholds, and exactly negated effects and intervals.
+Thresholds are user-declared operational choices, not universal claims or predictions
+for untested settings.
 
 ## Predictive-service readiness audit
 

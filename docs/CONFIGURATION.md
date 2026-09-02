@@ -33,7 +33,7 @@ Model fields:
 - `model`: endpoint or Codex model identifier.
 - `transport`: `openai_compat` or `codex_cli`.
 - `agent_backend`: Round 4 coding-agent scaffold, `codex_cli` (default) or optional
-  `opencode_cli`. This is independent from the Rounds 1–3 transport.
+  `opencode_cli` or `pi_cli`. This is independent from the Rounds 1–3 transport.
 - `rounds`: optional non-empty subset of the campaign rounds for this model.
 - `base_url`: OpenAI-compatible `/v1` base URL for a custom provider.
 - `api_key_env`: environment variable holding the API key.
@@ -87,11 +87,12 @@ required. Use `discover --base-url <url>` to print server model IDs.
 | `openai_compat` transport | Yes | — | `/v1/chat/completions` |
 | `codex_cli` transport | Yes | — | `/v1/responses` through Codex |
 | `opencode_cli` agent | — | Yes | `/v1/chat/completions` |
+| `pi_cli` agent | — | Yes | `/v1/chat/completions` |
 | `codex_cli` agent, custom provider | — | Yes | `/v1/responses` through Codex |
 | `codex_cli` agent, OpenAI provider | — | Yes | Signed-in Codex provider |
 
 Selecting Round 4 requires only the configured `agent_backend` executable on `PATH`.
-OpenCode remains optional and is checked only when selected.
+OpenCode and pi remain optional and are checked only when selected.
 
 Fail-closed macOS example:
 

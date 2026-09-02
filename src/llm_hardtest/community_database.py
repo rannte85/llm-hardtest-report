@@ -441,7 +441,7 @@ def _validate_relational_semantics(rows: dict[str, list[tuple]]) -> None:
                 or _public_text(configuration["public_name"]) is None
                 or configuration["transport"] not in {"openai_compat", "codex_cli"}
                 or configuration["agent_backend"] not in {
-                    "codex_cli", "opencode_cli"}
+                    "codex_cli", "opencode_cli", "pi_cli"}
                 or configuration["isolation_mode"] not in {
                     "none", "macos_seatbelt"}
                 or configuration["network_policy"] not in {

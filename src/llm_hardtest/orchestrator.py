@@ -101,14 +101,15 @@ def validate_config(config: dict, check_runtime: bool = True) -> None:
         if model.get("transport") not in ("openai_compat", "codex_cli"):
             raise ValueError(f'{model.get("key")}: unsupported transport')
         if model.get("agent_backend", "codex_cli") not in (
-                "codex_cli", "opencode_cli"):
+                "codex_cli", "opencode_cli", "pi_cli"):
             raise ValueError(f'{model.get("key")}: unsupported agent_backend')
         if model.get("codex_provider", "custom") not in ("custom", "openai"):
             raise ValueError(f'{model.get("key")}: unsupported codex_provider')
-        if (model.get("agent_backend") == "opencode_cli"
+        if (model.get("agent_backend") in ("opencode_cli", "pi_cli")
                 and model.get("codex_provider", "custom") != "custom"):
             raise ValueError(
-                f'{model.get("key")}: opencode_cli requires a configured base_url')
+                f'{model.get("key")}: {model["agent_backend"]} requires '
+                "a configured base_url")
         if (model.get("transport") == "openai_compat"
                 or model.get("codex_provider", "custom") == "custom"):
             base_url = model.get("base_url", "http://127.0.0.1:8000/v1")
@@ -248,11 +249,18 @@ def validate_config(config: dict, check_runtime: bool = True) -> None:
         4 in _model_rounds(model, rounds)
         and model.get("agent_backend") == "opencode_cli"
         for model in config["models"])
+    needs_pi = any(
+        4 in _model_rounds(model, rounds)
+        and model.get("agent_backend") == "pi_cli"
+        for model in config["models"])
     if check_runtime and needs_codex and not shutil.which("codex"):
         raise ValueError("selected Codex transport or round 4 requires the codex CLI on PATH")
     if check_runtime and needs_opencode and not shutil.which("opencode"):
         raise ValueError(
             "selected Round 4 opencode_cli backend requires opencode on PATH")
+    if check_runtime and needs_pi and not shutil.which("pi"):
+        raise ValueError(
+            "selected Round 4 pi_cli backend requires pi on PATH")
 
 
 def _round_item_ids(round_no: int) -> set[int]:

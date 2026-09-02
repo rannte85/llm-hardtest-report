@@ -141,6 +141,37 @@ OpenCode configuration and flags change across releases. The preflight accepts t
 current non-interactive permission flag exposed by the installed CLI and fails loudly
 when required `run` capabilities are absent.
 
+## `pi_cli` Round 4 agent
+
+[pi](https://github.com/earendil-works/pi) (npm `@earendil-works/pi-coding-agent`) is
+optional and does not become a Python dependency. Select it per model:
+
+```json
+{
+  "model": "server-model-id",
+  "transport": "openai_compat",
+  "agent_backend": "pi_cli",
+  "codex_provider": "custom",
+  "base_url": "http://127.0.0.1:8000/v1"
+}
+```
+
+The harness writes an attempt-private `models.json` describing a single
+`openai-completions` provider and points `PI_CODING_AGENT_DIR` at it, so the campaign
+never inherits the operator's own pi providers, skills, extensions, or MCP servers.
+The key is referenced as `${API_KEY_ENV}` and stays in the environment. Runs use
+`--print --mode json`, disable ambient extensions, skills, prompt templates, and
+project-local trust, and set `PI_OFFLINE=1` so startup catalog refreshes cannot change
+an attempt. `reasoning_effort` maps to `--thinking` when it names a level pi accepts.
+
+The harness owns the session identifier: it generates one per attempt and passes
+`--session-id` with an attempt-private `--session-dir`, which pi creates on the first
+turn and reuses afterwards. Token usage is summed across the `turn_end` events of a
+turn. `doctor` verifies the installed CLI flags, confirms the injected provider is
+registered through `--list-models`, and makes a real minimal agent call. Non-zero exit,
+timeout, empty output, error event, wrong session, or exposed model mismatch is
+infrastructure-invalid and retains its partial transcript.
+
 ## Compatibility reports
 
 When reporting a backend problem, include the runtime and version, launch command

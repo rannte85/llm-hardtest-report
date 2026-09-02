@@ -438,7 +438,7 @@ def validate_public_result(payload: dict) -> dict:
                     or set(scaffold) != {
                         "agent_backend", "isolation_mode", "network", "fail_closed"}
                     or scaffold.get("agent_backend") not in {
-                        "codex_cli", "opencode_cli"}
+                        "codex_cli", "opencode_cli", "pi_cli"}
                     or scaffold.get("isolation_mode") not in {
                         "none", "macos_seatbelt"}
                     or scaffold.get("network") not in {

@@ -6,6 +6,7 @@ import re
 import shutil
 import subprocess
 import time
+import uuid
 from pathlib import Path
 
 from .backends import CodexBackend, _stop_process
@@ -153,7 +154,7 @@ class CodexRound4Agent(Round4Agent):
         return result
 
 
-def _opencode_events(transcript: str) -> list[dict]:
+def _jsonl_events(transcript: str) -> list[dict]:
     events = []
     for line in (transcript or "").splitlines():
         try:
@@ -309,7 +310,7 @@ class OpenCodeRound4Agent(Round4Agent):
                 returncode = _stop_process(proc, hard=True)
                 stream.write(f"\n[harness] TIMEOUT: killed after {timeout}s\n")
         transcript = transcript_path.read_text(encoding="utf-8", errors="replace")
-        events = _opencode_events(transcript)
+        events = _jsonl_events(transcript)
         sessions = {event.get("sessionID") for event in events
                     if isinstance(event.get("sessionID"), str)}
         actual_session = next(iter(sessions), session_id)
@@ -371,6 +372,203 @@ class OpenCodeRound4Agent(Round4Agent):
         return result
 
 
+_PI_THINKING_LEVELS = {"off", "minimal", "low", "medium", "high", "xhigh", "max"}
+_PI_USAGE_FIELDS = ("input", "output", "cacheRead", "cacheWrite", "reasoning",
+                    "totalTokens")
+
+
+def _pi_usage(messages: list[dict]) -> tuple[int | None, dict]:
+    totals: dict[str, int] = {}
+    for message in messages:
+        usage = message.get("usage")
+        if not isinstance(usage, dict):
+            continue
+        for field in _PI_USAGE_FIELDS:
+            value = usage.get(field)
+            if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+                totals[field] = totals.get(field, 0) + value
+    return totals.get("totalTokens"), totals
+
+
+class PiRound4Agent(Round4Agent):
+    """pi CLI adapter for Chat-Completions-compatible servers."""
+
+    name = "pi_cli"
+    provider_id = "llm-hardtest"
+
+    def _env(self) -> dict:
+        env = dict(os.environ)
+        home = self.state_dir / "home"
+        agent_dir = self.state_dir / "pi-agent"
+        sessions = self.state_dir / "pi-sessions"
+        for path in (home, agent_dir, sessions):
+            path.mkdir(parents=True, exist_ok=True)
+        key_env = self.model.get("api_key_env", "LLM_HARDTEST_API_KEY")
+        env.setdefault(key_env, "local-dummy")
+        env.update({
+            "HOME": str(home),
+            # Isolate the campaign from the user's global pi providers and packages.
+            "PI_CODING_AGENT_DIR": str(agent_dir),
+            # Suppress startup catalog refreshes so attempts stay deterministic.
+            "PI_OFFLINE": "1",
+        })
+        save_json(agent_dir / "models.json", {"providers": {self.provider_id: {
+            "baseUrl": self.model.get("base_url", "http://127.0.0.1:8000/v1"),
+            "api": "openai-completions",
+            "apiKey": "${%s}" % key_env,
+            "models": [{
+                "id": self.model["model"],
+                "name": self.model.get("label", self.model["model"]),
+                "contextWindow": int(self.model.get("context_window", 131072)),
+                "maxTokens": int(self.model.get("max_tokens", 16000)),
+            }],
+        }}})
+        if self.isolation is not None:
+            env.update(self.isolation.env)
+        return env
+
+    def preflight(self, workdir: Path) -> dict:
+        self._preflight_isolation(workdir)
+        executable = shutil.which("pi")
+        if not executable:
+            raise Round4AgentError("pi_cli selected but pi is not on PATH")
+        env = self._env()
+        prefix = list(self.isolation.command_prefix)
+        try:
+            probe = subprocess.run(prefix + [executable, "--help"], text=True,
+                                   capture_output=True, env=env, timeout=30)
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            raise Round4AgentError(f"pi capability probe failed: {exc}") from exc
+        help_text = (probe.stdout or "") + (probe.stderr or "")
+        required = ("--print", "--mode", "--model", "--session-id", "--session-dir")
+        missing = [flag for flag in required if flag not in help_text]
+        if probe.returncode or missing:
+            detail = ("missing " + ", ".join(missing) if missing
+                      else f"exit {probe.returncode}")
+            raise Round4AgentError(f"incompatible pi CLI: {detail}")
+        try:
+            listing = subprocess.run(prefix + [executable, "--list-models"],
+                                     text=True, capture_output=True, env=env,
+                                     timeout=60)
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            raise Round4AgentError(f"pi model catalog probe failed: {exc}") from exc
+        catalog = (listing.stdout or "") + (listing.stderr or "")
+        registered = any(
+            len(parts) >= 2 and parts[0] == self.provider_id
+            and parts[1] == self.model["model"]
+            for parts in (line.split() for line in catalog.splitlines()))
+        if listing.returncode or not registered:
+            raise Round4AgentError(
+                "pi did not register "
+                f'{self.provider_id}/{self.model["model"]}')
+        self._preflighted = True
+        result = {"status": "pass", "executable": Path(executable).name,
+                  "provider": self.provider_id}
+        self._metadata["preflight"] = result
+        self._save_metadata()
+        return result
+
+    def turn(self, prompt: str, workdir: Path, evidence_dir: Path, turn: int,
+             timeout: int, session_id: str | None = None) -> dict:
+        evidence_dir.mkdir(parents=True, exist_ok=True)
+        transcript_path = evidence_dir / f"transcript_turn{turn}.txt"
+        last_path = evidence_dir / f"last_message_turn{turn}.txt"
+        if transcript_path.exists() or last_path.exists():
+            raise Round4AgentError(f"refusing to overwrite agent evidence for turn {turn}")
+        executable = shutil.which("pi")
+        if not executable or not getattr(self, "_preflighted", False):
+            raise Round4AgentError("pi preflight was not completed")
+        # pi creates --session-id when missing, so the harness owns the identifier.
+        requested_session = session_id or str(uuid.uuid4())
+        model_name = f"{self.provider_id}/{self.model['model']}"
+        command = list(self.isolation.command_prefix) + [
+            executable, "--print", "--mode", "json", "--model", model_name,
+            "--session-id", requested_session,
+            "--session-dir", str(self.state_dir / "pi-sessions"),
+            # Exclude ambient extensions, skills, and templates from the attempt.
+            "--no-extensions", "--no-skills", "--no-prompt-templates", "--no-approve",
+        ]
+        thinking = self.model.get("reasoning_effort")
+        if thinking in _PI_THINKING_LEVELS:
+            command += ["--thinking", thinking]
+        command += ["--", prompt]
+        started = time.time()
+        timed_out = False
+        with transcript_path.open("w", encoding="utf-8", errors="replace") as stream:
+            proc = subprocess.Popen(
+                command, cwd=workdir, env=self._env(), stdout=stream,
+                stderr=subprocess.STDOUT, text=True, stdin=subprocess.DEVNULL,
+                start_new_session=(os.name == "posix"))
+            try:
+                returncode = proc.wait(timeout=timeout)
+            except subprocess.TimeoutExpired:
+                timed_out = True
+                returncode = _stop_process(proc, hard=True)
+                stream.write(f"\n[harness] TIMEOUT: killed after {timeout}s\n")
+        transcript = transcript_path.read_text(encoding="utf-8", errors="replace")
+        events = _jsonl_events(transcript)
+        sessions = {event.get("id") for event in events
+                    if event.get("type") == "session"
+                    and isinstance(event.get("id"), str)}
+        replies = [event["message"] for event in events
+                   if event.get("type") == "turn_end"
+                   and isinstance(event.get("message"), dict)]
+        texts = [part["text"] for message in replies
+                 for part in (message.get("content") or [])
+                 if isinstance(part, dict) and part.get("type") == "text"
+                 and isinstance(part.get("text"), str)]
+        content = texts[-1] if texts else ""
+        if content:
+            last_path.write_text(content, encoding="utf-8")
+        observed = sorted({message["model"] for message in replies
+                           if isinstance(message.get("model"), str)})
+        tokens, raw_usage = _pi_usage(replies)
+        accepted = {self.model["model"], model_name}
+        mismatches = [value for value in observed if value not in accepted]
+        identity_verified = False if mismatches else True if observed else None
+        failure = None
+        if sessions and sessions != {requested_session}:
+            failure = "pi continuation returned the wrong session"
+        elif mismatches:
+            failure = "pi observed model mismatch: " + ", ".join(mismatches)
+        elif timed_out:
+            failure = f"pi timed out after {timeout}s"
+        elif returncode:
+            failure = f"pi exited {returncode}"
+        elif any(event.get("type") == "error" for event in events):
+            failure = "pi emitted an error event"
+        elif not sessions:
+            failure = "pi output did not identify a session"
+        elif not content.strip():
+            failure = "pi completed without a final text response"
+        result = {
+            "turn": turn,
+            "content": content,
+            "last_message": content,
+            "transcript": transcript,
+            "session_id": requested_session,
+            "wall": round(time.time() - started, 3),
+            "tokens": tokens,
+            "raw_usage": raw_usage,
+            "timed_out": timed_out,
+            "protocol_aborted": False,
+            "termination_reason": (
+                "timeout" if timed_out else "agent_error" if failure else None),
+            "returncode": returncode,
+            "rc": returncode,
+            "sandbox": "workspace-write",
+            "observed_model": observed[0] if len(observed) == 1 else None,
+            "model_identity_verified": identity_verified,
+        }
+        self._record_turn(result)
+        audit = self.audit(transcript)
+        if audit.get("boundary_violation"):
+            failure = "pi boundary audit failed"
+        if failure:
+            raise Round4AgentError(failure)
+        return result
+
+
 def make_round4_agent(model: dict, state_dir: Path, metadata_path: Path,
                       protected_paths: list[Path] | None = None) -> Round4Agent:
     name = model.get("agent_backend", "codex_cli")
@@ -378,6 +576,8 @@ def make_round4_agent(model: dict, state_dir: Path, metadata_path: Path,
         agent = CodexRound4Agent(model, state_dir, metadata_path)
     elif name == "opencode_cli":
         agent = OpenCodeRound4Agent(model, state_dir, metadata_path)
+    elif name == "pi_cli":
+        agent = PiRound4Agent(model, state_dir, metadata_path)
     else:
         raise Round4AgentError(f"unknown Round 4 agent backend {name!r}")
     isolation = make_isolation(

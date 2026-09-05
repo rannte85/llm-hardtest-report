@@ -890,7 +890,7 @@ class RoundFourPiBackendTests(unittest.TestCase):
 import json, os, sys, time
 args = sys.argv[1:]
 if args == ["--help"]:
-    print("--print --mode --model --session-id --session-dir --thinking")
+    print("--print --mode --model --session-id --session-dir --thinking --no-context-files")
     raise SystemExit(0)
 mode = os.environ.get("FAKE_PI_MODE", "ok")
 if args == ["--list-models"]:
@@ -918,15 +918,21 @@ if mode == "timeout":
 
 
 def reply(content):
+    stop_reason = "error" if mode == "model-error" else (
+        "aborted" if mode == "aborted" else "stop")
     print(json.dumps({{"type": "turn_end", "message": {{
         "role": "assistant", "content": content, "provider": "llm-hardtest",
-        "model": model, "stopReason": "stop",
+        "model": model, "stopReason": stop_reason,
         "usage": {{"input": 10, "output": 2, "totalTokens": 12}}}}}}))
 
 
 reply([{{"type": "toolCall", "id": "c1", "name": "write", "arguments": {{}}}}])
 if mode != "empty":
-    reply([{{"type": "text", "text": "done"}}])
+    content = ([{{"type": "text", "text": "first"}},
+                {{"type": "text", "text": "second"}}]
+               if mode == "split-text" else
+               [{{"type": "text", "text": "done"}}])
+    reply(content)
 """, encoding="utf-8")
         executable.chmod(executable.stat().st_mode | stat.S_IXUSR)
         return executable
@@ -1019,6 +1025,38 @@ if mode != "empty":
                         self._model(), root / "state", root / "meta.json")
                     agent.preflight(work)
                     with self.assertRaisesRegex(Round4AgentError, message):
+                        agent.turn("task", work, root / "evidence", 1, 10)
+
+    def test_pi_preserves_all_terminal_text_blocks(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            executable = self._fake_pi(root)
+            work = root / "work"
+            work.mkdir()
+            with patch.dict(os.environ, {"FAKE_PI_MODE": "split-text"}), \
+                    patch("llm_hardtest.round4_agents.shutil.which",
+                          return_value=str(executable)):
+                agent = make_round4_agent(
+                    self._model(), root / "state", root / "meta.json")
+                agent.preflight(work)
+                result = agent.turn("task", work, root / "evidence", 1, 10)
+            self.assertEqual(result["content"], "first\nsecond")
+
+    def test_pi_rejects_terminal_error_and_abort_with_zero_exit(self):
+        for mode in ("model-error", "aborted"):
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                executable = self._fake_pi(root)
+                work = root / "work"
+                work.mkdir()
+                with patch.dict(os.environ, {"FAKE_PI_MODE": mode}), \
+                        patch("llm_hardtest.round4_agents.shutil.which",
+                              return_value=str(executable)):
+                    agent = make_round4_agent(
+                        self._model(), root / "state", root / "meta.json")
+                    agent.preflight(work)
+                    with self.assertRaisesRegex(
+                            Round4AgentError, f"stopReason {mode.removeprefix('model-')}"):
                         agent.turn("task", work, root / "evidence", 1, 10)
 
     def test_pi_timeout_preserves_partial_transcript(self):

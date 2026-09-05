@@ -440,7 +440,10 @@ class PiRound4Agent(Round4Agent):
         except (OSError, subprocess.TimeoutExpired) as exc:
             raise Round4AgentError(f"pi capability probe failed: {exc}") from exc
         help_text = (probe.stdout or "") + (probe.stderr or "")
-        required = ("--print", "--mode", "--model", "--session-id", "--session-dir")
+        required = (
+            "--print", "--mode", "--model", "--session-id", "--session-dir",
+            "--no-context-files",
+        )
         missing = [flag for flag in required if flag not in help_text]
         if probe.returncode or missing:
             detail = ("missing " + ", ".join(missing) if missing
@@ -487,6 +490,7 @@ class PiRound4Agent(Round4Agent):
             "--session-dir", str(self.state_dir / "pi-sessions"),
             # Exclude ambient extensions, skills, and templates from the attempt.
             "--no-extensions", "--no-skills", "--no-prompt-templates", "--no-approve",
+            "--no-context-files",
         ]
         thinking = self.model.get("reasoning_effort")
         if thinking in _PI_THINKING_LEVELS:
@@ -513,11 +517,12 @@ class PiRound4Agent(Round4Agent):
         replies = [event["message"] for event in events
                    if event.get("type") == "turn_end"
                    and isinstance(event.get("message"), dict)]
-        texts = [part["text"] for message in replies
-                 for part in (message.get("content") or [])
+        final_reply = replies[-1] if replies else {}
+        texts = [part["text"] for part in (final_reply.get("content") or [])
                  if isinstance(part, dict) and part.get("type") == "text"
                  and isinstance(part.get("text"), str)]
-        content = texts[-1] if texts else ""
+        content = "\n".join(texts)
+        stop_reason = final_reply.get("stopReason")
         if content:
             last_path.write_text(content, encoding="utf-8")
         observed = sorted({message["model"] for message in replies
@@ -535,6 +540,8 @@ class PiRound4Agent(Round4Agent):
             failure = f"pi timed out after {timeout}s"
         elif returncode:
             failure = f"pi exited {returncode}"
+        elif stop_reason in {"error", "aborted"}:
+            failure = f"pi turn ended with stopReason {stop_reason}"
         elif any(event.get("type") == "error" for event in events):
             failure = "pi emitted an error event"
         elif not sessions:
@@ -551,7 +558,7 @@ class PiRound4Agent(Round4Agent):
             "tokens": tokens,
             "raw_usage": raw_usage,
             "timed_out": timed_out,
-            "protocol_aborted": False,
+            "protocol_aborted": stop_reason == "aborted",
             "termination_reason": (
                 "timeout" if timed_out else "agent_error" if failure else None),
             "returncode": returncode,

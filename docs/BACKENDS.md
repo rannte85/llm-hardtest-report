@@ -161,16 +161,18 @@ The harness writes an attempt-private `models.json` describing a single
 never inherits the operator's own pi providers, skills, extensions, or MCP servers.
 The key is referenced as `${API_KEY_ENV}` and stays in the environment. Runs use
 `--print --mode json`, disable ambient extensions, skills, prompt templates, and
-project-local trust, and set `PI_OFFLINE=1` so startup catalog refreshes cannot change
-an attempt. `reasoning_effort` maps to `--thinking` when it names a level pi accepts.
+project-local trust and context files, and set `PI_OFFLINE=1` so startup catalog
+refreshes cannot change an attempt. `reasoning_effort` maps to `--thinking` when it
+names a level pi accepts.
 
 The harness owns the session identifier: it generates one per attempt and passes
 `--session-id` with an attempt-private `--session-dir`, which pi creates on the first
 turn and reuses afterwards. Token usage is summed across the `turn_end` events of a
 turn. `doctor` verifies the installed CLI flags, confirms the injected provider is
 registered through `--list-models`, and makes a real minimal agent call. Non-zero exit,
-timeout, empty output, error event, wrong session, or exposed model mismatch is
-infrastructure-invalid and retains its partial transcript.
+timeout, empty output, error or aborted stop reason, error event, wrong session, or
+exposed model mismatch is infrastructure-invalid and retains its partial transcript.
+All text blocks in the terminal assistant message are preserved for grading.
 
 ## Compatibility reports
 

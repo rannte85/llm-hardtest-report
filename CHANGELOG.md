@@ -5,6 +5,8 @@ out separately from harness features.
 
 ## Unreleased
 
+## 2.52.0 — 2026-09-05
+
 - Added the optional `pi_cli` Round 4 agent backend for Chat-Completions-compatible
   servers. It injects an attempt-private `models.json` provider through
   `PI_CODING_AGENT_DIR`, so a campaign never inherits the operator's own pi providers,

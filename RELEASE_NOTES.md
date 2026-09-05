@@ -1,4 +1,33 @@
-# Release Notes — 2.51.0
+# Release Notes — 2.52.0
+
+This release adds `pi_cli` as an optional Round 4 repository-agent backend:
+
+- an attempt-private `models.json`, `PI_CODING_AGENT_DIR`, HOME, and session directory
+  prevent campaigns from inheriting operator provider, credential, package, extension,
+  skill, prompt-template, or session state;
+- `--no-context-files`, `--no-approve`, and explicit resource-disable flags exclude
+  ambient repository instructions and project-local configuration from measurements;
+- `PI_OFFLINE=1` suppresses startup network refreshes while the configured model
+  endpoint remains available through the selected isolation policy;
+- preflight checks the installed pi command contract and verifies exact custom-provider
+  registration before making a real doctor probe;
+- session identity, observed model identity, token usage, complete terminal text, and
+  partial transcripts are retained as auditable attempt evidence;
+- non-zero exit, timeout, empty output, terminal `error`/`aborted` stop reasons, error
+  events, wrong sessions, and model mismatches fail closed as infrastructure-invalid;
+- public-result and community-database execution-scaffold vocabularies accept
+  `pi_cli` without changing their existing schema shapes;
+- all 275 source tests pass locally, including focused exit-zero failure, context
+  isolation, multi-block output, session, timeout, and model-identity regressions; the
+  same suite and repository gates pass on macOS/Python 3.12 and Ubuntu/Python 3.10 and
+  3.12.
+
+## Previous release: 2.51.0
+
+The previous release closed the objective-subset post-selection gap in paired
+comparisons by allowing callers to reserve the full explored objective family.
+
+# Historical release notes — 2.51.0
 
 This release closes the objective-subset post-selection gap in paired comparisons:
 

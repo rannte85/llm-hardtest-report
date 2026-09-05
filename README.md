@@ -4,8 +4,8 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-**Current release: 2.51.0** — lets exploratory comparisons reserve unreported
-objective slots so post-selection cannot silently shrink Holm/Bonferroni correction.
+**Current release: 2.52.0** — adds an isolated `pi_cli` Round 4 backend with private
+provider/session state, fail-closed protocol handling, and ambient-context exclusion.
 
 LLM Hardtest Report is a local-first command-line benchmark for comparing language
 models as reasoners, coding workers, and safe handoff agents. Point it at one or more
@@ -39,7 +39,7 @@ rounds all use the **LLM Hardtest** name.
 | 1 | 20 compact reasoning questions | Normalized exact answer | OpenAI-compatible chat or Codex CLI |
 | 2 | 20 hardened reasoning questions | Normalized exact answer | OpenAI-compatible chat or Codex CLI |
 | 3 | Structured diagnosis and multi-turn engineering | Deterministic checks for Q21–Q24; Q25 is queued for review | OpenAI-compatible chat or Codex CLI |
-| 4 | Six repository-based coding-agent tasks | Public/held-back tests, integrity gates, handoff and release signals | Codex + Responses, or OpenCode + Chat Completions |
+| 4 | Six repository-based coding-agent tasks | Public/held-back tests, integrity gates, handoff and release signals | Codex + Responses, or OpenCode/pi + Chat Completions |
 
 Eleven selectable Round 5 research pilots are included for evolving incident evidence,
 retry idempotency, late compatibility constraints, and public-green partial fixes.

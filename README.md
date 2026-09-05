@@ -67,7 +67,8 @@ fully reconciled implementation. Q31 tests follow-through after explicit approva
 - Python 3.10 or newer
 - A running OpenAI-compatible server for direct local-model calls
 - For Round 4: [Codex CLI](https://github.com/openai/codex) with Responses support,
-  or optional [OpenCode](https://opencode.ai/) with Chat Completions support
+  or optional [OpenCode](https://opencode.ai/) or [pi](https://github.com/earendil-works/pi)
+  with Chat Completions support
 - For Round 5 research pilots: Codex CLI and Responses support
 
 No model weights or server are installed, started, stopped, or evicted by this tool.

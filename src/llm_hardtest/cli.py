@@ -108,10 +108,10 @@ def _probe_codex(model: dict, timeout: int) -> None:
             raise BackendError("Codex returned no text")
 
 
-def _probe_opencode(model: dict, timeout: int,
-                    isolation: dict | None = None) -> None:
+def _probe_round4_agent(model: dict, backend: str, label: str, timeout: int,
+                        isolation: dict | None = None) -> None:
     probe = dict(model)
-    probe["agent_backend"] = "opencode_cli"
+    probe["agent_backend"] = backend
     if isolation is not None:
         probe["round4_isolation"] = isolation
     with tempfile.TemporaryDirectory(prefix="llm-hardtest-doctor-") as tmp:
@@ -126,7 +126,16 @@ def _probe_opencode(model: dict, timeout: int,
             "Reply with OK. Do not modify files.", work, root / "evidence", 1,
             timeout)
         if not result["content"].strip():
-            raise BackendError("OpenCode returned no text")
+            raise BackendError(f"{label} returned no text")
+
+
+def _probe_opencode(model: dict, timeout: int,
+                    isolation: dict | None = None) -> None:
+    _probe_round4_agent(model, "opencode_cli", "OpenCode", timeout, isolation)
+
+
+def _probe_pi(model: dict, timeout: int, isolation: dict | None = None) -> None:
+    _probe_round4_agent(model, "pi_cli", "pi", timeout, isolation)
 
 
 def doctor_config(config: dict, timeout: int = 30) -> int:
@@ -180,6 +189,11 @@ def doctor_config(config: dict, timeout: int = 30) -> int:
                 print(
                     f"PASS {key}: OpenCode completed through Chat Completions for "
                     "repository-agent rounds")
+            if 4 in selected and model.get("agent_backend") == "pi_cli":
+                _probe_pi(model, timeout, config.get("round4_isolation"))
+                print(
+                    f"PASS {key}: pi completed through Chat Completions for "
+                    "repository-agent rounds")
         except Exception as exc:
             failures.append(f"{key}: {exc}")
     if failures:
@@ -229,7 +243,8 @@ def init_config(path: Path) -> None:
                  "max_tokens": int(_ask("Maximum output tokens", "16000"))}
         if 4 in model_rounds:
             model["agent_backend"] = _ask(
-                "Round 4 agent backend: codex_cli or opencode_cli", "codex_cli")
+                "Round 4 agent backend: codex_cli, opencode_cli or pi_cli",
+                "codex_cli")
         if preset != "openai":
             model["base_url"] = base_url
             model["api_key_env"] = api_key_env

@@ -68,6 +68,7 @@ def run(model: dict, attempts: int, out_dir: Path, timeout: int,
                 Path.home() / ".local" / "share" / "opencode",
                 Path.home() / "Library" / "Application Support" / "opencode",
                 Path.home() / "Library" / "Caches" / "opencode",
+                Path.home() / ".pi",
             ) if path.exists()]
             prior_attempts = []
             for candidate in run_root.rglob("attempt*"):

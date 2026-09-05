@@ -5,6 +5,23 @@ out separately from harness features.
 
 ## Unreleased
 
+- Added the optional `pi_cli` Round 4 agent backend for Chat-Completions-compatible
+  servers. It injects an attempt-private `models.json` provider through
+  `PI_CODING_AGENT_DIR`, so a campaign never inherits the operator's own pi providers,
+  skills, extensions, or MCP servers, and keeps the key in `${API_KEY_ENV}`.
+- pi attempts run with `--print --mode json`, ambient extensions, skills, prompt
+  templates, context files, and project-local trust disabled, and `PI_OFFLINE=1`, so
+  startup catalog refreshes cannot change an attempt. `reasoning_effort` maps to
+  `--thinking`.
+- The harness owns the pi session identifier and reuses it through `--session-id` with
+  an attempt-private `--session-dir`. `doctor` verifies CLI flags, confirms the
+  injected provider registers, and makes a real minimal agent call. Non-zero exit,
+  timeout, empty output, error or aborted stop reason, error event, wrong session, and
+  exposed model mismatch stay infrastructure-invalid with the partial transcript
+  retained. All terminal text blocks are preserved for grading.
+- `pi_cli` joins `codex_cli` and `opencode_cli` in the public bundle and community
+  database execution-scaffold vocabulary; the public schema version is unchanged.
+
 ## 2.51.0 — 2026-09-01
 
 - Added `--multiplicity-family-size 1..4` to paired comparisons so callers can reserve
